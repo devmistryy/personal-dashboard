@@ -2196,12 +2196,10 @@ async function loadFromSupabase() {
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
 
-  const [
-    { data: habits  = [] },
-    { data: logs    = [] },
-    { data: goals   = [] },
-    { data: setting }
-  ] = results;
+  const habits  = results[0].data || [];
+  const logs    = results[1].data || [];
+  const goals   = results[2].data || [];
+  const setting = results[3].data;
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date, endDate: h.end_date,
