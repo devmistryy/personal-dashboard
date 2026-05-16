@@ -2178,35 +2178,44 @@ async function _syncSetting(key, value) {
   await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
 }
 
-// ── Load all data from Supabase into MEM ──
+// ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
   const uid = await _uid(); if (!uid) return;
 
-  const { data: habits = [] } = await sb.from('habits').select('*').eq('user_id', uid).order('created_at');
+  const from = new Date(); from.setDate(from.getDate() - 90);
+  const to   = new Date(); to.setDate(to.getDate() + 1);
+  const fromStr = from.toISOString().slice(0,10);
+  const toStr   = to.toISOString().slice(0,10);
+
+  const [
+    { data: habits  = [] },
+    { data: logs    = [] },
+    { data: goals   = [] },
+    { data: setting }
+  ] = await Promise.all([
+    sb.from('habits').select('*').eq('user_id', uid).order('created_at'),
+    sb.from('habit_logs').select('*').eq('user_id', uid),
+    sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
+    sb.from('settings').select('value').eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle(),
+  ]);
+
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date, endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
   }));
 
-  const { data: logs = [] } = await sb.from('habit_logs').select('*').eq('user_id', uid);
   logs.forEach(l => {
     const k = 'habits:log:' + l.date;
     if (!MEM[k]) MEM[k] = [];
     MEM[k].push(l.habit_id);
   });
 
-  const from = new Date(); from.setDate(from.getDate() - 90);
-  const to   = new Date(); to.setDate(to.getDate() + 1);
-  const { data: goals = [] } = await sb.from('goals').select('*').eq('user_id', uid)
-    .gte('date', from.toISOString().slice(0,10)).lte('date', to.toISOString().slice(0,10)).order('id');
   goals.forEach(g => {
     const k = 'goals:' + g.date;
     if (!MEM[k]) MEM[k] = [];
     MEM[k].push({ text: g.text, done: g.done, doneAt: g.done_at, queued: g.queued });
   });
 
-  const { data: setting } = await sb.from('settings').select('value')
-    .eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle();
   if (setting) MEM['goal_streak_v1'] = setting.value;
 }
 
@@ -2768,6 +2777,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
     err.textContent = error.message; err.style.display = 'block';
     btn.textContent = 'Sign In'; btn.disabled = false;
   } else {
+    btn.textContent = 'Loading your data…';
     await loadFromSupabase();
     document.getElementById('loginOverlay').style.display = 'none';
     rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak();
