@@ -2141,7 +2141,7 @@ function getHabitLog(dateStr)     { return MEM['habits:log:' + dateStr] || []; }
 function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncHabitLog(dateStr, ids); }
 
 // ── Supabase sync (fire-and-forget) ──
-async function _uid() { return (await sb.auth.getUser()).data.user?.id; }
+async function _uid() { return (await sb.auth.getSession()).data.session?.user?.id; }
 
 async function _syncHabits(habits) {
   const uid = await _uid(); if (!uid) return;
@@ -2187,17 +2187,21 @@ async function loadFromSupabase() {
   const fromStr = from.toISOString().slice(0,10);
   const toStr   = to.toISOString().slice(0,10);
 
-  const [
-    { data: habits  = [] },
-    { data: logs    = [] },
-    { data: goals   = [] },
-    { data: setting }
-  ] = await Promise.all([
+  const results = await Promise.all([
     sb.from('habits').select('*').eq('user_id', uid).order('created_at'),
     sb.from('habit_logs').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
     sb.from('settings').select('value').eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle(),
   ]);
+
+  results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
+
+  const [
+    { data: habits  = [] },
+    { data: logs    = [] },
+    { data: goals   = [] },
+    { data: setting }
+  ] = results;
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date, endDate: h.end_date,
@@ -2778,9 +2782,16 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
     btn.textContent = 'Sign In'; btn.disabled = false;
   } else {
     btn.textContent = 'Loading your data…';
-    await loadFromSupabase();
-    document.getElementById('loginOverlay').style.display = 'none';
-    rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak();
+    try {
+      await loadFromSupabase();
+      document.getElementById('loginOverlay').style.display = 'none';
+      rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak();
+    } catch(e) {
+      err.textContent = 'Load failed: ' + e.message;
+      err.style.display = 'block';
+      btn.textContent = 'Sign In'; btn.disabled = false;
+      console.error('loadFromSupabase error:', e);
+    }
   }
 });
 
