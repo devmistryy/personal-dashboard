@@ -2299,7 +2299,7 @@ async function loadFromSupabase() {
   const jobs    = results[4].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
-    id: h.id, name: h.name, startDate: h.start_date, endDate: h.end_date,
+    id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
   }));
 
@@ -2687,7 +2687,7 @@ function renderHabitDetailPage(habit, allHabits) {
     const _startInput = document.getElementById('habitStartDateInput');
     const _saveStartDate = () => {
       const newDate = _startInput.value;
-      if (!newDate || newDate > today || newDate === startDate) return;
+      if (!newDate || newDate > today || newDate === habit.startDate) return;
       habit.startDate = newDate;
       saveHabits(allHabits);
       renderHabitDetailPage(habit, allHabits);
