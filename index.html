@@ -750,17 +750,22 @@ e<!DOCTYPE html>
   .job-sort-btn { font-size:11px; font-weight:500; padding:3px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:transparent; color:var(--text-tertiary); cursor:pointer; font-family:var(--font-body); transition:background 0.15s,color 0.15s; }
   .job-sort-btn.active { background:rgba(255,255,255,0.08); color:var(--text-primary); border-color:rgba(255,255,255,0.15); }
   .job-table-wrap { overflow-x:auto; }
-  .job-table { width:100%; border-collapse:collapse; min-width:520px; }
-  .job-table th { font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-tertiary); padding:8px 14px; text-align:left; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap; background:rgba(255,255,255,0.015); }
+  .job-table { width:100%; border-collapse:collapse; min-width:520px; table-layout:fixed; }
+  .job-table col.col-company   { width:20%; }
+  .job-table col.col-platform  { width:20%; }
+  .job-table col.col-date      { width:20%; }
+  .job-table col.col-status    { width:20%; }
+  .job-table col.col-location  { width:20%; }
+  .job-table th { font-size:12px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-tertiary); padding:8px 4px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap; background:rgba(255,255,255,0.015); }
   .job-table th i { font-size:12px; margin-right:5px; vertical-align:-1px; }
   .job-row { border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.12s; }
   .job-row:last-child { border-bottom:none; }
   .job-row:hover { background:rgba(255,255,255,0.025); }
-  .job-td { padding:10px 14px; font-size:13px; color:var(--text-primary); vertical-align:middle; }
-  .job-company-cell { display:flex; align-items:center; gap:8px; }
+  .job-td { padding:11px 4px; font-size:15px; color:var(--text-primary); vertical-align:middle; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .job-company-cell { display:flex; align-items:center; justify-content:center; gap:8px; }
   .job-company-name { outline:none; border-radius:4px; padding:2px 4px; min-width:60px; color:var(--text-primary); }
   .job-company-name:focus { background:rgba(255,255,255,0.06); }
-  .job-pill { font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; cursor:pointer; display:inline-block; white-space:nowrap; transition:opacity 0.12s; }
+  .job-pill { font-size:13px; font-weight:600; padding:4px 12px; border-radius:20px; cursor:pointer; display:inline-block; white-space:nowrap; transition:opacity 0.12s; }
   .job-pill:hover { opacity:0.8; }
   .job-pill-empty { background:rgba(255,255,255,0.06); color:var(--text-tertiary); }
   .job-date-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
@@ -1539,6 +1544,9 @@ e<!DOCTYPE html>
         </div>
         <div class="job-table-wrap">
           <table class="job-table">
+            <colgroup>
+              <col class="col-company"><col class="col-platform"><col class="col-date"><col class="col-status"><col class="col-location">
+            </colgroup>
             <thead>
               <tr>
                 <th><i class="ti ti-letter-case" aria-hidden="true"></i>Company</th>
@@ -2279,6 +2287,7 @@ async function loadFromSupabase() {
     sb.from('habit_logs').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
     sb.from('settings').select('value').eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle(),
+    sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -2287,6 +2296,7 @@ async function loadFromSupabase() {
   const logs    = results[1].data || [];
   const goals   = results[2].data || [];
   const setting = results[3].data;
+  const jobs    = results[4].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date, endDate: h.end_date,
@@ -2306,6 +2316,12 @@ async function loadFromSupabase() {
   });
 
   if (setting) MEM['goal_streak_v1'] = setting.value;
+
+  MEM['jobs:list'] = jobs.map(j => ({
+    id: j.id, company: j.company, platform: j.platform || '',
+    dateApplied: j.date_applied || '', status: j.status || 'Applied',
+    locationType: j.location_type || '', locationCity: j.location_city || '',
+  }));
 }
 
 function daysBetween(a, b) {
@@ -2848,7 +2864,27 @@ const JOB_PLATFORM_STYLE = {
 let _jobSort = 'date';
 
 function getJobs() { return MEM['jobs:list'] || []; }
-function saveJobs(jobs) { MEM['jobs:list'] = jobs; }
+function saveJobs(jobs) { MEM['jobs:list'] = jobs; _syncJobs(jobs); }
+
+async function _syncJobs(jobs) {
+  const uid = await _uid(); if (!uid) return;
+  if (jobs.length) {
+    const { error } = await sb.from('job_applications').upsert(jobs.map(j => ({
+      id: j.id, user_id: uid, company: j.company, platform: j.platform || null,
+      date_applied: j.dateApplied || null, status: j.status || 'Applied',
+      location_type: j.locationType || null, location_city: j.locationCity || null,
+    })), { onConflict: 'id' });
+    if (error) console.error('[sync] job_applications upsert failed:', error);
+  }
+  const { data: existing, error: selErr } = await sb.from('job_applications').select('id').eq('user_id', uid);
+  if (selErr) { console.error('[sync] job_applications select failed:', selErr); return; }
+  const currentIds = new Set(jobs.map(j => j.id));
+  const toDelete = (existing || []).filter(r => !currentIds.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('job_applications').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) console.error('[sync] job_applications delete failed:', delErr);
+  }
+}
 
 function _todayStr() {
   const d = new Date();
@@ -2882,13 +2918,12 @@ function renderJobs() {
     const ss = JOB_STATUS_STYLE[job.status] || JOB_STATUS_STYLE['Applied'];
     const ps = job.platform ? (JOB_PLATFORM_STYLE[job.platform] || { bg:'rgba(255,255,255,0.08)', color:'var(--text-secondary)' }) : null;
     const locLabel = job.locationType === 'remote' ? 'Remote'
-      : job.locationType === 'hybrid'  ? 'Hybrid' + (job.locationCity ? ' · ' + _esc(job.locationCity) : '')
-      : job.locationType === 'onsite'  ? 'On-site' + (job.locationCity ? ' · ' + _esc(job.locationCity) : '')
+      : job.locationType === 'hybrid'  ? (job.locationCity ? _esc(job.locationCity) + ' · Hybrid' : 'Hybrid')
+      : job.locationType === 'onsite'  ? (job.locationCity ? _esc(job.locationCity) + ' · On-site' : 'On-site')
       : '';
     return `<tr class="job-row" data-id="${job.id}">
       <td class="job-td">
         <div class="job-company-cell">
-          <i class="ti ti-file-text" style="font-size:13px;color:var(--text-tertiary);flex-shrink:0;" aria-hidden="true"></i>
           <span class="job-company-name" contenteditable="true" spellcheck="false" data-id="${job.id}">${_esc(job.company)}</span>
         </div>
       </td>
