@@ -2857,8 +2857,9 @@ const JOB_STATUS_STYLE = {
   'Rejected':     { bg:'rgba(226,75,74,0.22)',   color:'#E24B4A' },
 };
 const JOB_PLATFORM_STYLE = {
-  'LinkedIn': { bg:'rgba(55,138,221,0.20)', color:'#378ADD' },
-  'Indeed':   { bg:'rgba(99,153,34,0.20)',  color:'#97C459' },
+  'LinkedIn':     { bg:'rgba(55,138,221,0.20)', color:'#378ADD' },
+  'Indeed':       { bg:'rgba(99,153,34,0.20)',  color:'#97C459' },
+  'Company Site': { bg:'rgba(255,255,255,0.10)', color:'rgba(255,255,255,0.75)' },
 };
 
 let _jobSort = 'date';
@@ -3005,7 +3006,7 @@ document.addEventListener('click', (e) => {
   const platEl = e.target.closest('[data-action="platform"]');
   if (platEl) {
     const id = platEl.dataset.id;
-    const platforms = ['LinkedIn','Indeed'];
+    const platforms = ['LinkedIn','Indeed','Company Site'];
     _openJobDropdown(platEl, (dd) => {
       dd.innerHTML = platforms.map(p => {
         const ps = JOB_PLATFORM_STYLE[p];
