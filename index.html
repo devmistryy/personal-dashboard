@@ -35,7 +35,6 @@ e<!DOCTYPE html>
     position: fixed;
     inset: 0;
     background:
-      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
       radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
     filter: blur(40px);
     pointer-events: none;
@@ -757,7 +756,8 @@ e<!DOCTYPE html>
   .job-table col.col-status    { width:20%; }
   .job-table col.col-location  { width:20%; }
   .job-table th { font-size:12px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-tertiary); padding:8px 4px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap; background:rgba(255,255,255,0.015); }
-  .job-table th i { font-size:12px; margin-right:5px; vertical-align:-1px; }
+  .job-table th .th-inner { display:inline-flex; align-items:center; gap:5px; }
+  .job-table th i { font-size:12px; }
   .job-row { border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.12s; }
   .job-row:last-child { border-bottom:none; }
   .job-row:hover { background:rgba(255,255,255,0.025); }
@@ -1549,11 +1549,11 @@ e<!DOCTYPE html>
             </colgroup>
             <thead>
               <tr>
-                <th><i class="ti ti-letter-case" aria-hidden="true"></i>Company</th>
-                <th><i class="ti ti-target" aria-hidden="true"></i>Platform</th>
-                <th><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</th>
-                <th><i class="ti ti-list-check" aria-hidden="true"></i>Status</th>
-                <th><i class="ti ti-map-pin" aria-hidden="true"></i>Location</th>
+                <th><span class="th-inner"><i class="ti ti-letter-case" aria-hidden="true"></i>Company</span></th>
+                <th><span class="th-inner"><i class="ti ti-target" aria-hidden="true"></i>Platform</span></th>
+                <th><span class="th-inner"><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</span></th>
+                <th><span class="th-inner"><i class="ti ti-list-check" aria-hidden="true"></i>Status</span></th>
+                <th><span class="th-inner"><i class="ti ti-map-pin" aria-hidden="true"></i>Location</span></th>
               </tr>
             </thead>
             <tbody id="jobTableBody"></tbody>
@@ -1626,24 +1626,28 @@ function storeListKeys(prefix) {
 }
 
 // ── Date helpers ──
+function _localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 function getActiveDateString() {
   const now = new Date();
   if (now.getHours() < 6) {
     const d = new Date(now);
     d.setDate(d.getDate() - 1);
-    return d.toISOString().slice(0, 10);
+    return _localDateStr(d);
   }
-  return now.toISOString().slice(0, 10);
+  return _localDateStr(now);
 }
 
 function getTomorrowDateString() {
   const now = new Date();
   if (now.getHours() < 6) {
-    return now.toISOString().slice(0, 10);
+    return _localDateStr(now);
   }
   const d = new Date(now);
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return _localDateStr(d);
 }
 
 function formatDate(str) {
@@ -2213,7 +2217,7 @@ startTicker();
 function habitDateStr(offsetDays) {
   const d = new Date();
   d.setDate(d.getDate() + (offsetDays || 0));
-  return d.toISOString().slice(0, 10);
+  return _localDateStr(d);
 }
 
 function getHabits()              { return MEM['habits:list'] || []; }
@@ -2333,7 +2337,7 @@ function habitStreak(habitId) {
   let d = new Date();
   d.setDate(d.getDate() - 1);
   for (let i = 0; i < 365; i++) {
-    const ds = d.toISOString().slice(0, 10);
+    const ds = _localDateStr(d);
     if (getHabitLog(ds).includes(habitId)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
   }
@@ -2347,7 +2351,7 @@ function getCurrentWeekDates() {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(now);
     d.setDate(now.getDate() + diffToMonday + i);
-    return d.toISOString().slice(0, 10);
+    return _localDateStr(d);
   });
 }
 
