@@ -744,6 +744,43 @@ e<!DOCTYPE html>
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
+  /* ── Job Applications ── */
+  .job-sort-bar { display:flex; align-items:center; gap:6px; padding:12px 14px 10px; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .job-sort-label { font-size:11px; color:var(--text-tertiary); font-weight:500; margin-right:2px; }
+  .job-sort-btn { font-size:11px; font-weight:500; padding:3px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:transparent; color:var(--text-tertiary); cursor:pointer; font-family:var(--font-body); transition:background 0.15s,color 0.15s; }
+  .job-sort-btn.active { background:rgba(255,255,255,0.08); color:var(--text-primary); border-color:rgba(255,255,255,0.15); }
+  .job-table-wrap { overflow-x:auto; }
+  .job-table { width:100%; border-collapse:collapse; min-width:520px; }
+  .job-table th { font-size:11px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-tertiary); padding:8px 14px; text-align:left; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap; background:rgba(255,255,255,0.015); }
+  .job-table th i { font-size:12px; margin-right:5px; vertical-align:-1px; }
+  .job-row { border-bottom:1px solid rgba(255,255,255,0.04); transition:background 0.12s; }
+  .job-row:last-child { border-bottom:none; }
+  .job-row:hover { background:rgba(255,255,255,0.025); }
+  .job-td { padding:10px 14px; font-size:13px; color:var(--text-primary); vertical-align:middle; }
+  .job-company-cell { display:flex; align-items:center; gap:8px; }
+  .job-company-name { outline:none; border-radius:4px; padding:2px 4px; min-width:60px; color:var(--text-primary); }
+  .job-company-name:focus { background:rgba(255,255,255,0.06); }
+  .job-pill { font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; cursor:pointer; display:inline-block; white-space:nowrap; transition:opacity 0.12s; }
+  .job-pill:hover { opacity:0.8; }
+  .job-pill-empty { background:rgba(255,255,255,0.06); color:var(--text-tertiary); }
+  .job-date-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
+  .job-date-display:hover { color:var(--text-primary); }
+  .job-date-input { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14); border-radius:6px; color:var(--text-primary); font-size:12px; padding:3px 6px; display:none; }
+  .job-location-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
+  .job-location-display:hover { color:var(--text-primary); }
+  .job-empty { color:var(--text-tertiary); font-size:13px; padding:24px 14px; text-align:center; }
+  .job-add-row { display:flex; align-items:center; gap:8px; padding:11px 14px; border-top:1px solid rgba(255,255,255,0.05); }
+  .job-add-plus { font-size:14px; color:var(--text-tertiary); flex-shrink:0; }
+  .job-add-input { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-size:13px; font-family:var(--font-body); }
+  .job-add-input::placeholder { color:var(--text-tertiary); }
+  .job-dropdown { position:fixed; background:#1C1C1E; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:4px; z-index:2000; min-width:160px; box-shadow:0 8px 32px rgba(0,0,0,0.55); }
+  .job-dd-item { padding:7px 12px; border-radius:7px; font-size:13px; cursor:pointer; color:var(--text-primary); display:flex; align-items:center; gap:8px; }
+  .job-dd-item:hover { background:rgba(255,255,255,0.07); }
+  .job-dd-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .job-loc-city-input { width:100%; box-sizing:border-box; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:var(--text-primary); font-size:13px; padding:6px 10px; margin-top:4px; outline:none; font-family:var(--font-body); }
+  .job-loc-city-input:focus { border-color:rgba(255,255,255,0.28); }
+  .job-loc-city-input::placeholder { color:var(--text-tertiary); }
+
   /* ── Habit Tracker ── */
   .habit-list { list-style: none; margin-bottom: 4px; }
 
@@ -1402,6 +1439,7 @@ e<!DOCTYPE html>
   <div class="tab-bar">
     <button class="tab-btn active" data-tab="tasks">To Do</button>
     <button class="tab-btn" data-tab="habits">Habits</button>
+    <button class="tab-btn" data-tab="jobs">Jobs</button>
   </div>
 
   <!-- Tab: Tasks -->
@@ -1489,7 +1527,42 @@ e<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Tab: Jobs -->
+  <div class="tab-panel" id="tab-jobs">
+    <div class="section">
+      <div class="section-title">Job Applications</div>
+      <div class="card gm-card" style="padding:0;overflow:hidden;">
+        <div class="job-sort-bar">
+          <span class="job-sort-label">Sort by</span>
+          <button class="job-sort-btn active" data-sort="date">Date</button>
+          <button class="job-sort-btn" data-sort="status">Status</button>
+        </div>
+        <div class="job-table-wrap">
+          <table class="job-table">
+            <thead>
+              <tr>
+                <th><i class="ti ti-letter-case" aria-hidden="true"></i>Company</th>
+                <th><i class="ti ti-target" aria-hidden="true"></i>Platform</th>
+                <th><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</th>
+                <th><i class="ti ti-list-check" aria-hidden="true"></i>Status</th>
+                <th><i class="ti ti-map-pin" aria-hidden="true"></i>Location</th>
+              </tr>
+            </thead>
+            <tbody id="jobTableBody"></tbody>
+          </table>
+        </div>
+        <div class="job-add-row">
+          <span class="job-add-plus">+</span>
+          <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
+
+<!-- Job status/platform/location dropdown -->
+<div id="jobDropdown" class="job-dropdown" style="display:none;"></div>
 
 <!-- Habit Detail Page -->
 <div id="loginOverlay" style="position:fixed;inset:0;background:#050506;z-index:9999;display:flex;align-items:center;justify-content:center;">
@@ -2758,6 +2831,252 @@ function addHabit() {
   renderHabits();
 }
 
+// ── Job Applications ──
+const JOB_STATUSES = ['Applied','Phone Screen','Interview','Offer','Rejected'];
+const JOB_STATUS_STYLE = {
+  'Applied':      { bg:'rgba(186,117,23,0.22)',  color:'#EF9F27' },
+  'Phone Screen': { bg:'rgba(55,138,221,0.22)',  color:'#5BADEE' },
+  'Interview':    { bg:'rgba(52,199,89,0.18)',   color:'#34C759' },
+  'Offer':        { bg:'rgba(29,158,117,0.22)',  color:'#30D158' },
+  'Rejected':     { bg:'rgba(226,75,74,0.22)',   color:'#E24B4A' },
+};
+const JOB_PLATFORM_STYLE = {
+  'LinkedIn': { bg:'rgba(55,138,221,0.20)', color:'#378ADD' },
+  'Indeed':   { bg:'rgba(99,153,34,0.20)',  color:'#97C459' },
+};
+
+let _jobSort = 'date';
+
+function getJobs() { return MEM['jobs:list'] || []; }
+function saveJobs(jobs) { MEM['jobs:list'] = jobs; }
+
+function _todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function _fmtJobDate(ds) {
+  if (!ds) return '—';
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+}
+
+function _esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderJobs() {
+  const jobs = [...getJobs()];
+  if (_jobSort === 'date') {
+    jobs.sort((a,b) => (b.dateApplied||'').localeCompare(a.dateApplied||''));
+  } else {
+    jobs.sort((a,b) => JOB_STATUSES.indexOf(a.status) - JOB_STATUSES.indexOf(b.status));
+  }
+  const tbody = document.getElementById('jobTableBody');
+  if (!tbody) return;
+  if (!jobs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="job-empty">No applications yet — type a company name below.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = jobs.map(job => {
+    const ss = JOB_STATUS_STYLE[job.status] || JOB_STATUS_STYLE['Applied'];
+    const ps = job.platform ? (JOB_PLATFORM_STYLE[job.platform] || { bg:'rgba(255,255,255,0.08)', color:'var(--text-secondary)' }) : null;
+    const locLabel = job.locationType === 'remote' ? 'Remote'
+      : job.locationType === 'hybrid'  ? 'Hybrid' + (job.locationCity ? ' · ' + _esc(job.locationCity) : '')
+      : job.locationType === 'onsite'  ? 'On-site' + (job.locationCity ? ' · ' + _esc(job.locationCity) : '')
+      : '';
+    return `<tr class="job-row" data-id="${job.id}">
+      <td class="job-td">
+        <div class="job-company-cell">
+          <i class="ti ti-file-text" style="font-size:13px;color:var(--text-tertiary);flex-shrink:0;" aria-hidden="true"></i>
+          <span class="job-company-name" contenteditable="true" spellcheck="false" data-id="${job.id}">${_esc(job.company)}</span>
+        </div>
+      </td>
+      <td class="job-td">
+        ${ps
+          ? `<span class="job-pill" style="background:${ps.bg};color:${ps.color}" data-action="platform" data-id="${job.id}">${_esc(job.platform)}</span>`
+          : `<span class="job-pill job-pill-empty" data-action="platform" data-id="${job.id}">—</span>`}
+      </td>
+      <td class="job-td">
+        <span class="job-date-display" data-action="date" data-id="${job.id}">${_fmtJobDate(job.dateApplied)}</span>
+        <input type="date" class="job-date-input" data-id="${job.id}" value="${job.dateApplied||''}" max="${_todayStr()}">
+      </td>
+      <td class="job-td">
+        <span class="job-pill" style="background:${ss.bg};color:${ss.color}" data-action="status" data-id="${job.id}">${job.status}</span>
+      </td>
+      <td class="job-td">
+        <span class="job-location-display" data-action="location" data-id="${job.id}">${locLabel || '<span style="color:var(--text-tertiary)">—</span>'}</span>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function _getJobById(id) { return getJobs().find(j => j.id === id); }
+
+function _updateJob(id, patch) {
+  const jobs = getJobs();
+  const idx = jobs.findIndex(j => j.id === id);
+  if (idx === -1) return;
+  Object.assign(jobs[idx], patch);
+  saveJobs(jobs);
+  renderJobs();
+}
+
+// Dropdown
+let _jddCloseHandler = null;
+function _openJobDropdown(triggerEl, buildFn) {
+  const dd = document.getElementById('jobDropdown');
+  buildFn(dd);
+  const rect = triggerEl.getBoundingClientRect();
+  dd.style.display = 'block';
+  const ddW = 180;
+  let left = rect.left;
+  if (left + ddW > window.innerWidth - 8) left = window.innerWidth - ddW - 8;
+  dd.style.left = left + 'px';
+  dd.style.top = (rect.bottom + 5) + 'px';
+  if (_jddCloseHandler) document.removeEventListener('click', _jddCloseHandler, true);
+  _jddCloseHandler = (e) => {
+    if (!dd.contains(e.target) && e.target !== triggerEl) {
+      dd.style.display = 'none';
+      document.removeEventListener('click', _jddCloseHandler, true);
+      _jddCloseHandler = null;
+    }
+  };
+  setTimeout(() => document.addEventListener('click', _jddCloseHandler, true), 0);
+}
+function _closeJobDropdown() {
+  document.getElementById('jobDropdown').style.display = 'none';
+  if (_jddCloseHandler) { document.removeEventListener('click', _jddCloseHandler, true); _jddCloseHandler = null; }
+}
+
+// Table click delegation
+document.addEventListener('click', (e) => {
+  // Status
+  const statusEl = e.target.closest('[data-action="status"]');
+  if (statusEl) {
+    const id = statusEl.dataset.id;
+    _openJobDropdown(statusEl, (dd) => {
+      dd.innerHTML = JOB_STATUSES.map(s => {
+        const c = JOB_STATUS_STYLE[s].color;
+        return `<div class="job-dd-item" data-status="${s}"><span class="job-dd-dot" style="background:${c}"></span>${s}</div>`;
+      }).join('');
+      dd.querySelectorAll('[data-status]').forEach(item => {
+        item.addEventListener('click', () => { _updateJob(id, { status: item.dataset.status }); _closeJobDropdown(); });
+      });
+    });
+    return;
+  }
+  // Platform
+  const platEl = e.target.closest('[data-action="platform"]');
+  if (platEl) {
+    const id = platEl.dataset.id;
+    const platforms = ['LinkedIn','Indeed'];
+    _openJobDropdown(platEl, (dd) => {
+      dd.innerHTML = platforms.map(p => {
+        const ps = JOB_PLATFORM_STYLE[p];
+        return `<div class="job-dd-item" data-platform="${p}"><span class="job-pill" style="background:${ps.bg};color:${ps.color};font-size:11px;padding:2px 8px;">${p}</span></div>`;
+      }).join('');
+      dd.querySelectorAll('[data-platform]').forEach(item => {
+        item.addEventListener('click', () => { _updateJob(id, { platform: item.dataset.platform }); _closeJobDropdown(); });
+      });
+    });
+    return;
+  }
+  // Date
+  const dateEl = e.target.closest('[data-action="date"]');
+  if (dateEl) {
+    const id = dateEl.dataset.id;
+    const td = dateEl.closest('td');
+    const input = td.querySelector('.job-date-input');
+    dateEl.style.display = 'none';
+    input.style.display = 'inline-block';
+    input.focus();
+    const done = () => {
+      if (input.value) _updateJob(id, { dateApplied: input.value });
+      else renderJobs();
+    };
+    input.onblur = done;
+    input.onkeydown = ev => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = _getJobById(id)?.dateApplied || ''; input.blur(); } };
+    return;
+  }
+  // Location
+  const locEl = e.target.closest('[data-action="location"]');
+  if (locEl) {
+    const id = locEl.dataset.id;
+    const job = _getJobById(id);
+    let selType = job?.locationType || null;
+    _openJobDropdown(locEl, (dd) => {
+      dd.innerHTML = `
+        <div class="job-dd-item" data-loctype="remote">Remote</div>
+        <div class="job-dd-item" data-loctype="hybrid">Hybrid</div>
+        <div class="job-dd-item" data-loctype="onsite">On-site</div>
+        <div id="jobLocCityWrap" style="display:none;padding:4px 8px 6px;">
+          <input class="job-loc-city-input" id="jobLocCityInput" placeholder="City (e.g. New York)">
+        </div>`;
+      dd.querySelectorAll('[data-loctype]').forEach(item => {
+        item.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          selType = item.dataset.loctype;
+          dd.querySelectorAll('[data-loctype]').forEach(i => i.style.fontWeight = '');
+          item.style.fontWeight = '500';
+          if (selType === 'remote') {
+            _updateJob(id, { locationType:'remote', locationCity:'' });
+            _closeJobDropdown();
+          } else {
+            const wrap = document.getElementById('jobLocCityWrap');
+            wrap.style.display = 'block';
+            const ci = document.getElementById('jobLocCityInput');
+            ci.value = job?.locationCity || '';
+            ci.focus();
+            ci.onclick = ev2 => ev2.stopPropagation();
+            ci.onkeydown = ev2 => {
+              if (ev2.key === 'Enter') { _updateJob(id, { locationType:selType, locationCity:ci.value.trim() }); _closeJobDropdown(); }
+              if (ev2.key === 'Escape') _closeJobDropdown();
+            };
+          }
+        });
+      });
+    });
+    return;
+  }
+});
+
+// Company name inline save
+document.addEventListener('blur', (e) => {
+  if (!e.target.classList.contains('job-company-name')) return;
+  const id = e.target.dataset.id;
+  const name = e.target.textContent.trim();
+  if (!name || !id) return;
+  const jobs = getJobs();
+  const idx = jobs.findIndex(j => j.id === id);
+  if (idx !== -1 && jobs[idx].company !== name) { jobs[idx].company = name; saveJobs(jobs); }
+}, true);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('job-company-name')) { e.preventDefault(); e.target.blur(); }
+});
+
+// Add new job
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.target.id !== 'jobAddInput') return;
+  const name = e.target.value.trim();
+  if (!name) return;
+  const jobs = getJobs();
+  jobs.unshift({ id: Date.now().toString(36), company:name, platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
+  saveJobs(jobs);
+  e.target.value = '';
+  renderJobs();
+});
+
+// Sort buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.job-sort-btn');
+  if (!btn) return;
+  _jobSort = btn.dataset.sort;
+  document.querySelectorAll('.job-sort-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderJobs();
+});
+
 // ── Tab switching ──
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2778,7 +3097,7 @@ async function initApp() {
   if (session) {
     await loadFromSupabase();
     document.getElementById('loginOverlay').style.display = 'none';
-    rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak();
+    rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
   }
 }
 
@@ -2797,7 +3116,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
     try {
       await loadFromSupabase();
       document.getElementById('loginOverlay').style.display = 'none';
-      rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak();
+      rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
     } catch(e) {
       err.textContent = 'Load failed: ' + e.message;
       err.style.display = 'block';
