@@ -2146,36 +2146,50 @@ async function _uid() { return (await sb.auth.getSession()).data.session?.user?.
 async function _syncHabits(habits) {
   const uid = await _uid(); if (!uid) return;
   if (habits.length) {
-    await sb.from('habits').upsert(habits.map(h => ({
+    const { error } = await sb.from('habits').upsert(habits.map(h => ({
       id: h.id, user_id: uid, name: h.name,
       start_date: h.startDate || null, end_date: h.endDate || null,
       archived: h.archived || false, archived_at: h.archivedAt || null,
     })), { onConflict: 'id' });
+    if (error) console.error('[sync] habits upsert failed:', error);
   }
-  const { data: existing = [] } = await sb.from('habits').select('id').eq('user_id', uid);
+  const { data: existing = [], error: selErr } = await sb.from('habits').select('id').eq('user_id', uid);
+  if (selErr) { console.error('[sync] habits select failed:', selErr); return; }
   const currentIds = new Set(habits.map(h => h.id));
-  const toDelete = existing.filter(r => !currentIds.has(r.id)).map(r => r.id);
-  if (toDelete.length) await sb.from('habits').delete().eq('user_id', uid).in('id', toDelete);
+  const toDelete = (existing || []).filter(r => !currentIds.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('habits').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) console.error('[sync] habits delete failed:', delErr);
+  }
 }
 
 async function _syncHabitLog(dateStr, ids) {
   const uid = await _uid(); if (!uid) return;
-  await sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
-  if (ids.length) await sb.from('habit_logs').insert(ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })));
+  const { error: delErr } = await sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
+  if (delErr) { console.error('[sync] habit_logs delete failed:', delErr); return; }
+  if (ids.length) {
+    const { error } = await sb.from('habit_logs').insert(ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })));
+    if (error) console.error('[sync] habit_logs insert failed:', error);
+  }
 }
 
 async function _syncGoals(dateStr, goals) {
   const uid = await _uid(); if (!uid) return;
-  await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
-  if (goals.length) await sb.from('goals').insert(goals.map(g => ({
-    user_id: uid, date: dateStr, text: g.text,
-    done: g.done || false, done_at: g.doneAt || null, queued: g.queued || false,
-  })));
+  const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
+  if (delErr) { console.error('[sync] goals delete failed:', delErr); return; }
+  if (goals.length) {
+    const { error } = await sb.from('goals').insert(goals.map(g => ({
+      user_id: uid, date: dateStr, text: g.text,
+      done: g.done || false, done_at: g.doneAt || null, queued: g.queued || false,
+    })));
+    if (error) console.error('[sync] goals insert failed:', error);
+  }
 }
 
 async function _syncSetting(key, value) {
   const uid = await _uid(); if (!uid) return;
-  await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
+  const { error } = await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
+  if (error) console.error('[sync] settings upsert failed:', error);
 }
 
 // ── Load all data from Supabase into MEM (parallel) ──
