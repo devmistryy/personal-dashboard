@@ -446,7 +446,53 @@ e<!DOCTYPE html>
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.06);
     transition: background 0.2s;
+    position: relative;
   }
+  .goal-priority-high { box-shadow: inset 3px 0 0 0 #E24B4A; }
+  .goal-priority-med  { box-shadow: inset 3px 0 0 0 #EF9F27; }
+  .goal-priority-low  { box-shadow: inset 3px 0 0 0 #52C97A; }
+  .goal-priority-btn {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 18px;
+    background: transparent; border: none; cursor: pointer; padding: 0;
+    border-radius: 12px 0 0 12px; z-index: 1;
+  }
+  .goal-area-pill {
+    font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px;
+    white-space: nowrap; flex-shrink: 0; cursor: pointer; transition: opacity 0.15s;
+    background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.5);
+  }
+  .goal-area-pill:hover { opacity: 0.8; }
+  .goal-area-pill.is-empty {
+    background: transparent; color: rgba(255,255,255,0.22);
+    border: 1px dashed rgba(255,255,255,0.15);
+  }
+  .goal-area-wrap { position: relative; flex-shrink: 0; }
+  .goal-area-dd {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+    width: max-content; background: #252528; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .goal-area-dd-item {
+    padding: 9px 13px; font-size: 13px; color: rgba(255,255,255,0.8);
+    cursor: pointer; display: flex; align-items: center; gap: 8px;
+    transition: background 0.12s;
+  }
+  .goal-area-dd-item:hover { background: rgba(255,255,255,0.07); }
+  .goal-area-dd-empty {
+    padding: 12px 13px; font-size: 12px; color: rgba(255,255,255,0.3);
+    text-align: center; font-style: italic;
+  }
+  .goal-area-dd-divider { border-top: 1px solid rgba(255,255,255,0.07); margin: 2px 0; }
+  .goal-area-dd-new {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 13px; font-size: 12px; color: rgba(255,255,255,0.4); cursor: text;
+  }
+  .goal-area-dd-new input {
+    background: none; border: none; outline: none; font-size: 12px;
+    color: rgba(255,255,255,0.75); font-family: inherit; flex: 1;
+  }
+  .goal-area-dd-new input::placeholder { color: rgba(255,255,255,0.3); }
 
   .goal-row:hover { background: rgba(255,255,255,0.055); }
 
@@ -742,6 +788,172 @@ e<!DOCTYPE html>
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+
+  /* ── Areas ── */
+  #areasListWrap {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;
+    margin-bottom: 12px;
+  }
+  .area-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 22px 20px 18px;
+    transition: background 0.2s; min-height: 110px;
+  }
+  .area-card:hover { background: rgba(255,255,255,0.055); }
+  .area-card-name {
+    font-size: 16px; font-weight: 500; color: var(--text-primary);
+    outline: none; background: none; border: none; font-family: inherit;
+    cursor: pointer; line-height: 1.3;
+  }
+  .area-card-count {
+    font-size: 11px; color: var(--text-tertiary);
+    background: rgba(255,255,255,0.06); border-radius: 20px;
+    padding: 2px 8px; white-space: nowrap;
+  }
+  .area-card-delete {
+    background: none; border: none; cursor: pointer; color: var(--text-tertiary);
+    font-size: 16px; padding: 2px 4px; border-radius: 6px;
+    opacity: 0; transition: opacity 0.2s, color 0.2s; line-height: 1; flex-shrink: 0;
+  }
+  .area-card:hover .area-card-delete { opacity: 1; }
+  .area-card-delete:hover { color: var(--danger); }
+  .area-empty-state {
+    text-align: center; padding: 36px 0 24px;
+    color: var(--text-tertiary); font-size: 14px;
+  }
+  .area-add-btn {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 8px; padding: 9px 16px; border-radius: 10px;
+    background: rgba(255,255,255,0.05); border: 1px dashed rgba(255,255,255,0.15);
+    color: var(--text-tertiary); font-size: 14px; font-family: inherit;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .area-add-btn:hover { background: rgba(255,255,255,0.09); color: var(--text-primary); }
+
+  /* ── Area detail ── */
+  .area-detail-tabs {
+    display: flex; gap: 4px; margin: 20px 0 18px;
+  }
+  .area-detail-tab {
+    font-size: 13px; font-weight: 500; padding: 6px 16px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.08); background: transparent;
+    color: var(--text-tertiary); cursor: pointer; font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+  }
+  .area-detail-tab:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+  .area-detail-tab.active { background: rgba(255,255,255,0.10); color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+  .area-detail-panel { }
+  .area-detail-goal-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .area-detail-goal-row:last-child { border-bottom: none; }
+  .area-detail-goal-cb { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.22); flex-shrink: 0; }
+  .area-detail-goal-cb.done { background: rgba(255,255,255,0.12); border-color: transparent; }
+  .area-detail-goal-text { font-size: 14px; color: var(--text-primary); flex: 1; }
+  .area-detail-goal-text.done { text-decoration: line-through; color: var(--text-tertiary); }
+  .area-detail-goal-key { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+  .area-detail-empty { color: var(--text-tertiary); font-size: 14px; padding: 24px 0; }
+  .area-note-entry {
+    padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .area-note-entry:last-child { border-bottom: none; }
+  .area-note-date {
+    font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  .area-note-body { font-size: 14px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
+  .area-note-input-wrap { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .area-note-input {
+    width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+    color: var(--text-primary); font-size: 14px; padding: 12px 14px;
+    outline: none; font-family: inherit; resize: vertical; line-height: 1.6;
+    transition: border-color 0.15s;
+  }
+  .area-note-input:focus { border-color: rgba(255,255,255,0.22); }
+  .area-note-input::placeholder { color: var(--text-tertiary); }
+  .area-note-add-btn {
+    align-self: flex-end; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; color: var(--text-primary); font-size: 13px; font-weight: 500;
+    padding: 7px 18px; cursor: pointer; font-family: inherit; transition: background 0.15s;
+  }
+  .area-note-add-btn:hover { background: rgba(255,255,255,0.14); }
+  .area-detail-delete-btn {
+    background: rgba(226,75,74,0.10); border: 1px solid rgba(226,75,74,0.25);
+    border-radius: 8px; color: #E24B4A; font-size: 13px; font-weight: 500;
+    padding: 8px 18px; cursor: pointer; font-family: inherit; transition: background 0.15s;
+  }
+  .area-detail-delete-btn:hover { background: rgba(226,75,74,0.20); }
+
+  /* ── Area creation modal ── */
+  .area-create-card {
+    background: #1e1e22; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+    padding: 28px 28px 24px; width: 340px; max-width: 92vw;
+  }
+  .area-create-title {
+    font-size: 17px; font-weight: 600; color: var(--text-primary); margin-bottom: 18px;
+  }
+  .area-create-name-input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; color: var(--text-primary); font-size: 15px;
+    padding: 11px 14px; outline: none; font-family: inherit; margin-bottom: 20px;
+    transition: border-color 0.15s;
+  }
+  .area-create-name-input:focus { border-color: rgba(255,255,255,0.28); }
+  .area-create-name-input::placeholder { color: var(--text-tertiary); }
+  .area-create-colors-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 12px;
+  }
+  .area-create-colors {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px;
+  }
+  .area-color-swatch {
+    width: 30px; height: 30px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
+    border: 2px solid transparent; transition: transform 0.12s, border-color 0.12s;
+    box-sizing: border-box; position: relative; overflow: hidden;
+  }
+  .area-color-swatch:hover { transform: scale(1.12); }
+  .area-color-swatch.selected { border-color: #fff; transform: scale(1.12); }
+  .area-color-swatch.taken {
+    cursor: not-allowed;
+    border-color: rgba(160,160,160,0.9);
+  }
+  .area-color-swatch.taken::before {
+    content: '';
+    position: absolute;
+    inset: 0; border-radius: 50%;
+    background: rgba(30,30,34,0.5);
+    pointer-events: none;
+  }
+  .area-color-swatch.taken::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: -10%;
+    width: 120%; height: 1.5px;
+    background: rgba(255,255,255,0.6);
+    transform: translateY(-50%) rotate(-45deg);
+    pointer-events: none;
+  }
+  .area-color-swatch.taken:hover { transform: none; }
+  .area-create-actions {
+    display: flex; justify-content: flex-end; gap: 10px;
+  }
+  .area-create-btn-cancel {
+    background: transparent; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; color: var(--text-tertiary); font-size: 14px; font-weight: 500;
+    padding: 8px 18px; cursor: pointer; font-family: inherit; transition: background 0.15s;
+  }
+  .area-create-btn-cancel:hover { background: rgba(255,255,255,0.06); }
+  .area-create-btn-save {
+    background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 8px; color: var(--text-primary); font-size: 14px; font-weight: 600;
+    padding: 8px 20px; cursor: pointer; font-family: inherit; transition: background 0.15s;
+  }
+  .area-create-btn-save:hover { background: rgba(255,255,255,0.16); }
 
   /* ── Job Applications ── */
   .job-sort-bar { display:flex; align-items:center; gap:6px; padding:12px 14px 10px; border-bottom:1px solid rgba(255,255,255,0.05); }
@@ -1445,6 +1657,7 @@ e<!DOCTYPE html>
     <button class="tab-btn active" data-tab="tasks">To Do</button>
     <button class="tab-btn" data-tab="habits">Habits</button>
     <button class="tab-btn" data-tab="jobs">Jobs</button>
+    <button class="tab-btn" data-tab="areas">Areas</button>
   </div>
 
   <!-- Tab: Tasks -->
@@ -1567,6 +1780,15 @@ e<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Tab: Areas -->
+  <div class="tab-panel" id="tab-areas">
+    <div class="section">
+      <div class="section-title">Areas</div>
+      <div id="areasListWrap"></div>
+      <button class="area-add-btn" id="areaAddBtn">+ New Area</button>
+    </div>
+  </div>
+
 </div>
 
 <!-- Job status/platform/location dropdown -->
@@ -1581,6 +1803,43 @@ e<!DOCTYPE html>
     <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#fff;font-size:15px;padding:12px 14px;margin-bottom:18px;outline:none;font-family:system-ui,sans-serif;">
     <button id="loginBtn" style="width:100%;background:#4A9EFF;border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:600;padding:13px;cursor:pointer;font-family:system-ui,sans-serif;">Sign In</button>
     <p id="loginError" style="color:#ff453a;font-size:13px;margin:10px 0 0;text-align:center;display:none;font-family:system-ui,sans-serif;"></p>
+  </div>
+</div>
+
+<!-- Area creation modal -->
+<div id="areaCreateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;align-items:center;justify-content:center;">
+  <div class="area-create-card">
+    <div class="area-create-title">New Area</div>
+    <input id="areaCreateName" type="text" class="area-create-name-input" placeholder="Area name…">
+    <div id="areaCreateError" style="display:none;font-size:12px;color:#E24B4A;margin:-12px 0 14px;"></div>
+    <div class="area-create-colors-label">Color</div>
+    <div class="area-create-colors" id="areaCreateColors"></div>
+    <div class="area-create-actions">
+      <button id="areaCreateCancel" class="area-create-btn-cancel">Cancel</button>
+      <button id="areaCreateSave" class="area-create-btn-save">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="areaDetailPage" class="habit-detail-page">
+  <div class="habit-detail-wrap">
+    <button id="areaDetailBack" class="habit-detail-back">← Back</button>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px;">
+      <h2 class="habit-detail-name" id="areaDetailName" contenteditable="true" spellcheck="false" style="margin:0;flex:1;"></h2>
+      <div id="areaDetailColorRow" style="display:flex;gap:7px;flex-wrap:wrap;"></div>
+    </div>
+    <div id="areaDetailGoals" class="area-detail-panel"></div>
+    <div id="areaDetailNotes" class="area-detail-panel" style="margin-top:28px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.06);">
+      <div class="habit-detail-section-title" style="margin-bottom:16px;">Notes</div>
+      <div id="areaNotesEntries"></div>
+      <div class="area-note-input-wrap">
+        <textarea id="areaNoteInput" class="area-note-input" placeholder="Add a note…" rows="3"></textarea>
+        <button id="areaNoteAdd" class="area-note-add-btn">Add Entry</button>
+      </div>
+    </div>
+    <div style="margin-top:40px; padding-top:24px; border-top:1px solid rgba(255,255,255,0.06);">
+      <button id="areaDetailDelete" class="area-detail-delete-btn">Delete Area</button>
+    </div>
   </div>
 </div>
 
@@ -1608,6 +1867,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const MEM = {};
 
 function storeGet(key) { return MEM.hasOwnProperty(key) ? MEM[key] : null; }
+const AREA_COLORS = ['#E24B4A','#EF9F27','#F5D558','#52C97A','#30D6C0','#4A9EFF','#A78BFA','#E879A9','#FF8C5A','#94A3B8'];
+function getAreas() {
+  const raw = MEM['areas:list'] || [];
+  return raw.map(a => typeof a === 'string' ? { name: a, color: AREA_COLORS[0] } : a);
+}
+function saveAreas(areas) { MEM['areas:list'] = areas; }
 function storeSet(key, value) {
   MEM[key] = value;
   if (key.startsWith('goals:')) {
@@ -1891,10 +2156,25 @@ function renderTomorrowCount() {
 
 // ── Build goal row ──
 function buildGoalRow(g, idx, goals, key, readOnly) {
+  const priority = g.priority || 'Medium';
+  const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[priority] || 'goal-priority-med';
   const li = document.createElement('li');
-  li.className = 'goal-row' + (g.done ? ' is-done' : '') + (g.queued && !g.done ? ' is-queued' : '');
+  li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '') + (g.queued && !g.done ? ' is-queued' : '');
   li.dataset.idx = idx;
   li.draggable = !readOnly;
+
+  // Priority click strip (invisible, covers left border area)
+  const priBtn = document.createElement('button');
+  priBtn.className = 'goal-priority-btn';
+  priBtn.title = `Priority: ${priority} — click to change`;
+  priBtn.addEventListener('click', () => {
+    const order = ['High', 'Medium', 'Low'];
+    const cur = goals[idx].priority || 'Medium';
+    goals[idx].priority = order[(order.indexOf(cur) + 1) % order.length];
+    storeSet(key, goals);
+    reload();
+  });
+  li.appendChild(priBtn);
 
   // Drag handle
   const drag = document.createElement('span');
@@ -1930,6 +2210,71 @@ function buildGoalRow(g, idx, goals, key, readOnly) {
   txt.textContent = g.text;
   makeInlineEdit(txt, idx, goals, key, reload);
   li.appendChild(txt);
+
+  // Area pill + dropdown
+  const areaWrap = document.createElement('div');
+  areaWrap.className = 'goal-area-wrap';
+
+  const _areaObj = getAreas().find(a => a.name === g.area);
+  const hasArea = !!g.area;
+  const areaPill = document.createElement('span');
+  areaPill.className = 'goal-area-pill' + (hasArea ? '' : ' is-empty');
+  if (hasArea && _areaObj) {
+    areaPill.textContent = g.area;
+    areaPill.style.background = _areaObj.color + 'BF';
+    areaPill.style.color = '#fff';
+  } else {
+    areaPill.textContent = '+ area';
+  }
+  areaWrap.appendChild(areaPill);
+
+  areaPill.addEventListener('click', e => {
+    e.stopPropagation();
+    document.querySelectorAll('.goal-area-dd').forEach(d => d.remove());
+
+    const areas = getAreas();
+    const dd = document.createElement('div');
+    dd.className = 'goal-area-dd';
+
+    if (areas.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'goal-area-dd-empty';
+      empty.textContent = 'No Areas Created';
+      dd.appendChild(empty);
+    } else {
+      areas.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'goal-area-dd-item';
+        const pill = document.createElement('span');
+        pill.className = 'goal-area-pill';
+        pill.textContent = a.name;
+        pill.style.background = a.color + 'BF';
+        pill.style.color = '#fff';
+        if (goals[idx].area === a.name) pill.style.outline = '2px solid #fff';
+        item.appendChild(pill);
+        item.addEventListener('click', e => {
+          e.stopPropagation();
+          goals[idx].area = goals[idx].area === a.name ? null : a.name;
+          storeSet(key, goals);
+          dd.remove();
+          reload();
+        });
+        dd.appendChild(item);
+      });
+    }
+
+    areaWrap.appendChild(dd);
+
+    const closeOnOutside = ev => {
+      if (!dd.contains(ev.target) && ev.target !== areaPill) {
+        dd.remove();
+        document.removeEventListener('click', closeOnOutside);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
+  });
+
+  li.appendChild(areaWrap);
 
   // Queue button
   const qBtn = document.createElement('button');
@@ -2134,7 +2479,7 @@ function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
   function addGoal(text) {
     if (!text) return;
     const goals = storeGet(getKey()) || [];
-    goals.push({ text, done: false });
+    goals.push({ text, done: false, priority: 'Medium', area: null });
     storeSet(getKey(), goals);
     inputEl.value = '';
     reload();
@@ -2174,7 +2519,7 @@ document.getElementById('gmPushBtn').addEventListener('click', () => {
   const tomorrowGoals = storeGet(tomorrowKey()) || [];
   const existingTexts = new Set(tomorrowGoals.map(g => g.text));
   const unchecked = todayGoals.filter(g => !g.done);
-  unchecked.forEach(g => { if (!existingTexts.has(g.text)) tomorrowGoals.push({ text: g.text, done: false }); });
+  unchecked.forEach(g => { if (!existingTexts.has(g.text)) tomorrowGoals.push({ text: g.text, done: false, priority: g.priority || 'Medium', area: g.area || null }); });
   storeSet(tomorrowKey(), tomorrowGoals);
   const remaining = todayGoals.filter(g => g.done);
   storeSet(todayKey(), remaining);
@@ -3116,6 +3461,311 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.job-sort-btn').forEach(b => b.classList.toggle('active', b === btn));
   renderJobs();
 });
+
+// ── Areas ──
+function getAllGoalAreas() {
+  const all = [];
+  const keys = [todayKey(), tomorrowKey()];
+  keys.forEach(k => {
+    (storeGet(k) || []).forEach(g => { if (g.area) all.push(g.area); });
+  });
+  return all;
+}
+
+// ── Area detail ──
+let _currentAreaName = null;
+
+function getAreaNotes(name) { return (MEM['area_notes:' + name] || []); }
+function saveAreaNotes(name, notes) { MEM['area_notes:' + name] = notes; }
+
+function openAreaDetail(name) {
+  _currentAreaName = name;
+  document.getElementById('areaDetailPage').classList.add('open');
+  renderAreaDetail();
+}
+
+function closeAreaDetail() {
+  document.getElementById('areaDetailPage').classList.remove('open');
+  _currentAreaName = null;
+  renderAreas();
+}
+
+function renderAreaDetail() {
+  if (!_currentAreaName) return;
+  const name = _currentAreaName;
+
+  // Name
+  const nameEl = document.getElementById('areaDetailName');
+  nameEl.textContent = name;
+  nameEl.onblur = () => {
+    const newName = nameEl.textContent.trim();
+    if (!newName || newName === name) { nameEl.textContent = name; return; }
+    const areas = getAreas();
+    const idx = areas.findIndex(a => a.name === name);
+    if (idx === -1) return;
+    areas[idx] = { ...areas[idx], name: newName };
+    saveAreas(areas);
+    // rename notes key
+    const notes = getAreaNotes(name);
+    saveAreaNotes(newName, notes);
+    MEM['area_notes:' + name] = undefined;
+    // update goals
+    [todayKey(), tomorrowKey()].forEach(k => {
+      const goals = storeGet(k) || [];
+      let changed = false;
+      goals.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
+      if (changed) storeSet(k, goals);
+    });
+    _currentAreaName = newName;
+  };
+  nameEl.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+    if (e.key === 'Escape') { nameEl.textContent = _currentAreaName; nameEl.blur(); }
+  };
+
+  // Color swatches
+  const colorRow = document.getElementById('areaDetailColorRow');
+  colorRow.innerHTML = '';
+  const areas = getAreas();
+  const areaObj = areas.find(a => a.name === name) || {};
+  const usedColors = new Set(areas.filter(a => a.name !== name).map(a => a.color));
+  AREA_COLORS.forEach(c => {
+    const taken = usedColors.has(c);
+    const sw = document.createElement('div');
+    sw.className = 'area-color-swatch' + (c === areaObj.color ? ' selected' : '') + (taken ? ' taken' : '');
+    sw.style.cssText = `background:${c};width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid transparent;box-sizing:border-box;transition:transform 0.12s,border-color 0.12s;position:relative;overflow:hidden;`;
+    if (c === areaObj.color) { sw.style.borderColor = '#fff'; sw.style.transform = 'scale(1.15)'; }
+    if (taken) { sw.style.cursor = 'not-allowed'; sw.style.borderColor = 'rgba(160,160,160,0.9)'; sw.title = 'Already in use'; }
+    else {
+      sw.style.cursor = 'pointer';
+      sw.addEventListener('click', () => {
+        const areas = getAreas();
+        const idx = areas.findIndex(a => a.name === _currentAreaName);
+        if (idx === -1) return;
+        areas[idx] = { ...areas[idx], color: c };
+        saveAreas(areas);
+        colorRow.querySelectorAll('.area-color-swatch').forEach(s => { s.classList.remove('selected'); s.style.borderColor = 'transparent'; s.style.transform = ''; if (s.classList.contains('taken')) s.style.borderColor = 'rgba(160,160,160,0.9)'; });
+        sw.classList.add('selected'); sw.style.borderColor = '#fff'; sw.style.transform = 'scale(1.15)';
+      });
+    }
+    colorRow.appendChild(sw);
+  });
+
+  renderAreaGoals();
+  renderAreaNotes();
+}
+
+function renderAreaGoals() {
+  const name = _currentAreaName;
+  const wrap = document.getElementById('areaDetailGoals');
+  wrap.innerHTML = '';
+  const all = [];
+  [{ k: todayKey(), label: 'Today' }, { k: tomorrowKey(), label: 'Tomorrow' }].forEach(({ k, label }) => {
+    (storeGet(k) || []).filter(g => g.area === name).forEach(g => all.push({ g, label }));
+  });
+  if (all.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'area-detail-empty';
+    empty.textContent = 'No goals assigned to this area yet.';
+    wrap.appendChild(empty);
+    return;
+  }
+  all.forEach(({ g, label }) => {
+    const row = document.createElement('div');
+    row.className = 'area-detail-goal-row';
+    const cb = document.createElement('div');
+    cb.className = 'area-detail-goal-cb' + (g.done ? ' done' : '');
+    const txt = document.createElement('span');
+    txt.className = 'area-detail-goal-text' + (g.done ? ' done' : '');
+    txt.textContent = g.text;
+    const key = document.createElement('span');
+    key.className = 'area-detail-goal-key';
+    key.textContent = label;
+    row.appendChild(cb); row.appendChild(txt); row.appendChild(key);
+    wrap.appendChild(row);
+  });
+}
+
+function renderAreaNotes() {
+  const name = _currentAreaName;
+  const notes = getAreaNotes(name);
+  const wrap = document.getElementById('areaNotesEntries');
+  wrap.innerHTML = '';
+  if (notes.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'area-detail-empty';
+    empty.textContent = 'No notes yet.';
+    wrap.appendChild(empty);
+    return;
+  }
+  [...notes].reverse().forEach(note => {
+    const entry = document.createElement('div');
+    entry.className = 'area-note-entry';
+    const dateEl = document.createElement('div');
+    dateEl.className = 'area-note-date';
+    dateEl.textContent = new Date(note.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const body = document.createElement('div');
+    body.className = 'area-note-body';
+    body.textContent = note.text;
+    entry.appendChild(dateEl); entry.appendChild(body);
+    wrap.appendChild(entry);
+  });
+}
+
+document.getElementById('areaDetailBack').addEventListener('click', closeAreaDetail);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('areaDetailPage').classList.contains('open')) closeAreaDetail();
+});
+
+
+// Add note
+document.getElementById('areaNoteAdd').addEventListener('click', () => {
+  const inp = document.getElementById('areaNoteInput');
+  const text = inp.value.trim();
+  if (!text || !_currentAreaName) return;
+  const notes = getAreaNotes(_currentAreaName);
+  notes.push({ text, createdAt: Date.now() });
+  saveAreaNotes(_currentAreaName, notes);
+  inp.value = '';
+  renderAreaNotes();
+});
+document.getElementById('areaNoteInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) document.getElementById('areaNoteAdd').click();
+});
+
+document.getElementById('areaDetailDelete').addEventListener('click', () => {
+  if (!_currentAreaName) return;
+  if (!confirm(`Delete area "${_currentAreaName}"? Goals assigned to it will lose their area tag.`)) return;
+  const name = _currentAreaName;
+  const areas = getAreas();
+  const idx = areas.findIndex(a => a.name === name);
+  if (idx !== -1) { areas.splice(idx, 1); saveAreas(areas); }
+  [todayKey(), tomorrowKey()].forEach(k => {
+    const goals = storeGet(k) || [];
+    let changed = false;
+    goals.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });
+    if (changed) storeSet(k, goals);
+  });
+  closeAreaDetail();
+});
+
+function renderAreas() {
+  const wrap = document.getElementById('areasListWrap');
+  if (!wrap) return;
+  const areas = getAreas();
+  wrap.innerHTML = '';
+  if (areas.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'area-empty-state';
+    empty.textContent = 'No Areas Created';
+    wrap.appendChild(empty);
+    return;
+  }
+  const allGoalAreas = getAllGoalAreas();
+  areas.forEach(area => {
+    const count = allGoalAreas.filter(a => a === area.name).length;
+    const card = document.createElement('div');
+    card.className = 'area-card';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => openAreaDetail(area.name));
+
+    card.style.borderColor = area.color + 'BF';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'area-card-name';
+    nameEl.textContent = area.name;
+    card.appendChild(nameEl);
+
+    const countEl = document.createElement('span');
+    countEl.className = 'area-card-count';
+    countEl.textContent = count === 1 ? '1 task' : `${count} tasks`;
+    card.appendChild(countEl);
+
+    wrap.appendChild(card);
+  });
+}
+
+// ── Area creation modal ──
+let _areaCreateColor = AREA_COLORS[0];
+
+function openAreaCreateModal(prefill) {
+  const modal = document.getElementById('areaCreateModal');
+  const nameInp = document.getElementById('areaCreateName');
+  nameInp.value = prefill || '';
+
+  const usedColors = new Set(getAreas().map(a => a.color));
+  const firstAvailable = AREA_COLORS.find(c => !usedColors.has(c)) || AREA_COLORS[0];
+  _areaCreateColor = firstAvailable;
+
+  const colorsWrap = document.getElementById('areaCreateColors');
+  colorsWrap.innerHTML = '';
+  AREA_COLORS.forEach(c => {
+    const taken = usedColors.has(c);
+    const sw = document.createElement('div');
+    sw.className = 'area-color-swatch' + (c === _areaCreateColor ? ' selected' : '') + (taken ? ' taken' : '');
+    sw.style.background = c;
+    if (taken) {
+      sw.title = 'Already in use';
+    } else {
+      sw.addEventListener('click', () => {
+        _areaCreateColor = c;
+        colorsWrap.querySelectorAll('.area-color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+      });
+    }
+    colorsWrap.appendChild(sw);
+  });
+
+  modal.style.display = 'flex';
+  setTimeout(() => nameInp.focus(), 50);
+}
+
+function closeAreaCreateModal() {
+  document.getElementById('areaCreateModal').style.display = 'none';
+  document.getElementById('areaCreateError').style.display = 'none';
+}
+
+document.getElementById('areaCreateCancel').addEventListener('click', closeAreaCreateModal);
+document.getElementById('areaCreateModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('areaCreateModal')) closeAreaCreateModal();
+});
+
+document.getElementById('areaCreateSave').addEventListener('click', () => {
+  const name = document.getElementById('areaCreateName').value.trim();
+  const errEl = document.getElementById('areaCreateError');
+  if (!name) return;
+  const areas = getAreas();
+  const duplicate = areas.find(a => a.name.toLowerCase() === name.toLowerCase());
+  if (duplicate) {
+    errEl.textContent = 'Project already exists';
+    errEl.style.display = 'block';
+    return;
+  }
+  areas.push({ name, color: _areaCreateColor });
+  saveAreas(areas);
+  closeAreaCreateModal();
+  renderAreas();
+  openAreaDetail(name);
+});
+
+document.getElementById('areaCreateName').addEventListener('input', () => {
+  const errEl = document.getElementById('areaCreateError');
+  errEl.style.display = 'none';
+});
+
+document.getElementById('areaCreateName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('areaCreateSave').click();
+  if (e.key === 'Escape') closeAreaCreateModal();
+});
+
+document.getElementById('areaAddBtn').addEventListener('click', () => openAreaCreateModal(''));
+
+// re-render areas when the tab is opened
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  if (btn.dataset.tab === 'areas') btn.addEventListener('click', renderAreas);
+});
+
+renderAreas();
 
 // ── Tab switching ──
 document.querySelectorAll('.tab-btn').forEach(btn => {
