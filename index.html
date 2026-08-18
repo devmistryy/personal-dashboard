@@ -798,9 +798,11 @@ e<!DOCTYPE html>
     display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
     background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06);
     border-radius: 16px; padding: 22px 20px 18px;
-    transition: background 0.2s; min-height: 110px;
+    transition: background 0.2s, opacity 0.2s, transform 0.15s; min-height: 110px;
   }
   .area-card:hover { background: rgba(255,255,255,0.055); }
+  .area-card.drag-over { outline: 2px solid rgba(255,255,255,0.3); }
+  .area-card.dragging { opacity: 0.4; }
   .area-card-name {
     font-size: 16px; font-weight: 500; color: var(--text-primary);
     outline: none; background: none; border: none; font-family: inherit;
@@ -1829,6 +1831,7 @@ e<!DOCTYPE html>
       <div id="areaDetailColorRow" style="display:flex;gap:7px;flex-wrap:wrap;"></div>
     </div>
     <div id="areaDetailGoals" class="area-detail-panel"></div>
+    <div id="areaDetailHabits" class="area-detail-panel" style="margin-top:28px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.06);"></div>
     <div id="areaDetailNotes" class="area-detail-panel" style="margin-top:28px;padding-top:24px;">
       <div class="habit-detail-section-title" style="margin-bottom:16px;">Notes</div>
       <div id="areaNotesEntries"></div>
@@ -2154,6 +2157,74 @@ function renderTomorrowCount() {
   document.getElementById('tomorrowLabel').textContent = `Plan tomorrow — ${formatDate(getTomorrowDateString())}`;
 }
 
+// ── Shared area pill + dropdown ──
+function buildAreaPill(currentArea, onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'goal-area-wrap';
+
+  const areas = getAreas();
+  const areaObj = areas.find(a => a.name === currentArea);
+  const hasArea = !!currentArea && !!areaObj;
+
+  const pill = document.createElement('span');
+  pill.className = 'goal-area-pill' + (hasArea ? '' : ' is-empty');
+  if (hasArea) {
+    pill.textContent = currentArea;
+    pill.style.background = areaObj.color + 'BF';
+    pill.style.color = '#fff';
+  } else {
+    pill.textContent = '+ area';
+  }
+  wrap.appendChild(pill);
+
+  pill.addEventListener('click', e => {
+    e.stopPropagation();
+    document.querySelectorAll('.goal-area-dd').forEach(d => d.remove());
+
+    const freshAreas = getAreas();
+    const dd = document.createElement('div');
+    dd.className = 'goal-area-dd';
+
+    if (freshAreas.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'goal-area-dd-empty';
+      empty.textContent = 'No Areas Created';
+      dd.appendChild(empty);
+    } else {
+      freshAreas.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'goal-area-dd-item';
+        const dpill = document.createElement('span');
+        dpill.className = 'goal-area-pill';
+        dpill.textContent = a.name;
+        dpill.style.background = a.color + 'BF';
+        dpill.style.color = '#fff';
+        if (currentArea === a.name) dpill.style.outline = '2px solid #fff';
+        item.appendChild(dpill);
+        item.addEventListener('click', ev => {
+          ev.stopPropagation();
+          const newArea = currentArea === a.name ? null : a.name;
+          onChange(newArea);
+          currentArea = newArea;
+          dd.remove();
+        });
+        dd.appendChild(item);
+      });
+    }
+
+    wrap.appendChild(dd);
+    const closeOnOutside = ev => {
+      if (!dd.contains(ev.target) && ev.target !== pill) {
+        dd.remove();
+        document.removeEventListener('click', closeOnOutside);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
+  });
+
+  return wrap;
+}
+
 // ── Build goal row ──
 function buildGoalRow(g, idx, goals, key, readOnly) {
   const priority = g.priority || 'Medium';
@@ -2212,69 +2283,11 @@ function buildGoalRow(g, idx, goals, key, readOnly) {
   li.appendChild(txt);
 
   // Area pill + dropdown
-  const areaWrap = document.createElement('div');
-  areaWrap.className = 'goal-area-wrap';
-
-  const _areaObj = getAreas().find(a => a.name === g.area);
-  const hasArea = !!g.area;
-  const areaPill = document.createElement('span');
-  areaPill.className = 'goal-area-pill' + (hasArea ? '' : ' is-empty');
-  if (hasArea && _areaObj) {
-    areaPill.textContent = g.area;
-    areaPill.style.background = _areaObj.color + 'BF';
-    areaPill.style.color = '#fff';
-  } else {
-    areaPill.textContent = '+ area';
-  }
-  areaWrap.appendChild(areaPill);
-
-  areaPill.addEventListener('click', e => {
-    e.stopPropagation();
-    document.querySelectorAll('.goal-area-dd').forEach(d => d.remove());
-
-    const areas = getAreas();
-    const dd = document.createElement('div');
-    dd.className = 'goal-area-dd';
-
-    if (areas.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'goal-area-dd-empty';
-      empty.textContent = 'No Areas Created';
-      dd.appendChild(empty);
-    } else {
-      areas.forEach(a => {
-        const item = document.createElement('div');
-        item.className = 'goal-area-dd-item';
-        const pill = document.createElement('span');
-        pill.className = 'goal-area-pill';
-        pill.textContent = a.name;
-        pill.style.background = a.color + 'BF';
-        pill.style.color = '#fff';
-        if (goals[idx].area === a.name) pill.style.outline = '2px solid #fff';
-        item.appendChild(pill);
-        item.addEventListener('click', e => {
-          e.stopPropagation();
-          goals[idx].area = goals[idx].area === a.name ? null : a.name;
-          storeSet(key, goals);
-          dd.remove();
-          reload();
-        });
-        dd.appendChild(item);
-      });
-    }
-
-    areaWrap.appendChild(dd);
-
-    const closeOnOutside = ev => {
-      if (!dd.contains(ev.target) && ev.target !== areaPill) {
-        dd.remove();
-        document.removeEventListener('click', closeOnOutside);
-      }
-    };
-    setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
-  });
-
-  li.appendChild(areaWrap);
+  li.appendChild(buildAreaPill(g.area, newArea => {
+    goals[idx].area = newArea;
+    storeSet(key, goals);
+    reload();
+  }));
 
   // Queue button
   const qBtn = document.createElement('button');
@@ -2781,6 +2794,15 @@ function buildHabitRow(habit, allHabits, isArchived) {
   }
 
   li.appendChild(nameCol);
+
+  // Area pill
+  if (!isArchived) {
+    li.appendChild(buildAreaPill(habit.area || null, newArea => {
+      habit.area = newArea;
+      saveHabits(allHabits);
+      renderHabits();
+    }));
+  }
 
   // Weekly dots (Mon–Sun of current week)
   const last7 = getCurrentWeekDates();
@@ -3552,6 +3574,7 @@ function renderAreaDetail() {
   });
 
   renderAreaGoals();
+  renderAreaHabits();
   renderAreaNotes();
 }
 
@@ -3559,6 +3582,11 @@ function renderAreaGoals() {
   const name = _currentAreaName;
   const wrap = document.getElementById('areaDetailGoals');
   wrap.innerHTML = '';
+  const titleEl = document.createElement('div');
+  titleEl.className = 'habit-detail-section-title';
+  titleEl.style.marginBottom = '16px';
+  titleEl.textContent = 'Goals';
+  wrap.appendChild(titleEl);
   const all = [];
   [{ k: todayKey(), label: 'Today' }, { k: tomorrowKey(), label: 'Tomorrow' }].forEach(({ k, label }) => {
     (storeGet(k) || []).filter(g => g.area === name).forEach(g => all.push({ g, label }));
@@ -3582,6 +3610,44 @@ function renderAreaGoals() {
     key.className = 'area-detail-goal-key';
     key.textContent = label;
     row.appendChild(cb); row.appendChild(txt); row.appendChild(key);
+    wrap.appendChild(row);
+  });
+}
+
+function renderAreaHabits() {
+  const name = _currentAreaName;
+  const wrap = document.getElementById('areaDetailHabits');
+  wrap.innerHTML = '';
+
+  const title = document.createElement('div');
+  title.className = 'habit-detail-section-title';
+  title.style.marginBottom = '16px';
+  title.textContent = 'Habits';
+  wrap.appendChild(title);
+
+  const today = habitDateStr(0);
+  const todayLog = getHabitLog(today);
+  const habits = getHabits().filter(h => !h.archived && h.area === name);
+
+  if (habits.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'area-detail-empty';
+    empty.textContent = 'No habits assigned to this area yet.';
+    wrap.appendChild(empty);
+    return;
+  }
+
+  habits.forEach(h => {
+    const row = document.createElement('div');
+    row.className = 'area-detail-goal-row';
+    const cb = document.createElement('div');
+    const done = todayLog.includes(h.id);
+    cb.className = 'area-detail-goal-cb' + (done ? ' done' : '');
+    const txt = document.createElement('span');
+    txt.className = 'area-detail-goal-text' + (done ? ' done' : '');
+    txt.textContent = h.name;
+    row.appendChild(cb);
+    row.appendChild(txt);
     wrap.appendChild(row);
   });
 }
@@ -3662,14 +3728,45 @@ function renderAreas() {
     return;
   }
   const allGoalAreas = getAllGoalAreas();
-  areas.forEach(area => {
+  let _areaDragFrom = null;
+
+  areas.forEach((area, idx) => {
     const count = allGoalAreas.filter(a => a === area.name).length;
     const card = document.createElement('div');
     card.className = 'area-card';
-    card.style.cursor = 'pointer';
+    card.dataset.idx = idx;
+    card.draggable = true;
+    card.style.borderColor = area.color + 'BF';
+
     card.addEventListener('click', () => openAreaDetail(area.name));
 
-    card.style.borderColor = area.color + 'BF';
+    card.addEventListener('dragstart', e => {
+      _areaDragFrom = idx;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      wrap.querySelectorAll('.area-card').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      wrap.querySelectorAll('.area-card').forEach(c => c.classList.remove('drag-over'));
+      if (idx !== _areaDragFrom) card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      if (_areaDragFrom === null || _areaDragFrom === idx) return;
+      const areas = getAreas();
+      const [moved] = areas.splice(_areaDragFrom, 1);
+      areas.splice(idx, 0, moved);
+      saveAreas(areas);
+      _areaDragFrom = null;
+      renderAreas();
+    });
 
     const nameEl = document.createElement('span');
     nameEl.className = 'area-card-name';
