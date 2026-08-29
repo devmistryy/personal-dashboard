@@ -255,15 +255,26 @@ function _habitScheduledOn(h, ds) {
   return true;
 }
 
-// Completion-ring colour: red (0%) → yellow (50%) → green (100%).
-// Uses the theme tokens --danger / --warning / --success and lerpColor (main.js).
+// Completion-ring colour: a continuous ramp through four regions — red, orange,
+// yellow (each dark → light as the day fills), then green (light → dark) — with
+// the region seams blended over ~12% around each of 25 / 50 / 75.
+const _HCAL_STOPS = [
+  [  0, [ 74,  14,  14]],  // red    · darkest
+  [ 19, [255,  90,  90]],  // red    · lightest
+  [ 31, [192, 106,  30]],  // orange · darkest
+  [ 44, [255, 174,  99]],  // orange · lightest
+  [ 56, [196, 165,  46]],  // yellow · darkest
+  [ 69, [255, 232, 107]],  // yellow · lightest
+  [ 81, [ 88, 217, 142]],  // green  · lightest
+  [100, [ 31, 122,  76]],  // green  · darkest
+];
 function _hcalRingColor(pct) {
-  const t = Math.max(0, Math.min(1, pct / 100));
-  const [a, b, seg] = t <= 0.5
-    ? [[255,107,107], [242,192,99],  t / 0.5]           // #FF6B6B → #F2C063
-    : [[242,192,99],  [107,227,164], (t - 0.5) / 0.5];  // #F2C063 → #6BE3A4
-  const [r, g, bl] = lerpColor(a, b, seg);
-  return `rgb(${r},${g},${bl})`;
+  const p = Math.max(0, Math.min(100, pct));
+  let i = 1;
+  while (i < _HCAL_STOPS.length - 1 && _HCAL_STOPS[i][0] < p) i++;
+  const [p0, c0] = _HCAL_STOPS[i - 1];
+  const [p1, c1] = _HCAL_STOPS[i];
+  return `rgb(${lerpColor(c0, c1, (p - p0) / (p1 - p0)).join(',')})`;
 }
 
 function renderHabitOverviewCalendar() {
