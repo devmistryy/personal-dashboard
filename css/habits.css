@@ -684,10 +684,90 @@
   /* Make habit name column feel clickable */
   .habit-name-col { cursor: pointer; }
   .habit-name-col:hover .habit-name { color: #C8C5BD; }
+
+  /* ── Overview-calendar day cells: clickable ── */
+  .hcal-day.is-clickable { cursor: pointer; border-radius: 10px; transition: background 0.15s; }
+  .hcal-day.is-clickable:hover { background: rgba(255,255,255,0.06); }
+  .hcal-day.is-clickable:focus-visible { outline: 1px solid rgba(255,255,255,0.35); outline-offset: 1px; }
+
+  /* ── Day Detail Page ── */
+  .day-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .day-detail-head .day-detail-date {
+    margin: 0;
+    flex: 1;
+    text-align: center;
+    font-size: 23px;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  .day-detail-head .hcal-nav-btn { flex-shrink: 0; }
+
+  .day-detail-summary-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 28px 20px;
+    margin-bottom: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    backdrop-filter: blur(24px) saturate(1.2);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .day-detail-ring-wrap {
+    position: relative;
+    width: 116px;
+    height: 116px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .day-detail-ring {
+    position: static;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+  }
+  .day-detail-ring .hcal-ring-track { stroke-width: 2.4; }
+  .day-detail-ring .hcal-ring-fill { stroke-width: 2.4; }
+  .day-detail-ring-pct {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .day-detail-summary-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+
+  .day-detail-habit-list { display: flex; flex-direction: column; gap: 8px; }
+  .day-detail-habit-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+  }
+  .day-detail-habit-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
   /* Responsive */
   @media (max-width: 480px) {
     .habit-week { display: none; }
     .habit-detail-stats-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .habit-stat-val { font-size: 22px; }
     .habit-detail-name { font-size: 22px; }
+    .day-detail-head .day-detail-date { font-size: 18px; }
   }

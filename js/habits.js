@@ -263,6 +263,9 @@ function renderHabits() {
     const habit = all.find(h => h.id === _detailHabitId);
     if (habit) renderHabitDetailPage(habit, all);
   }
+  if (_detailDay && document.getElementById('dayDetailPage').classList.contains('open')) {
+    renderDayDetail(_detailDay);
+  }
 }
 
 // ── Habits-tab overview calendar ──
@@ -372,7 +375,8 @@ function renderHabitOverviewCalendar() {
            stroke-dasharray="${C} ${C}"></circle>`
       : '';
 
-    html += `<div class="${cls}" title="${titleTxt}">
+    const dayAttrs = isFuture ? '' : ` data-date="${ds}" role="button" tabindex="0"`;
+    html += `<div class="${cls}${isFuture ? '' : ' is-clickable'}"${dayAttrs} title="${titleTxt}">
       <svg class="hcal-ring" viewBox="0 0 36 36">
         <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
         ${fill}
@@ -397,6 +401,19 @@ document.getElementById('hcalNext').addEventListener('click', () => {
   const { year, month } = _hcalMonth;
   _hcalMonth = month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 };
   renderHabitOverviewCalendar();
+});
+
+// Click / keyboard on a calendar day → open that day's detail view. Delegated on
+// the stable #hcalGrid element (only its innerHTML is swapped each render).
+const _hcalGrid = document.getElementById('hcalGrid');
+_hcalGrid.addEventListener('click', e => {
+  const cell = e.target.closest('.hcal-day[data-date]');
+  if (cell) openDayDetail(cell.dataset.date);
+});
+_hcalGrid.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const cell = e.target.closest('.hcal-day[data-date]');
+  if (cell) { e.preventDefault(); openDayDetail(cell.dataset.date); }
 });
 
 // ── Habit Detail Page ──
@@ -676,6 +693,126 @@ function renderHabitHistoryGrid(habit) {
   }
 }
 
+// ── Day Detail Page (opened from the overview calendar) ──
+let _detailDay = null; // ISO YYYY-MM-DD
+
+// Earliest day the ‹ arrow can reach — the ISO form of the calendar's 12-month floor.
+function _dayDetailFloor() {
+  const n = new Date();
+  return _localDateStr(new Date(n.getFullYear(), n.getMonth() - 11, 1));
+}
+
+// Shift an ISO date by whole days using the local-time constructor (matches formatDate).
+function _shiftDay(ds, delta) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return _localDateStr(new Date(y, m - 1, d + delta));
+}
+
+function _fullDateLabel(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US',
+    { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function openDayDetail(ds) {
+  _detailDay = ds;
+  renderDayDetail(ds);
+  const page = document.getElementById('dayDetailPage');
+  page.scrollTop = 0;
+  page.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDayDetail() {
+  document.getElementById('dayDetailPage').classList.remove('open');
+  _detailDay = null;
+  const other = document.getElementById('habitDetailPage').classList.contains('open') ||
+                document.getElementById('areaDetailPage').classList.contains('open');
+  if (!other) document.body.style.overflow = '';
+}
+
+function renderDayDetail(ds) {
+  const body = document.getElementById('dayDetailBody');
+  if (!body) return;
+
+  const today     = habitDateStr(0);
+  const habits    = getHabits();
+  const scheduled = habits.filter(h => _habitScheduledOn(h, ds));
+  const doneIds   = getHabitLog(ds);
+  const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
+  const pct       = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
+  const isMissed  = ds < today && scheduled.length > 0 && doneCount === 0;
+
+  const R = 15.5, C = 2 * Math.PI * R;
+  const arc = doneCount > 0
+    ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
+         stroke-dasharray="${(pct / 100) * C} ${C}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
+    : isMissed
+    ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_HCAL_MISSED}"
+         stroke-dasharray="${C} ${C}"></circle>`
+    : '';
+
+  const prevDisabled = ds <= _dayDetailFloor();
+  const nextDisabled = ds >= today;
+
+  const summary = scheduled.length
+    ? `${doneCount} of ${scheduled.length} habit${scheduled.length === 1 ? '' : 's'} completed`
+    : 'No habits were active on this day.';
+
+  const rows = scheduled.map(h => `
+    <div class="day-detail-habit-row">
+      <label class="habit-cb-wrap">
+        <input type="checkbox" data-habit-id="${h.id}"${doneIds.includes(h.id) ? ' checked' : ''}>
+        <span class="habit-cb-box"></span>
+      </label>
+      <span class="day-detail-habit-name">${h.name}</span>
+    </div>`).join('');
+
+  body.innerHTML = `
+    <div class="day-detail-head">
+      <button class="hcal-nav-btn" id="dayDetailPrev"${prevDisabled ? ' disabled' : ''}>‹</button>
+      <h2 class="habit-detail-name day-detail-date">${_fullDateLabel(ds)}</h2>
+      <button class="hcal-nav-btn" id="dayDetailNext"${nextDisabled ? ' disabled' : ''}>›</button>
+    </div>
+    <div class="day-detail-summary-card">
+      <div class="day-detail-ring-wrap">
+        <svg class="hcal-ring day-detail-ring" viewBox="0 0 36 36">
+          <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
+          ${arc}
+        </svg>
+        <span class="day-detail-ring-pct">${pct}%</span>
+      </div>
+      <div class="day-detail-summary-text">${summary}</div>
+    </div>
+    ${scheduled.length ? `
+      <div class="habit-detail-section-title">Habits</div>
+      <div class="day-detail-habit-list">${rows}</div>` : ''}
+  `;
+
+  body.querySelectorAll('input[data-habit-id]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id  = cb.dataset.habitId;
+      const log = getHabitLog(ds);
+      const i   = log.indexOf(id);
+      if (cb.checked) { if (i === -1) log.push(id); }
+      else if (i !== -1) log.splice(i, 1);
+      saveHabitLog(ds, log);
+      renderHabits(); // repaints the calendar + this open day view
+    });
+  });
+
+  if (!prevDisabled) document.getElementById('dayDetailPrev').addEventListener('click', () => {
+    _detailDay = _shiftDay(ds, -1);
+    document.getElementById('dayDetailPage').scrollTop = 0;
+    renderDayDetail(_detailDay);
+  });
+  if (!nextDisabled) document.getElementById('dayDetailNext').addEventListener('click', () => {
+    _detailDay = _shiftDay(ds, 1);
+    document.getElementById('dayDetailPage').scrollTop = 0;
+    renderDayDetail(_detailDay);
+  });
+}
+
 // ── Archived section toggle
 document.getElementById('archivedToggle').addEventListener('click', () => {
   const toggle = document.getElementById('archivedToggle');
@@ -708,4 +845,9 @@ function addHabit() {
 document.getElementById('habitDetailBack').addEventListener('click', closeHabitDetail);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open')) closeHabitDetail();
+});
+
+document.getElementById('dayDetailBack').addEventListener('click', closeDayDetail);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('dayDetailPage').classList.contains('open')) closeDayDetail();
 });
