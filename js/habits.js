@@ -277,6 +277,9 @@ function _hcalRingColor(pct) {
   return `rgb(${lerpColor(c0, c1, (p - p0) / (p1 - p0)).join(',')})`;
 }
 
+// Dark red for a past day that had habits but zero completed (ring + day number).
+const _HCAL_MISSED = 'rgb(120,26,26)';
+
 function renderHabitOverviewCalendar() {
   const grid = document.getElementById('hcalGrid');
   if (!grid) return;
@@ -322,11 +325,14 @@ function renderHabitOverviewCalendar() {
     // A past day (not today) that had habits but none done is a "miss" — full red ring.
     const isMissed = ds < today && scheduled.length > 0 && doneCount === 0;
 
+    const isFull = pct >= 100 && scheduled.length > 0;
+    const numColor = isFull ? _hcalRingColor(100) : isMissed ? _HCAL_MISSED : null;
+
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
     if (isFuture) cls += ' future';
     else if (!scheduled.length) cls += ' none-sched';
-    if (pct >= 100 && scheduled.length) cls += ' full';
+    if (isFull) cls += ' full';
     if (isMissed) cls += ' missed';
 
     const dash = `${(pct / 100) * C} ${C}`;
@@ -338,7 +344,7 @@ function renderHabitOverviewCalendar() {
       ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
            stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
       : isMissed
-      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:rgb(255,90,90)"
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_HCAL_MISSED}"
            stroke-dasharray="${C} ${C}"></circle>`
       : '';
 
@@ -347,7 +353,7 @@ function renderHabitOverviewCalendar() {
         <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
         ${fill}
       </svg>
-      <span class="hcal-day-num">${d}</span>
+      <span class="hcal-day-num"${numColor ? ` style="color:${numColor}"` : ''}>${d}</span>
     </div>`;
   }
 

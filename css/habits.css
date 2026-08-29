@@ -575,14 +575,13 @@
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
   }
-  .hcal-day.full .hcal-day-num { color: var(--text-primary); font-weight: 700; }
+  .hcal-day.full .hcal-day-num { font-weight: 700; } /* colour set inline to match the 100% ring */
   .hcal-day.today .hcal-ring-track { stroke: rgba(255,255,255,0.38); }
   .hcal-day.today .hcal-day-num { color: var(--text-primary); font-weight: 700; }
   .hcal-day.future .hcal-ring { display: none; }
   .hcal-day.future .hcal-day-num { color: rgba(255,255,255,0.12); }
   .hcal-day.none-sched .hcal-ring-track { stroke: rgba(255,255,255,0.04); }
   .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
-  .hcal-day.missed .hcal-day-num { color: rgba(255,138,138,0.9); }
   .hcal-empty { aspect-ratio: 1; pointer-events: none; }
 
   /* Today check-in card */
