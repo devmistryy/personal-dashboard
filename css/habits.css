@@ -582,6 +582,7 @@
   .hcal-day.future .hcal-day-num { color: rgba(255,255,255,0.12); }
   .hcal-day.none-sched .hcal-ring-track { stroke: rgba(255,255,255,0.04); }
   .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
+  .hcal-day.missed .hcal-day-num { color: rgba(255,138,138,0.9); }
   .hcal-empty { aspect-ratio: 1; pointer-events: none; }
 
   /* Today check-in card */

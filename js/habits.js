@@ -319,12 +319,15 @@ function renderHabitOverviewCalendar() {
     const doneIds = getHabitLog(ds);
     const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
     const pct = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
+    // A past/current day that had habits but none done is a "miss" — full red ring.
+    const isMissed = !isFuture && scheduled.length > 0 && doneCount === 0;
 
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
     if (isFuture) cls += ' future';
     else if (!scheduled.length) cls += ' none-sched';
     if (pct >= 100 && scheduled.length) cls += ' full';
+    if (isMissed) cls += ' missed';
 
     const dash = `${(pct / 100) * C} ${C}`;
     const titleTxt = isFuture ? ds
@@ -334,6 +337,9 @@ function renderHabitOverviewCalendar() {
     const fill = doneCount > 0
       ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
            stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
+      : isMissed
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:rgb(255,90,90)"
+           stroke-dasharray="${C} ${C}"></circle>`
       : '';
 
     html += `<div class="${cls}" title="${titleTxt}">
