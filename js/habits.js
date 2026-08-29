@@ -319,8 +319,8 @@ function renderHabitOverviewCalendar() {
     const doneIds = getHabitLog(ds);
     const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
     const pct = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
-    // A past/current day that had habits but none done is a "miss" — full red ring.
-    const isMissed = !isFuture && scheduled.length > 0 && doneCount === 0;
+    // A past day (not today) that had habits but none done is a "miss" — full red ring.
+    const isMissed = ds < today && scheduled.length > 0 && doneCount === 0;
 
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
