@@ -78,6 +78,13 @@
   }
 
   /* ── Page title ── */
+  .dash-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
   .dash-title {
     font-size: 28px;
     font-weight: 700;
@@ -86,7 +93,26 @@
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 14px;
+  }
+
+  .btn-signout {
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 8px 14px;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .btn-signout:hover {
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.18);
   }
 
   /* ── Section eyebrow ── */
@@ -1505,6 +1531,119 @@
     pointer-events: none;
   }
 
+  /* ── Habits-tab overview calendar (ring per day) ── */
+  .hcal { max-width: 460px; margin: 0 auto; }
+  .hcal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .hcal-nav-btn {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 15px;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0;
+    font-family: var(--font-body);
+  }
+  .hcal-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: var(--text-primary); }
+  .hcal-nav-btn:disabled { opacity: 0.25; cursor: default; }
+  .hcal-month-header {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    text-align: center;
+    flex: 1;
+  }
+  .hcal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  .hcal-day-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding-bottom: 4px;
+  }
+  .hcal-day {
+    position: relative;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hcal-ring {
+    position: absolute;
+    inset: 8%;
+    width: 84%;
+    height: 84%;
+    overflow: visible;
+  }
+  .hcal-ring-track {
+    fill: none;
+    stroke: rgba(255,255,255,0.09);
+    stroke-width: 3;
+  }
+  .hcal-ring-fill {
+    fill: none;
+    stroke: var(--success);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.35s ease;
+  }
+  .hcal-day-num {
+    position: relative;
+    z-index: 1;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .hcal-day.full .hcal-day-num { color: var(--text-primary); font-weight: 700; }
+  .hcal-day.today .hcal-ring-track { stroke: rgba(255,255,255,0.38); }
+  .hcal-day.today .hcal-day-num { color: var(--text-primary); font-weight: 700; }
+  .hcal-day.future .hcal-ring { display: none; }
+  .hcal-day.future .hcal-day-num { color: rgba(255,255,255,0.12); }
+  .hcal-day.none-sched .hcal-ring-track { stroke: rgba(255,255,255,0.04); }
+  .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
+  .hcal-empty { aspect-ratio: 1; pointer-events: none; }
+  .hcal-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .hcal-legend-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.09), var(--success));
+  }
+
   /* Today check-in card */
   .habit-detail-checkin {
     display: flex;
@@ -1602,7 +1741,10 @@
 <body>
 <div class="page-wrap">
 
-  <h1 class="dash-title">My Dashboard</h1>
+  <div class="dash-header">
+    <h1 class="dash-title">My Dashboard</h1>
+    <button id="signOutBtn" class="btn-signout" style="display:none;">Sign out</button>
+  </div>
 
   <!-- Goal Ticker -->
   <div class="ticker-row">
@@ -1721,6 +1863,21 @@
 
   <!-- Tab: Habits -->
   <div class="tab-panel" id="tab-habits">
+    <div class="section">
+      <div class="section-title">Habit Calendar</div>
+      <div class="card gm-card">
+        <div class="hcal">
+          <div class="hcal-nav">
+            <button class="hcal-nav-btn" id="hcalPrev">←</button>
+            <div class="hcal-month-header" id="hcalMonthHeader"></div>
+            <button class="hcal-nav-btn" id="hcalNext">→</button>
+          </div>
+          <div class="hcal-grid" id="hcalGrid"></div>
+          <div class="hcal-legend"><span>none</span><span class="hcal-legend-bar"></span><span>all done</span></div>
+        </div>
+      </div>
+    </div>
+
     <div class="section">
       <div class="section-title">Habit Tracker</div>
       <div class="card gm-card" id="habitCard">
@@ -1868,6 +2025,53 @@ const SUPABASE_URL = 'https://tlqjmlocxxsdlxseumxw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRscWptbG9jeHhzZGx4c2V1bXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NzQzNTEsImV4cCI6MjA5NDU1MDM1MX0.AQ-MSRnfCCj-2AghxHZUh8iDtw_8yHYrCiqdSowD4F0';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ── Local test-user mode (no database) ──
+// Sign in with email "test@local" (any password) to use a purely local
+// account. All data lives in localStorage on this browser only.
+const LOCAL_TEST_EMAIL = 'test@local';
+const LOCAL_STORE_KEY  = 'dashboard_local_v1';
+const LOCAL_FLAG_KEY   = 'dashboard_local_mode';
+let LOCAL_MODE = false;
+
+function _saveLocal() {
+  try { localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(MEM)); }
+  catch (e) { console.error('[local] save failed:', e); }
+}
+function _loadLocal() {
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(LOCAL_STORE_KEY) || '{}'); }
+  catch (e) { console.error('[local] load failed:', e); }
+  if (!data || Object.keys(data).length === 0) data = _seedLocalData();
+  Object.keys(MEM).forEach(k => delete MEM[k]);
+  Object.assign(MEM, data);
+  _saveLocal();
+}
+function _seedLocalData() {
+  const d = new Date();
+  const today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const h1 = 'h_' + Math.random().toString(36).slice(2, 10);
+  const h2 = 'h_' + Math.random().toString(36).slice(2, 10);
+  return {
+    'areas:list': [
+      { name: 'Health', color: '#52C97A' },
+      { name: 'Work',   color: '#4A9EFF' },
+    ],
+    'habits:list': [
+      { id: h1, name: 'Read 20 minutes', startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health' },
+      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health' },
+    ],
+    ['habits:log:' + today]: [h1],
+    ['goals:' + today]: [
+      { text: 'Try out the local test account', done: true,  doneAt: new Date().toISOString(), queued: false },
+      { text: 'Add my own goal',                done: false, doneAt: null, queued: false },
+    ],
+    'goal_streak_v1': { count: 0, lastProcessedDate: null },
+    'jobs:list': [
+      { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
+    ],
+  };
+}
+
 // ── In-memory store (synced from/to Supabase) ──
 const MEM = {};
 
@@ -1976,6 +2180,7 @@ function checkStreak() {
 let tickerItems = [];
 let cycleIdx = 0;
 let tickerInterval = null;
+let tickerLeaveTimer = null;
 
 function buildTickerItems() {
   const goals = storeGet(todayKey()) || [];
@@ -2005,19 +2210,26 @@ function tick(first) {
   cycleIdx = (cycleIdx + 1) % tickerItems.length;
 
   const stage = document.getElementById('goalTickerStage');
-  const oldRow = stage.querySelector('.goal-ticker-row');
+  const existingRows = [...stage.querySelectorAll('.goal-ticker-row')];
+
+  // Drop any leftover rows from an interrupted transition, keeping only the
+  // most recent one to animate out.
+  if (tickerLeaveTimer) { clearTimeout(tickerLeaveTimer); tickerLeaveTimer = null; }
+  const currentRow = existingRows.pop() || null;
+  existingRows.forEach(r => r.remove());
 
   const newRow = document.createElement('div');
   newRow.className = 'goal-ticker-row';
   newRow.innerHTML = `<span class="goal-ticker-status" data-status="${item.status}">${glyphFor(item.status)}</span><span class="goal-ticker-text">${item.text}</span>`;
 
-  if (oldRow && !first) {
-    oldRow.classList.add('is-leaving');
+  if (currentRow && !first) {
+    currentRow.classList.remove('is-entering');
+    currentRow.classList.add('is-leaving');
     newRow.classList.add('is-entering');
     stage.appendChild(newRow);
-    setTimeout(() => oldRow.remove(), 460);
+    tickerLeaveTimer = setTimeout(() => { currentRow.remove(); tickerLeaveTimer = null; }, 460);
   } else {
-    if (oldRow) oldRow.remove();
+    if (currentRow) currentRow.remove();
     stage.appendChild(newRow);
   }
 }
@@ -2031,6 +2243,11 @@ function startTicker() {
 window.addEventListener('goals-changed', () => {
   cycleIdx = 0;
   tick(false);
+  // Re-space the auto-advance so it doesn't fire right on top of this update.
+  if (tickerInterval) {
+    clearInterval(tickerInterval);
+    tickerInterval = setInterval(() => tick(false), 5000);
+  }
 });
 
 // ── Day Ring ──
@@ -2589,6 +2806,7 @@ function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncH
 async function _uid() { return (await sb.auth.getSession()).data.session?.user?.id; }
 
 async function _syncHabits(habits) {
+  if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   if (habits.length) {
     const { error } = await sb.from('habits').upsert(habits.map(h => ({
@@ -2609,6 +2827,7 @@ async function _syncHabits(habits) {
 }
 
 async function _syncHabitLog(dateStr, ids) {
+  if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   const { error: delErr } = await sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
   if (delErr) { console.error('[sync] habit_logs delete failed:', delErr); return; }
@@ -2619,6 +2838,7 @@ async function _syncHabitLog(dateStr, ids) {
 }
 
 async function _syncGoals(dateStr, goals) {
+  if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
   if (delErr) { console.error('[sync] goals delete failed:', delErr); return; }
@@ -2632,6 +2852,7 @@ async function _syncGoals(dateStr, goals) {
 }
 
 async function _syncSetting(key, value) {
+  if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   const { error } = await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
   if (error) console.error('[sync] settings upsert failed:', error);
@@ -2639,6 +2860,7 @@ async function _syncSetting(key, value) {
 
 // ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
+  if (LOCAL_MODE) return _loadLocal();
   const uid = await _uid(); if (!uid) return;
 
   const from = new Date(); from.setDate(from.getDate() - 90);
@@ -2907,12 +3129,112 @@ function renderHabits() {
     archived.forEach(h => archList.appendChild(buildHabitRow(h, all, true)));
   }
 
+  renderHabitOverviewCalendar();
+
   // Keep detail page in sync if open
   if (_detailHabitId && document.getElementById('habitDetailPage').classList.contains('open')) {
     const habit = all.find(h => h.id === _detailHabitId);
     if (habit) renderHabitDetailPage(habit, all);
   }
 }
+
+// ── Habits-tab overview calendar ──
+// One ring per day; the ring fills to the share of that day's scheduled
+// habits that were completed. Mirrors the detail-view calendar's month grid.
+let _hcalMonth = null; // { year, month }
+
+// Was this habit scheduled on date `ds`? (started, not yet ended, not yet archived)
+function _habitScheduledOn(h, ds) {
+  const start = h.startDate || '0000-00-00';
+  if (ds < start) return false;
+  if (h.endDate && ds > h.endDate) return false;
+  if (h.archivedAt && ds > String(h.archivedAt).slice(0, 10)) return false;
+  return true;
+}
+
+function renderHabitOverviewCalendar() {
+  const grid = document.getElementById('hcalGrid');
+  if (!grid) return;
+
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+  const DAY_LABELS = ['M','T','W','T','F','S','S'];
+
+  const now = new Date();
+  if (!_hcalMonth) _hcalMonth = { year: now.getFullYear(), month: now.getMonth() };
+  const { year, month } = _hcalMonth;
+  const today = habitDateStr(0);
+  const habits = getHabits();
+
+  // Bounds: back up to 12 months, no further forward than the current month
+  const limitDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  const atStart = year < limitDate.getFullYear() ||
+                  (year === limitDate.getFullYear() && month <= limitDate.getMonth());
+  const atCurrent = year === now.getFullYear() && month === now.getMonth();
+  document.getElementById('hcalPrev').disabled = atStart;
+  document.getElementById('hcalNext').disabled = atCurrent;
+  document.getElementById('hcalMonthHeader').textContent = `${MONTH_NAMES[month]} ${year}`;
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
+
+  const R = 15.5;
+  const C = 2 * Math.PI * R;
+
+  let html = '';
+  DAY_LABELS.forEach(l => { html += `<div class="hcal-day-label">${l}</div>`; });
+  for (let i = 0; i < firstDow; i++) html += '<div class="hcal-empty"></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = ds === today;
+    const isFuture = ds > today;
+
+    const scheduled = habits.filter(h => _habitScheduledOn(h, ds));
+    const doneIds = getHabitLog(ds);
+    const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
+    const pct = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
+
+    let cls = 'hcal-day';
+    if (isToday) cls += ' today';
+    if (isFuture) cls += ' future';
+    else if (!scheduled.length) cls += ' none-sched';
+    if (pct >= 100 && scheduled.length) cls += ' full';
+
+    const dash = `${(pct / 100) * C} ${C}`;
+    const titleTxt = isFuture ? ds
+      : `${ds} — ${doneCount}/${scheduled.length} habits (${pct}%)`;
+    const fill = doneCount > 0
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}"
+           stroke-dasharray="${dash}" transform="rotate(-90 18 18)"></circle>`
+      : '';
+
+    html += `<div class="${cls}" title="${titleTxt}">
+      <svg class="hcal-ring" viewBox="0 0 36 36">
+        <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
+        ${fill}
+      </svg>
+      <span class="hcal-day-num">${d}</span>
+    </div>`;
+  }
+
+  const totalCells = firstDow + daysInMonth;
+  const trailing = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+  for (let i = 0; i < trailing; i++) html += '<div class="hcal-empty"></div>';
+
+  grid.innerHTML = html;
+}
+
+document.getElementById('hcalPrev').addEventListener('click', () => {
+  const { year, month } = _hcalMonth;
+  _hcalMonth = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
+  renderHabitOverviewCalendar();
+});
+document.getElementById('hcalNext').addEventListener('click', () => {
+  const { year, month } = _hcalMonth;
+  _hcalMonth = month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 };
+  renderHabitOverviewCalendar();
+});
 
 // ── Habit Detail Page ──
 let _detailHabitId = null;
@@ -3241,6 +3563,7 @@ function getJobs() { return MEM['jobs:list'] || []; }
 function saveJobs(jobs) { MEM['jobs:list'] = jobs; _syncJobs(jobs); }
 
 async function _syncJobs(jobs) {
+  if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   if (jobs.length) {
     const { error } = await sb.from('job_applications').upsert(jobs.map(j => ({
@@ -3881,12 +4204,43 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open')) closeHabitDetail();
 });
 
+// Console helpers for the local test account:
+//   exitLocalMode()  – sign out of the local account (keeps saved data)
+//   resetLocalData() – wipe the local account's data and reseed samples
+window.exitLocalMode = function () {
+  localStorage.removeItem(LOCAL_FLAG_KEY);
+  location.reload();
+};
+window.resetLocalData = function () {
+  localStorage.removeItem(LOCAL_STORE_KEY);
+  location.reload();
+};
+
+function _enterApp() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('signOutBtn').style.display = '';
+  rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
+  tick(true); // refresh the goal ticker immediately with the loaded data
+}
+
+async function signOut() {
+  try { if (!LOCAL_MODE) await sb.auth.signOut(); } catch (e) { console.error('sign out error:', e); }
+  localStorage.removeItem(LOCAL_FLAG_KEY);
+  location.reload();
+}
+document.getElementById('signOutBtn').addEventListener('click', signOut);
+
 async function initApp() {
+  if (localStorage.getItem(LOCAL_FLAG_KEY)) {
+    LOCAL_MODE = true;
+    await loadFromSupabase();
+    _enterApp();
+    return;
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     await loadFromSupabase();
-    document.getElementById('loginOverlay').style.display = 'none';
-    rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
+    _enterApp();
   }
 }
 
@@ -3896,6 +4250,24 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
   const btn   = document.getElementById('loginBtn');
   const err   = document.getElementById('loginError');
   btn.textContent = 'Signing in…'; btn.disabled = true; err.style.display = 'none';
+
+  // Local test-user mode — no database, data stays in this browser.
+  if (email.toLowerCase() === LOCAL_TEST_EMAIL) {
+    LOCAL_MODE = true;
+    localStorage.setItem(LOCAL_FLAG_KEY, '1');
+    btn.textContent = 'Loading local data…';
+    try {
+      await loadFromSupabase();
+      _enterApp();
+    } catch (e) {
+      err.textContent = 'Load failed: ' + e.message;
+      err.style.display = 'block';
+      btn.textContent = 'Sign In'; btn.disabled = false;
+      console.error('local load error:', e);
+    }
+    return;
+  }
+
   const { error } = await sb.auth.signInWithPassword({ email, password: pw });
   if (error) {
     err.textContent = error.message; err.style.display = 'block';
@@ -3904,8 +4276,7 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
     btn.textContent = 'Loading your data…';
     try {
       await loadFromSupabase();
-      document.getElementById('loginOverlay').style.display = 'none';
-      rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
+      _enterApp();
     } catch(e) {
       err.textContent = 'Load failed: ' + e.message;
       err.style.display = 'block';
