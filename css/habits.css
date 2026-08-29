@@ -561,10 +561,10 @@
   }
   .hcal-ring-fill {
     fill: none;
-    stroke: var(--success);
+    stroke: var(--success); /* fallback; per-day colour is set inline by percentage */
     stroke-width: 3;
     stroke-linecap: round;
-    transition: stroke-dasharray 0.35s ease;
+    transition: stroke-dasharray 0.35s ease, stroke 0.35s ease;
   }
   .hcal-day-num {
     position: relative;
@@ -583,23 +583,6 @@
   .hcal-day.none-sched .hcal-ring-track { stroke: rgba(255,255,255,0.04); }
   .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
   .hcal-empty { aspect-ratio: 1; pointer-events: none; }
-  .hcal-legend {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 14px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-  }
-  .hcal-legend-bar {
-    flex: 1;
-    height: 4px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.09), var(--success));
-  }
 
   /* Today check-in card */
   .habit-detail-checkin {

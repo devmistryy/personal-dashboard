@@ -255,6 +255,17 @@ function _habitScheduledOn(h, ds) {
   return true;
 }
 
+// Completion-ring colour: red (0%) → yellow (50%) → green (100%).
+// Uses the theme tokens --danger / --warning / --success and lerpColor (main.js).
+function _hcalRingColor(pct) {
+  const t = Math.max(0, Math.min(1, pct / 100));
+  const [a, b, seg] = t <= 0.5
+    ? [[255,107,107], [242,192,99],  t / 0.5]           // #FF6B6B → #F2C063
+    : [[242,192,99],  [107,227,164], (t - 0.5) / 0.5];  // #F2C063 → #6BE3A4
+  const [r, g, bl] = lerpColor(a, b, seg);
+  return `rgb(${r},${g},${bl})`;
+}
+
 function renderHabitOverviewCalendar() {
   const grid = document.getElementById('hcalGrid');
   if (!grid) return;
@@ -307,9 +318,11 @@ function renderHabitOverviewCalendar() {
     const dash = `${(pct / 100) * C} ${C}`;
     const titleTxt = isFuture ? ds
       : `${ds} — ${doneCount}/${scheduled.length} habits (${pct}%)`;
+    // transform: rotate start point to 12 o'clock, then mirror horizontally so
+    // the arc grows counter-clockwise.
     const fill = doneCount > 0
-      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}"
-           stroke-dasharray="${dash}" transform="rotate(-90 18 18)"></circle>`
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" stroke="${_hcalRingColor(pct)}"
+           stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
       : '';
 
     html += `<div class="${cls}" title="${titleTxt}">
