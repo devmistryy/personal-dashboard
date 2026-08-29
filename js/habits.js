@@ -321,7 +321,7 @@ function renderHabitOverviewCalendar() {
     // transform: rotate start point to 12 o'clock, then mirror horizontally so
     // the arc grows counter-clockwise.
     const fill = doneCount > 0
-      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" stroke="${_hcalRingColor(pct)}"
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
            stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
       : '';
 
