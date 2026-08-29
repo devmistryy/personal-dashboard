@@ -40,7 +40,7 @@ function getCurrentWeekDates() {
   });
 }
 
-function buildHabitRow(habit, allHabits, isArchived) {
+function buildHabitRow(habit, allHabits, isArchived, activeIdx) {
   const today    = habitDateStr(0);
   const todayLog = getHabitLog(today);
   const done     = todayLog.includes(habit.id);
@@ -54,6 +54,17 @@ function buildHabitRow(habit, allHabits, isArchived) {
 
   const li = document.createElement('li');
   li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '');
+
+  // Drag-to-reorder (active habits only)
+  if (!isArchived) {
+    li.draggable = true;
+    li.dataset.idx = activeIdx;
+    const drag = document.createElement('span');
+    drag.className = 'habit-drag-handle';
+    drag.textContent = '⋮⋮';
+    drag.setAttribute('aria-hidden', 'true');
+    li.appendChild(drag);
+  }
 
   // Checkbox (disabled if archived)
   const cbWrap = document.createElement('label');
@@ -220,7 +231,20 @@ function renderHabits() {
   } else {
     emptyEl.style.display = 'none';
     listEl.style.display  = '';
-    active.forEach(h => listEl.appendChild(buildHabitRow(h, all, false)));
+    active.forEach((h, i) => listEl.appendChild(buildHabitRow(h, all, false, i)));
+  }
+
+  if (!listEl._dragWired) {
+    listEl._dragWired = true;
+    wireDragReorder(listEl, 'habit-row', (from, to) => {
+      const habits  = getHabits();
+      const actives = habits.filter(h => !h.archived);
+      const rest    = habits.filter(h => h.archived);
+      const [moved] = actives.splice(from, 1);
+      actives.splice(to, 0, moved);
+      saveHabits([...actives, ...rest]);
+      renderHabits();
+    });
   }
 
   if (archived.length === 0) {

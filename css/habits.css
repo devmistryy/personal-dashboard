@@ -14,7 +14,21 @@
   }
   .habit-row:hover { background: rgba(255,255,255,0.055); }
   .habit-row:hover .habit-delete,
-  .habit-row:hover .habit-archive-btn { opacity: 1; }
+  .habit-row:hover .habit-archive-btn,
+  .habit-row:hover .habit-drag-handle { opacity: 1; }
+  .habit-row.drag-over { border-top: 2px solid rgba(255,255,255,0.35); }
+
+  .habit-drag-handle {
+    font-size: 14px;
+    width: 14px;
+    color: var(--text-tertiary);
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.2s;
+    letter-spacing: -2px;
+    flex-shrink: 0;
+    user-select: none;
+  }
 
   .habit-cb-wrap {
     width: 22px; height: 22px;

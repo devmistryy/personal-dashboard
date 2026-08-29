@@ -219,10 +219,15 @@ function makeInlineEdit(el, idx, goals, key, reload) {
   }
 }
 
-function wireDragReorder(listEl, goals, key, reloadFn) {
+// Generic drag-to-reorder for a <ul>/<ol> of `.${rowClass}` rows carrying
+// data-idx. Wire once per list element. `onReorder(fromIdx, toIdx)` owns the
+// actual array move + persist + re-render. Used by goals and habits.
+function wireDragReorder(listEl, rowClass, onReorder) {
+  const sel = '.' + rowClass;
+  const clearOver = () => listEl.querySelectorAll(sel).forEach(r => r.classList.remove('drag-over'));
   let dragFrom = null;
   listEl.addEventListener('dragstart', e => {
-    const row = e.target.closest('.goal-row');
+    const row = e.target.closest(sel);
     if (!row) return;
     dragFrom = parseInt(row.dataset.idx);
     e.dataTransfer.effectAllowed = 'move';
@@ -230,24 +235,20 @@ function wireDragReorder(listEl, goals, key, reloadFn) {
   listEl.addEventListener('dragover', e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    const row = e.target.closest('.goal-row');
-    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
+    const row = e.target.closest(sel);
+    clearOver();
     if (row) row.classList.add('drag-over');
   });
-  listEl.addEventListener('dragleave', () => {
-    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
-  });
+  listEl.addEventListener('dragleave', clearOver);
   listEl.addEventListener('drop', e => {
     e.preventDefault();
-    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
-    const row = e.target.closest('.goal-row');
+    clearOver();
+    const row = e.target.closest(sel);
     if (!row || dragFrom === null) return;
     const to = parseInt(row.dataset.idx);
-    if (to === dragFrom) return;
-    const [item] = goals.splice(dragFrom, 1);
-    goals.splice(to, 0, item);
-    storeSet(key, goals);
-    reloadFn();
+    const from = dragFrom;
+    dragFrom = null;
+    if (to !== from) onReorder(from, to);
   });
 }
 
@@ -289,9 +290,16 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
     }
   }
 
-  if (!readOnly) wireDragReorder(listEl, goals, key, () => {
-    if (key === todayKey()) loadToday(); else loadTomorrow();
-  });
+  if (!readOnly && !listEl._dragWired) {
+    listEl._dragWired = true;
+    wireDragReorder(listEl, 'goal-row', (from, to) => {
+      const arr = storeGet(key) || [];
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      storeSet(key, arr);
+      if (key === todayKey()) loadToday(); else loadTomorrow();
+    });
+  }
 
   if (key === todayKey()) renderTodayHeader();
   else renderTomorrowCount();
