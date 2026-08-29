@@ -1,0 +1,405 @@
+// To Do tab: rollover, streak, goal rows, drag-reorder, inline edit,
+// quick-add + polish. Loaded before main.js.
+
+// ── Rollover ──
+function rollover() {
+  const activeDate = getActiveDateString();
+  const keys = storeListKeys('goals:').filter(k => k.slice(6) < activeDate);
+  keys.forEach(k => {
+    const goals = storeGet(k) || [];
+    const undone = goals.filter(g => !g.done);
+    if (undone.length > 0) {
+      const todayGoals = storeGet(todayKey()) || [];
+      const existingTexts = new Set(todayGoals.map(g => g.text));
+      undone.forEach(g => { if (!existingTexts.has(g.text)) todayGoals.push({ text: g.text, done: false }); });
+      storeSet(todayKey(), todayGoals);
+    }
+    storeDelete(k);
+  });
+}
+
+// ── Streak check ──
+function checkStreak() {
+  const activeDate = getActiveDateString();
+  let streak = storeGet('goal_streak_v1') || { count: 0, lastProcessedDate: null };
+  const keys = storeListKeys('goals:')
+    .filter(k => k.slice(6) < activeDate)
+    .sort();
+  let startFrom = streak.lastProcessedDate;
+  for (const k of keys) {
+    const date = k.slice(6);
+    if (startFrom && date <= startFrom) continue;
+    const goals = storeGet(k) || [];
+    if (goals.length === 0) continue;
+    if (goals.every(g => g.done)) {
+      streak.count++;
+    } else {
+      streak.count = 0;
+    }
+    streak.lastProcessedDate = date;
+  }
+  storeSet('goal_streak_v1', streak);
+  return streak;
+}
+
+
+// ── Render helpers ──
+function renderTodayHeader() {
+  const goals = storeGet(todayKey()) || [];
+  const total = goals.length;
+  const done  = goals.filter(g => g.done).length;
+
+  document.getElementById('todayLabel').textContent = `Today — ${formatDate(getActiveDateString())}`;
+  document.getElementById('gmProgressNum').textContent = done;
+  document.getElementById('gmProgressTotal').textContent = `/ ${total}`;
+
+  const labelEl = document.getElementById('gmProgressLabel');
+  if (total === 0) labelEl.textContent = 'no goals yet';
+  else if (done === total) labelEl.textContent = 'all done — solid day';
+  else labelEl.textContent = 'complete';
+
+  const bar = document.getElementById('gmBar');
+  bar.innerHTML = '';
+  goals.forEach(g => {
+    const seg = document.createElement('div');
+    seg.className = 'gm-bar-seg' + (g.done ? ' gm-bar-seg-done' : '');
+    bar.appendChild(seg);
+  });
+
+  const card = document.getElementById('todayCard');
+  if (total > 0 && done === total) card.classList.add('gm-all-done');
+  else card.classList.remove('gm-all-done');
+
+  const pushBtn = document.getElementById('gmPushBtn');
+  pushBtn.style.display = (goals.some(g => !g.done) && total > 0) ? 'block' : 'none';
+}
+
+function renderStreak() {
+  const streak = storeGet('goal_streak_v1') || { count: 0 };
+  document.getElementById('gmStreakNum').textContent = streak.count;
+  const el = document.getElementById('gmStreak');
+  if (streak.count > 0) el.classList.add('gm-streak-active');
+  else el.classList.remove('gm-streak-active');
+}
+
+function renderTomorrowCount() {
+  const goals = storeGet(tomorrowKey()) || [];
+  document.getElementById('gmTomorrowCount').textContent = `${goals.length} planned`;
+  document.getElementById('tomorrowLabel').textContent = `Plan tomorrow — ${formatDate(getTomorrowDateString())}`;
+}
+
+
+// ── Build goal row ──
+function buildGoalRow(g, idx, goals, key, readOnly) {
+  const priority = g.priority || 'Medium';
+  const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[priority] || 'goal-priority-med';
+  const li = document.createElement('li');
+  li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '') + (g.queued && !g.done ? ' is-queued' : '');
+  li.dataset.idx = idx;
+  li.draggable = !readOnly;
+
+  // Priority click strip (invisible, covers left border area)
+  const priBtn = document.createElement('button');
+  priBtn.className = 'goal-priority-btn';
+  priBtn.title = `Priority: ${priority} — click to change`;
+  priBtn.addEventListener('click', () => {
+    const order = ['High', 'Medium', 'Low'];
+    const cur = goals[idx].priority || 'Medium';
+    goals[idx].priority = order[(order.indexOf(cur) + 1) % order.length];
+    storeSet(key, goals);
+    reload();
+  });
+  li.appendChild(priBtn);
+
+  // Drag handle
+  const drag = document.createElement('span');
+  drag.className = 'goal-drag-handle';
+  drag.textContent = '⋮⋮';
+  drag.setAttribute('aria-hidden', 'true');
+  li.appendChild(drag);
+
+  // Checkbox
+  const cbWrap = document.createElement('label');
+  cbWrap.className = 'goal-cb-wrap';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = !!g.done;
+  if (readOnly) { cb.disabled = true; cb.title = 'Activates at 6 AM tomorrow'; }
+  const cbBox = document.createElement('span');
+  cbBox.className = 'goal-cb-box';
+  cbWrap.appendChild(cb);
+  cbWrap.appendChild(cbBox);
+  li.appendChild(cbWrap);
+
+  cb.addEventListener('change', () => {
+    goals[idx].done = cb.checked;
+    if (cb.checked) goals[idx].doneAt = Date.now();
+    else delete goals[idx].doneAt;
+    storeSet(key, goals);
+    reload();
+  });
+
+  // Text
+  const txt = document.createElement('span');
+  txt.className = 'goal-text';
+  txt.textContent = g.text;
+  makeInlineEdit(txt, idx, goals, key, reload);
+  li.appendChild(txt);
+
+  // Area pill + dropdown
+  li.appendChild(buildAreaPill(g.area, newArea => {
+    goals[idx].area = newArea;
+    storeSet(key, goals);
+    reload();
+  }));
+
+  // Queue button
+  const qBtn = document.createElement('button');
+  qBtn.className = 'gm-queue-btn' + (g.queued ? ' is-queued' : '');
+  qBtn.textContent = '⚡';
+  qBtn.title = 'Toggle productivity queue';
+  if (readOnly) qBtn.disabled = true;
+  qBtn.addEventListener('click', () => {
+    goals[idx].queued = !goals[idx].queued;
+    storeSet(key, goals);
+    li.classList.add('is-queue-flashing');
+    setTimeout(reload, 480);
+  });
+  li.appendChild(qBtn);
+
+  // Delete
+  const del = document.createElement('button');
+  del.className = 'goal-delete';
+  del.textContent = '×';
+  del.title = 'Delete goal';
+  del.addEventListener('click', () => {
+    goals.splice(idx, 1);
+    storeSet(key, goals);
+    reload();
+  });
+  li.appendChild(del);
+
+  return li;
+
+  function reload() {
+    if (key === todayKey()) loadToday();
+    else loadTomorrow();
+  }
+}
+
+function makeInlineEdit(el, idx, goals, key, reload) {
+  let original = '';
+  el.addEventListener('click', () => {
+    if (el.contentEditable === 'true') return;
+    original = goals[idx].text;
+    el.contentEditable = 'true';
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  el.addEventListener('blur', () => commit());
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { el.textContent = original; el.contentEditable = 'false'; }
+  });
+  function commit() {
+    const val = el.textContent.trim();
+    el.contentEditable = 'false';
+    if (val && val !== original) {
+      goals[idx].text = val;
+      storeSet(key, goals);
+      reload();
+    } else if (!val) {
+      el.textContent = original;
+    }
+  }
+}
+
+function wireDragReorder(listEl, goals, key, reloadFn) {
+  let dragFrom = null;
+  listEl.addEventListener('dragstart', e => {
+    const row = e.target.closest('.goal-row');
+    if (!row) return;
+    dragFrom = parseInt(row.dataset.idx);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  listEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.target.closest('.goal-row');
+    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
+    if (row) row.classList.add('drag-over');
+  });
+  listEl.addEventListener('dragleave', () => {
+    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
+  });
+  listEl.addEventListener('drop', e => {
+    e.preventDefault();
+    listEl.querySelectorAll('.goal-row').forEach(r => r.classList.remove('drag-over'));
+    const row = e.target.closest('.goal-row');
+    if (!row || dragFrom === null) return;
+    const to = parseInt(row.dataset.idx);
+    if (to === dragFrom) return;
+    const [item] = goals.splice(dragFrom, 1);
+    goals.splice(to, 0, item);
+    storeSet(key, goals);
+    reloadFn();
+  });
+}
+
+function renderListInto(goals, listEl, emptyEl, key, readOnly) {
+  listEl.innerHTML = '';
+  const LIMIT = 5;
+  let showAll = listEl._showAll || false;
+
+  if (goals.length === 0) {
+    emptyEl.style.display = 'block';
+    listEl.style.display = 'none';
+  } else {
+    emptyEl.style.display = 'none';
+    listEl.style.display = '';
+
+    const visible = (goals.length > LIMIT && !showAll) ? goals.slice(0, LIMIT) : goals;
+    visible.forEach((g, i) => {
+      listEl.appendChild(buildGoalRow(g, i, goals, key, readOnly));
+    });
+
+    if (goals.length > LIMIT && !showAll) {
+      const more = document.createElement('div');
+      more.className = 'show-more-row';
+      more.textContent = `Show ${goals.length - LIMIT} more ▾`;
+      more.addEventListener('click', () => {
+        listEl._showAll = true;
+        renderListInto(goals, listEl, emptyEl, key, readOnly);
+      });
+      listEl.appendChild(more);
+    } else if (goals.length > LIMIT && showAll) {
+      const less = document.createElement('div');
+      less.className = 'show-more-row';
+      less.textContent = 'Show less ▴';
+      less.addEventListener('click', () => {
+        listEl._showAll = false;
+        renderListInto(goals, listEl, emptyEl, key, readOnly);
+      });
+      listEl.appendChild(less);
+    }
+  }
+
+  if (!readOnly) wireDragReorder(listEl, goals, key, () => {
+    if (key === todayKey()) loadToday(); else loadTomorrow();
+  });
+
+  if (key === todayKey()) renderTodayHeader();
+  else renderTomorrowCount();
+}
+
+function loadToday() {
+  const goals = storeGet(todayKey()) || [];
+  renderListInto(goals,
+    document.getElementById('goalList'),
+    document.getElementById('emptyState'),
+    todayKey(), false);
+}
+
+function loadTomorrow() {
+  const goals = storeGet(tomorrowKey()) || [];
+  renderListInto(goals,
+    document.getElementById('tomorrowList'),
+    document.getElementById('tomorrowEmptyState'),
+    tomorrowKey(), true);
+}
+
+// ── Status message helper ──
+function showStatus(el, msg, color, ms) {
+  el.textContent = msg;
+  el.style.color = color || 'var(--text-tertiary)';
+  setTimeout(() => { el.textContent = ''; el.style.color = ''; }, ms || 3500);
+}
+
+// ── Polish via Claude API ──
+async function polishGoal(text, statusEl) {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Clean up and improve this single goal into a concise, actionable task. Return ONLY a one-element JSON array of strings with no extra text, no markdown fences. Goal: "${text}"`
+        }]
+      })
+    });
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    const raw = data.content[0].text.trim();
+    const parsed = JSON.parse(raw);
+    return parsed[0];
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Add + Polish handlers ──
+function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
+  function addGoal(text) {
+    if (!text) return;
+    const goals = storeGet(getKey()) || [];
+    goals.push({ text, done: false, priority: 'Medium', area: null });
+    storeSet(getKey(), goals);
+    inputEl.value = '';
+    reload();
+  }
+
+  addBtn.addEventListener('click', () => addGoal(inputEl.value.trim()));
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addGoal(inputEl.value.trim());
+  });
+
+  polishBtn.addEventListener('click', async () => {
+    const raw = inputEl.value.trim();
+    if (!raw) return;
+    if (!ANTHROPIC_API_KEY) {
+      addGoal(raw);
+      showStatus(statusEl, 'Polish needs an Anthropic API key — added as-typed.', 'var(--text-tertiary)', 3500);
+      return;
+    }
+    polishBtn.disabled = true;
+    polishBtn.textContent = '✨ Polishing…';
+    const polished = await polishGoal(raw, statusEl);
+    polishBtn.disabled = false;
+    polishBtn.textContent = '✨ Polish';
+    if (polished) {
+      addGoal(polished);
+    } else {
+      addGoal(raw);
+      showStatus(statusEl, 'Polish failed — added as-typed.', 'var(--danger)', 3500);
+    }
+  });
+}
+
+// ── Push remaining ──
+document.getElementById('gmPushBtn').addEventListener('click', () => {
+  if (!confirm('Push all unchecked goals to tomorrow?')) return;
+  const todayGoals    = storeGet(todayKey()) || [];
+  const tomorrowGoals = storeGet(tomorrowKey()) || [];
+  const existingTexts = new Set(tomorrowGoals.map(g => g.text));
+  const unchecked = todayGoals.filter(g => !g.done);
+  unchecked.forEach(g => { if (!existingTexts.has(g.text)) tomorrowGoals.push({ text: g.text, done: false, priority: g.priority || 'Medium', area: g.area || null }); });
+  storeSet(tomorrowKey(), tomorrowGoals);
+  const remaining = todayGoals.filter(g => g.done);
+  storeSet(todayKey(), remaining);
+  loadToday();
+  loadTomorrow();
+});
