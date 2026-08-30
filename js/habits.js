@@ -759,14 +759,22 @@ function renderDayDetail(ds) {
     ? `${doneCount} of ${scheduled.length} habit${scheduled.length === 1 ? '' : 's'} completed`
     : 'No habits were active on this day.';
 
-  const rows = scheduled.map(h => `
+  const areas = getAreas();
+  const rows = scheduled.map(h => {
+    const areaObj = h.area && areas.find(a => a.name === h.area);
+    const areaTag = areaObj
+      ? `<span class="day-detail-habit-area" style="background:${areaObj.color}BF">${areaObj.name}</span>`
+      : '';
+    return `
     <div class="day-detail-habit-row">
       <label class="habit-cb-wrap">
         <input type="checkbox" data-habit-id="${h.id}"${doneIds.includes(h.id) ? ' checked' : ''}>
         <span class="habit-cb-box"></span>
       </label>
       <span class="day-detail-habit-name">${h.name}</span>
-    </div>`).join('');
+      ${areaTag}
+    </div>`;
+  }).join('');
 
   body.innerHTML = `
     <div class="day-detail-head">
