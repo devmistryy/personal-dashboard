@@ -96,6 +96,11 @@
     outline: 1px solid rgba(255,255,255,0.25);
     border-radius: 4px; padding: 2px 4px;
   }
+  .habit-row.is-done {
+    opacity: 0.55;
+    transition: background 0.2s, opacity 0.25s;
+  }
+  .habit-row.is-done:hover { opacity: 0.78; }
   .habit-row.is-done .habit-name {
     text-decoration: line-through;
     text-decoration-color: rgba(255,255,255,0.4);
@@ -773,7 +778,10 @@
     background: rgba(255,255,255,0.035);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 12px;
+    transition: opacity 0.25s;
   }
+  .day-detail-habit-row.is-done { opacity: 0.55; }
+  .day-detail-habit-row.is-done .day-detail-habit-name { text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.4); }
   .day-detail-habit-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .day-detail-habit-area {
     flex-shrink: 0;

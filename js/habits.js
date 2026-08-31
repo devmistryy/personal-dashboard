@@ -49,6 +49,26 @@ function _syncHabitSortButtons() {
   document.querySelectorAll('.habit-sort-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.sort === mode));
 }
+
+// FLIP-animate `rowSel` rows inside `containerEl` (a node that survives `mutate`)
+// around a DOM rebuild. Rows are matched across the rebuild by `data-habit-id`.
+function _flipRows(containerEl, rowSel, mutate) {
+  if (!containerEl || matchMedia('(prefers-reduced-motion: reduce)').matches) { mutate(); return; }
+  const firstTop = new Map();
+  containerEl.querySelectorAll(rowSel).forEach(r => firstTop.set(r.dataset.habitId, r.getBoundingClientRect().top));
+  mutate();
+  containerEl.querySelectorAll(rowSel).forEach(r => {
+    const prev = firstTop.get(r.dataset.habitId);
+    if (prev == null) return;
+    const dy = prev - r.getBoundingClientRect().top;
+    if (Math.abs(dy) < 1) return;
+    r.style.transition = 'none';
+    r.style.transform  = `translateY(${dy}px)`;
+    void r.offsetHeight; // reflow so the next line animates from here
+    r.style.transition = 'transform 0.34s cubic-bezier(0.22,1,0.36,1)';
+    r.style.transform  = '';
+  });
+}
 function _noteId() {
   return (crypto && crypto.randomUUID) ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -97,8 +117,8 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '');
   li.dataset.habitId = habit.id;
 
-  // Drag-to-reorder — only in Custom / By-area modes, active habits only
-  if (!isArchived && canDrag) {
+  // Drag-to-reorder — only in Custom / By-area modes, not-done active habits
+  if (!isArchived && canDrag && !done) {
     li.draggable = true;
     const drag = document.createElement('span');
     drag.className = 'habit-drag-handle';
@@ -124,7 +144,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
       if (cb.checked) { if (!log.includes(habit.id)) log.push(habit.id); }
       else { const i = log.indexOf(habit.id); if (i !== -1) log.splice(i, 1); }
       saveHabitLog(today, log);
-      renderHabits();
+      _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits);
     });
   }
   li.appendChild(cbWrap);
@@ -216,7 +236,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
         log.push(habit.id);
       }
       saveHabitLog(today, log);
-      setTimeout(renderHabits, 0);
+      setTimeout(() => _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits), 0);
     });
   }
   li.appendChild(streakEl);
@@ -258,7 +278,9 @@ function renderHabits() {
   const all      = getHabits();
   const mode     = getHabitSort();
   const canDrag  = mode === 'custom' || mode === 'area';
-  const active   = _sortHabitsForDisplay(all.filter(h => !h.archived), mode);
+  const doneToday = new Set(getHabitLog(habitDateStr(0)));
+  let active     = _sortHabitsForDisplay(all.filter(h => !h.archived), mode);
+  active = [...active.filter(h => !doneToday.has(h.id)), ...active.filter(h => doneToday.has(h.id))];
   const archived = _sortHabitsForDisplay(all.filter(h => h.archived), mode);
   const listEl   = document.getElementById('habitList');
   const emptyEl  = document.getElementById('habitEmpty');
@@ -870,15 +892,17 @@ function renderDayDetail(ds) {
     : 'No habits were active on this day.';
 
   const areas = getAreas();
-  const rows = scheduled.map(h => {
+  const ordered = [...scheduled.filter(h => !doneIds.includes(h.id)), ...scheduled.filter(h => doneIds.includes(h.id))];
+  const rows = ordered.map(h => {
+    const isDone = doneIds.includes(h.id);
     const areaObj = h.area && areas.find(a => a.name === h.area);
     const areaTag = areaObj
       ? `<span class="day-detail-habit-area" style="background:${areaObj.color}BF">${areaObj.name}</span>`
       : '';
     return `
-    <div class="day-detail-habit-row">
+    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}" data-habit-id="${h.id}">
       <label class="habit-cb-wrap">
-        <input type="checkbox" data-habit-id="${h.id}"${doneIds.includes(h.id) ? ' checked' : ''}>
+        <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}>
         <span class="habit-cb-box"></span>
       </label>
       <span class="day-detail-habit-name">${h.name}</span>
@@ -915,7 +939,8 @@ function renderDayDetail(ds) {
       if (cb.checked) { if (i === -1) log.push(id); }
       else if (i !== -1) log.splice(i, 1);
       saveHabitLog(ds, log);
-      renderHabits(); // repaints the calendar + this open day view
+      // renderHabits re-renders the open day view via its sync block
+      _flipRows(document.getElementById('dayDetailBody'), '.day-detail-habit-row', renderHabits);
     });
   });
 
