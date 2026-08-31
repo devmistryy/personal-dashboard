@@ -11,7 +11,7 @@
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
 <link rel="stylesheet" href="css/main.css?v=1">
 <link rel="stylesheet" href="css/todo.css?v=1">
-<link rel="stylesheet" href="css/habits.css?v=9">
+<link rel="stylesheet" href="css/habits.css?v=10">
 <link rel="stylesheet" href="css/jobs.css?v=1">
 <link rel="stylesheet" href="css/areas.css?v=1">
 </head>
@@ -157,6 +157,14 @@
     <div class="section">
       <div class="section-title">Habit Tracker</div>
       <div class="card gm-card" id="habitCard">
+        <div class="habit-sort-bar">
+          <span class="habit-sort-label">Sort by</span>
+          <button class="habit-sort-btn active" data-sort="custom">Custom</button>
+          <button class="habit-sort-btn" data-sort="az">A–Z</button>
+          <button class="habit-sort-btn" data-sort="area">By area</button>
+          <button class="habit-sort-btn" data-sort="newest">Newest</button>
+          <button class="habit-sort-btn" data-sort="oldest">Oldest</button>
+        </div>
         <ul id="habitList" class="habit-list"></ul>
         <div id="habitEmpty" class="empty-state">No habits yet — add one below.</div>
 
@@ -308,10 +316,10 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=2"></script>
-<script src="js/habits.js?v=12"></script>
+<script src="js/todo.js?v=3"></script>
+<script src="js/habits.js?v=13"></script>
 <script src="js/jobs.js?v=1"></script>
 <script src="js/areas.js?v=1"></script>
-<script src="js/main.js?v=2"></script>
+<script src="js/main.js?v=3"></script>
 </body>
 </html>

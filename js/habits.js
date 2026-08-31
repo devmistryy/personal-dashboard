@@ -15,6 +15,40 @@ function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncH
 
 function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
 function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
+
+// ── Habit sort mode ──
+function getHabitSort()      { return MEM['habit_sort_v1'] || 'custom'; }
+function setHabitSort(mode)  { MEM['habit_sort_v1'] = mode; _syncSetting('habit_sort_v1', mode); renderHabits(); }
+
+function _habitCreatedKey(h) { return h.createdAt || h.startDate || ''; }
+
+// Returns a new array sorted for display. `MEM['habits:list']` is never mutated —
+// its order is the canonical "custom" order and the tiebreak for the other modes.
+function _sortHabitsForDisplay(list, mode) {
+  const pos = new Map(list.map((h, i) => [h.id, i]));
+  const byCustom = (a, b) => pos.get(a.id) - pos.get(b.id);
+  const arr = [...list];
+  if (mode === 'az') {
+    arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || byCustom(a, b));
+  } else if (mode === 'newest') {
+    arr.sort((a, b) => _habitCreatedKey(b).localeCompare(_habitCreatedKey(a)) || byCustom(a, b));
+  } else if (mode === 'oldest') {
+    arr.sort((a, b) => _habitCreatedKey(a).localeCompare(_habitCreatedKey(b)) || byCustom(a, b));
+  } else if (mode === 'area') {
+    arr.sort((a, b) => {
+      const aa = a.area || '', ba = b.area || '';
+      if (!!aa !== !!ba) return aa ? -1 : 1;            // no-area group last
+      return aa.localeCompare(ba, undefined, { sensitivity: 'base' }) || byCustom(a, b);
+    });
+  }
+  return arr; // 'custom' / unknown → stored order
+}
+
+function _syncHabitSortButtons() {
+  const mode = getHabitSort();
+  document.querySelectorAll('.habit-sort-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.sort === mode));
+}
 function _noteId() {
   return (crypto && crypto.randomUUID) ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -47,7 +81,7 @@ function getCurrentWeekDates() {
   });
 }
 
-function buildHabitRow(habit, allHabits, isArchived, activeIdx) {
+function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const today    = habitDateStr(0);
   const todayLog = getHabitLog(today);
   const done     = todayLog.includes(habit.id);
@@ -61,11 +95,11 @@ function buildHabitRow(habit, allHabits, isArchived, activeIdx) {
 
   const li = document.createElement('li');
   li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '');
+  li.dataset.habitId = habit.id;
 
-  // Drag-to-reorder (active habits only)
-  if (!isArchived) {
+  // Drag-to-reorder — only in Custom / By-area modes, active habits only
+  if (!isArchived && canDrag) {
     li.draggable = true;
-    li.dataset.idx = activeIdx;
     const drag = document.createElement('span');
     drag.className = 'habit-drag-handle';
     drag.textContent = '⋮⋮';
@@ -222,13 +256,16 @@ function buildHabitRow(habit, allHabits, isArchived, activeIdx) {
 
 function renderHabits() {
   const all      = getHabits();
-  const active   = all.filter(h => !h.archived);
-  const archived = all.filter(h => h.archived);
+  const mode     = getHabitSort();
+  const canDrag  = mode === 'custom' || mode === 'area';
+  const active   = _sortHabitsForDisplay(all.filter(h => !h.archived), mode);
+  const archived = _sortHabitsForDisplay(all.filter(h => h.archived), mode);
   const listEl   = document.getElementById('habitList');
   const emptyEl  = document.getElementById('habitEmpty');
   const archToggle = document.getElementById('archivedToggle');
   const archList   = document.getElementById('archivedList');
 
+  _syncHabitSortButtons();
   listEl.innerHTML  = '';
   archList.innerHTML = '';
 
@@ -238,18 +275,24 @@ function renderHabits() {
   } else {
     emptyEl.style.display = 'none';
     listEl.style.display  = '';
-    active.forEach((h, i) => listEl.appendChild(buildHabitRow(h, all, false, i)));
+    active.forEach(h => listEl.appendChild(buildHabitRow(h, all, false, canDrag)));
   }
 
   if (!listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'habit-row', (from, to) => {
-      const habits  = getHabits();
-      const actives = habits.filter(h => !h.archived);
-      const rest    = habits.filter(h => h.archived);
-      const [moved] = actives.splice(from, 1);
-      actives.splice(to, 0, moved);
-      saveHabits([...actives, ...rest]);
+    wireDragReorder(listEl, 'habit-row', (fromEl, toEl) => {
+      const m = getHabitSort();
+      if (m !== 'custom' && m !== 'area') return;
+      const fromId = fromEl.dataset.habitId, toId = toEl.dataset.habitId;
+      if (!fromId || !toId || fromId === toId) return;
+      const list    = getHabits();
+      const dragged = list.find(h => h.id === fromId);
+      const target  = list.find(h => h.id === toId);
+      if (!dragged || !target) return;
+      if (m === 'area' && (dragged.area || null) !== (target.area || null)) return;
+      const next = list.filter(h => h.id !== fromId);
+      next.splice(next.indexOf(target), 0, dragged);
+      saveHabits(next);
       renderHabits();
     });
   }
@@ -260,7 +303,7 @@ function renderHabits() {
     archToggle.style.display = '';
     document.getElementById('archivedToggleLabel').textContent =
       `Completed habits (${archived.length})`;
-    archived.forEach(h => archList.appendChild(buildHabitRow(h, all, true)));
+    archived.forEach(h => archList.appendChild(buildHabitRow(h, all, true, false)));
   }
 
   renderHabitOverviewCalendar();
@@ -901,13 +944,18 @@ document.getElementById('habitInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') addHabit();
 });
 
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.habit-sort-btn');
+  if (btn) setHabitSort(btn.dataset.sort);
+});
+
 function addHabit() {
   const input   = document.getElementById('habitInput');
   const endDate = document.getElementById('habitEndDate');
   const name    = input.value.trim();
   if (!name) return;
   const today   = habitDateStr(0);
-  const entry   = { id: Date.now().toString(36), name, startDate: today, archived: false };
+  const entry   = { id: Date.now().toString(36), name, startDate: today, archived: false, createdAt: new Date().toISOString() };
   if (endDate.value && endDate.value > today) entry.endDate = endDate.value;
   const habits = getHabits();
   habits.push(entry);

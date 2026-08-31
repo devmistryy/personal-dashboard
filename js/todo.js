@@ -219,17 +219,18 @@ function makeInlineEdit(el, idx, goals, key, reload) {
   }
 }
 
-// Generic drag-to-reorder for a <ul>/<ol> of `.${rowClass}` rows carrying
-// data-idx. Wire once per list element. `onReorder(fromIdx, toIdx)` owns the
-// actual array move + persist + re-render. Used by goals and habits.
+// Generic drag-to-reorder for a <ul>/<ol> of `.${rowClass}` rows. Wire once per
+// list element. `onReorder(fromEl, toEl)` receives the dragged row element and
+// the drop-target row element (guaranteed distinct) and owns the array move +
+// persist + re-render. Used by goals and habits.
 function wireDragReorder(listEl, rowClass, onReorder) {
   const sel = '.' + rowClass;
   const clearOver = () => listEl.querySelectorAll(sel).forEach(r => r.classList.remove('drag-over'));
-  let dragFrom = null;
+  let dragFromEl = null;
   listEl.addEventListener('dragstart', e => {
     const row = e.target.closest(sel);
     if (!row) return;
-    dragFrom = parseInt(row.dataset.idx);
+    dragFromEl = row;
     e.dataTransfer.effectAllowed = 'move';
   });
   listEl.addEventListener('dragover', e => {
@@ -244,11 +245,10 @@ function wireDragReorder(listEl, rowClass, onReorder) {
     e.preventDefault();
     clearOver();
     const row = e.target.closest(sel);
-    if (!row || dragFrom === null) return;
-    const to = parseInt(row.dataset.idx);
-    const from = dragFrom;
-    dragFrom = null;
-    if (to !== from) onReorder(from, to);
+    if (!row || !dragFromEl) return;
+    const fromEl = dragFromEl;
+    dragFromEl = null;
+    if (row !== fromEl) onReorder(fromEl, row);
   });
 }
 
@@ -292,7 +292,9 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
 
   if (!readOnly && !listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'goal-row', (from, to) => {
+    wireDragReorder(listEl, 'goal-row', (fromEl, toEl) => {
+      const from = parseInt(fromEl.dataset.idx);
+      const to   = parseInt(toEl.dataset.idx);
       const arr = storeGet(key) || [];
       const [item] = arr.splice(from, 1);
       arr.splice(to, 0, item);

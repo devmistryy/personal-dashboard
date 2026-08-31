@@ -48,9 +48,10 @@ function _seedLocalData() {
       { name: 'Health', color: '#52C97A' },
       { name: 'Work',   color: '#4A9EFF' },
     ],
+    'habit_sort_v1': 'custom',
     'habits:list': [
-      { id: h1, name: 'Read 20 minutes', startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health' },
-      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health' },
+      { id: h1, name: 'Read 20 minutes', startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date(Date.now() - 60000).toISOString() },
+      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date().toISOString() },
     ],
     ['habits:log:' + today]: [h1],
     ['goals:' + today]: [
@@ -360,10 +361,11 @@ async function _syncHabits(habits) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   if (habits.length) {
-    const { error } = await sb.from('habits').upsert(habits.map(h => ({
+    const { error } = await sb.from('habits').upsert(habits.map((h, i) => ({
       id: h.id, user_id: uid, name: h.name,
       start_date: h.startDate || null, end_date: h.endDate || null,
       archived: h.archived || false, archived_at: h.archivedAt || null,
+      sort_order: i, area: h.area || null,
     })), { onConflict: 'id' });
     if (error) console.error('[sync] habits upsert failed:', error);
   }
@@ -434,10 +436,10 @@ async function loadFromSupabase() {
   const toStr   = to.toISOString().slice(0,10);
 
   const results = await Promise.all([
-    sb.from('habits').select('*').eq('user_id', uid).order('created_at'),
+    sb.from('habits').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_logs').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
-    sb.from('settings').select('value').eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle(),
+    sb.from('settings').select('key,value').eq('user_id', uid),
     sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
     sb.from('habit_notes').select('*').eq('user_id', uid).order('created_at'),
   ]);
@@ -447,13 +449,13 @@ async function loadFromSupabase() {
   const habits  = results[0].data || [];
   const logs    = results[1].data || [];
   const goals   = results[2].data || [];
-  const setting = results[3].data;
   const jobs    = results[4].data || [];
   const hNotes  = results[5].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
+    area: h.area || null, createdAt: h.created_at,
   }));
 
   logs.forEach(l => {
@@ -468,7 +470,7 @@ async function loadFromSupabase() {
     MEM[k].push({ text: g.text, done: g.done, doneAt: g.done_at, queued: g.queued });
   });
 
-  if (setting) MEM['goal_streak_v1'] = setting.value;
+  (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
 
   MEM['jobs:list'] = jobs.map(j => ({
     id: j.id, company: j.company, platform: j.platform || '',
