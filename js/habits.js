@@ -44,10 +44,40 @@ function _sortHabitsForDisplay(list, mode) {
   return arr; // 'custom' / unknown → stored order
 }
 
+const _HABIT_SORT_MODES = [
+  ['custom', 'Custom'], ['az', 'A–Z'], ['area', 'By area'], ['newest', 'Newest'], ['oldest', 'Oldest'],
+];
+
+function _habitSortBarHTML() {
+  const mode = getHabitSort();
+  return `<div class="habit-sort-bar"><span class="habit-sort-label">Sort by</span>${
+    _HABIT_SORT_MODES.map(([v, l]) =>
+      `<button class="habit-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('')
+  }</div>`;
+}
+
 function _syncHabitSortButtons() {
   const mode = getHabitSort();
   document.querySelectorAll('.habit-sort-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.sort === mode));
+}
+
+// Shared drag-reorder handler for both the tracker list and the day-detail checklist.
+// `fromEl`/`toEl` are the dragged and drop-target row elements (keyed by data-habit-id).
+function _reorderHabitByDrag(fromEl, toEl) {
+  const m = getHabitSort();
+  if (m !== 'custom' && m !== 'area') return;
+  const fromId = fromEl.dataset.habitId, toId = toEl.dataset.habitId;
+  if (!fromId || !toId || fromId === toId) return;
+  const list    = getHabits();
+  const dragged = list.find(h => h.id === fromId);
+  const target  = list.find(h => h.id === toId);
+  if (!dragged || !target) return;
+  if (m === 'area' && (dragged.area || null) !== (target.area || null)) return;
+  const next = list.filter(h => h.id !== fromId);
+  next.splice(next.indexOf(target), 0, dragged);
+  saveHabits(next);
+  renderHabits();
 }
 
 // FLIP-animate `rowSel` rows inside `containerEl` (a node that survives `mutate`)
@@ -302,21 +332,7 @@ function renderHabits() {
 
   if (!listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'habit-row', (fromEl, toEl) => {
-      const m = getHabitSort();
-      if (m !== 'custom' && m !== 'area') return;
-      const fromId = fromEl.dataset.habitId, toId = toEl.dataset.habitId;
-      if (!fromId || !toId || fromId === toId) return;
-      const list    = getHabits();
-      const dragged = list.find(h => h.id === fromId);
-      const target  = list.find(h => h.id === toId);
-      if (!dragged || !target) return;
-      if (m === 'area' && (dragged.area || null) !== (target.area || null)) return;
-      const next = list.filter(h => h.id !== fromId);
-      next.splice(next.indexOf(target), 0, dragged);
-      saveHabits(next);
-      renderHabits();
-    });
+    wireDragReorder(listEl, 'habit-row', _reorderHabitByDrag);
   }
 
   if (archived.length === 0) {
@@ -891,16 +907,22 @@ function renderDayDetail(ds) {
     ? `${doneCount} of ${scheduled.length} habit${scheduled.length === 1 ? '' : 's'} completed`
     : 'No habits were active on this day.';
 
-  const areas = getAreas();
-  const ordered = [...scheduled.filter(h => !doneIds.includes(h.id)), ...scheduled.filter(h => doneIds.includes(h.id))];
+  const mode    = getHabitSort();
+  const canDrag = mode === 'custom' || mode === 'area';
+
+  const areas   = getAreas();
+  const sorted  = _sortHabitsForDisplay(scheduled, mode);
+  const ordered = [...sorted.filter(h => !doneIds.includes(h.id)), ...sorted.filter(h => doneIds.includes(h.id))];
   const rows = ordered.map(h => {
     const isDone = doneIds.includes(h.id);
+    const rowDrag = canDrag && !isDone;
     const areaObj = h.area && areas.find(a => a.name === h.area);
     const areaTag = areaObj
       ? `<span class="day-detail-habit-area" style="background:${areaObj.color}BF">${areaObj.name}</span>`
       : '';
     return `
-    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}" data-habit-id="${h.id}">
+    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}">
+      ${rowDrag ? '<span class="habit-drag-handle" aria-hidden="true">⋮⋮</span>' : ''}
       <label class="habit-cb-wrap">
         <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}>
         <span class="habit-cb-box"></span>
@@ -927,9 +949,13 @@ function renderDayDetail(ds) {
       <div class="day-detail-summary-text">${summary}</div>
     </div>
     ${scheduled.length ? `
+      ${_habitSortBarHTML()}
       <div class="habit-detail-section-title">Habits</div>
       <div class="day-detail-habit-list">${rows}</div>` : ''}
   `;
+
+  const dlist = body.querySelector('.day-detail-habit-list');
+  if (dlist && canDrag) wireDragReorder(dlist, 'day-detail-habit-row', _reorderHabitByDrag);
 
   body.querySelectorAll('input[data-habit-id]').forEach(cb => {
     cb.addEventListener('change', () => {

@@ -782,6 +782,8 @@
   }
   .day-detail-habit-row.is-done { opacity: 0.55; }
   .day-detail-habit-row.is-done .day-detail-habit-name { text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.4); }
+  .day-detail-habit-row:hover .habit-drag-handle { opacity: 1; }
+  .day-detail-habit-row.drag-over { border-top: 2px solid rgba(255,255,255,0.35); }
   .day-detail-habit-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
   .day-detail-habit-area {
     flex-shrink: 0;
