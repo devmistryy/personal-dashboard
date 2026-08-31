@@ -13,6 +13,13 @@ function saveHabits(h)            { MEM['habits:list'] = h; _syncHabits(h); }
 function getHabitLog(dateStr)     { return MEM['habits:log:' + dateStr] || []; }
 function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncHabitLog(dateStr, ids); }
 
+function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
+function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
+function _noteId() {
+  return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 function daysBetween(a, b) {
   return Math.round((new Date(b) - new Date(a)) / 86400000);
 }
@@ -419,6 +426,16 @@ _hcalGrid.addEventListener('keydown', e => {
 // ── Habit Detail Page ──
 let _detailHabitId = null;
 let _detailMonth = null; // { year, month }
+let _habitDetailTab = 'overview'; // 'overview' | 'notes'
+
+function _setHabitDetailTab(tab) {
+  _habitDetailTab = tab;
+  document.querySelectorAll('#habitDetailPage .hd-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.hdtab === tab));
+  document.getElementById('habitDetailOverview').style.display = tab === 'overview' ? '' : 'none';
+  document.getElementById('habitDetailNotes').style.display    = tab === 'notes'    ? '' : 'none';
+  document.getElementById('habitDetailPage').scrollTop = 0;
+}
 
 function openHabitDetail(habitId) {
   _detailHabitId = habitId;
@@ -428,6 +445,8 @@ function openHabitDetail(habitId) {
   const habit = all.find(h => h.id === habitId);
   if (!habit) return;
   renderHabitDetailPage(habit, all);
+  renderHabitNotesPanel(habit);
+  _setHabitDetailTab('overview');
   const page = document.getElementById('habitDetailPage');
   page.scrollTop = 0;
   page.classList.add('open');
@@ -587,8 +606,56 @@ function renderHabitDetailPage(habit, allHabits) {
     const idx = allHabits.indexOf(habit);
     if (idx !== -1) allHabits.splice(idx, 1);
     saveHabits(allHabits);
+    if (getHabitNotes(habit.id).length) saveHabitNotes(habit.id, []);
     renderHabits();
     closeHabitDetail();
+  });
+}
+
+function renderHabitNotesPanel(habit) {
+  const panel = document.getElementById('habitDetailNotes');
+  if (!panel) return;
+  const notes = getHabitNotes(habit.id);
+  const fmt = ts => new Date(ts).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  panel.innerHTML = `
+    <div class="habit-detail-section-title">Notes</div>
+    <div class="hd-notes-list">${
+      notes.length === 0
+        ? '<div class="area-detail-empty">No notes yet.</div>'
+        : [...notes].reverse().map(n => `
+          <div class="area-note-entry" data-note-id="${n.id}">
+            <div class="hd-note-head">
+              <span class="area-note-date">${fmt(n.createdAt)}</span>
+              <button class="hd-note-del" title="Delete note" aria-label="Delete note">×</button>
+            </div>
+            <div class="area-note-body"></div>
+          </div>`).join('')
+    }</div>
+    <div class="area-note-input-wrap">
+      <textarea id="habitNoteInput" class="area-note-input" placeholder="Add a note…" rows="3"></textarea>
+      <button id="habitNoteAdd" class="area-note-add-btn">Add note</button>
+    </div>`;
+
+  panel.querySelectorAll('.area-note-entry').forEach(el => {
+    const n = notes.find(x => x.id === el.dataset.noteId);
+    el.querySelector('.area-note-body').textContent = n ? n.text : '';
+    el.querySelector('.hd-note-del').addEventListener('click', () => {
+      saveHabitNotes(habit.id, getHabitNotes(habit.id).filter(x => x.id !== el.dataset.noteId));
+      renderHabitNotesPanel(habit);
+    });
+  });
+
+  const inp = document.getElementById('habitNoteInput');
+  const add = () => {
+    const text = inp.value.trim();
+    if (!text) return;
+    saveHabitNotes(habit.id, getHabitNotes(habit.id).concat({ id: _noteId(), text, createdAt: Date.now() }));
+    renderHabitNotesPanel(habit);
+  };
+  document.getElementById('habitNoteAdd').addEventListener('click', add);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) add();
   });
 }
 
@@ -853,6 +920,9 @@ function addHabit() {
 document.getElementById('habitDetailBack').addEventListener('click', closeHabitDetail);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open')) closeHabitDetail();
+});
+document.querySelectorAll('#habitDetailPage .hd-tab').forEach(btn => {
+  btn.addEventListener('click', () => _setHabitDetailTab(btn.dataset.hdtab));
 });
 
 document.getElementById('dayDetailBack').addEventListener('click', closeDayDetail);

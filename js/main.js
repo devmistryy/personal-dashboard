@@ -409,6 +409,20 @@ async function _syncSetting(key, value) {
   if (error) console.error('[sync] settings upsert failed:', error);
 }
 
+async function _syncHabitNotes(habitId, notes) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  const { error: delErr } = await sb.from('habit_notes').delete().eq('user_id', uid).eq('habit_id', habitId);
+  if (delErr) { console.error('[sync] habit_notes delete failed:', delErr); return; }
+  if (notes.length) {
+    const { error } = await sb.from('habit_notes').insert(notes.map(n => ({
+      user_id: uid, habit_id: habitId, text: n.text,
+      created_at: new Date(n.createdAt).toISOString(),
+    })));
+    if (error) console.error('[sync] habit_notes insert failed:', error);
+  }
+}
+
 // ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
   if (LOCAL_MODE) return _loadLocal();
@@ -425,6 +439,7 @@ async function loadFromSupabase() {
     sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
     sb.from('settings').select('value').eq('user_id', uid).eq('key', 'goal_streak_v1').maybeSingle(),
     sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+    sb.from('habit_notes').select('*').eq('user_id', uid).order('created_at'),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -434,6 +449,7 @@ async function loadFromSupabase() {
   const goals   = results[2].data || [];
   const setting = results[3].data;
   const jobs    = results[4].data || [];
+  const hNotes  = results[5].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -459,6 +475,11 @@ async function loadFromSupabase() {
     dateApplied: j.date_applied || '', status: j.status || 'Applied',
     locationType: j.location_type || '', locationCity: j.location_city || '',
   }));
+
+  hNotes.forEach(n => {
+    const k = 'habit_notes:' + n.habit_id;
+    (MEM[k] = MEM[k] || []).push({ id: n.id, text: n.text, createdAt: Date.parse(n.created_at) });
+  });
 }
 
 
