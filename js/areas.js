@@ -15,7 +15,7 @@ function getAllGoalAreas() {
 let _currentAreaName = null;
 
 function getAreaNotes(name) { return (MEM['area_notes:' + name] || []); }
-function saveAreaNotes(name, notes) { MEM['area_notes:' + name] = notes; }
+function saveAreaNotes(name, notes) { MEM['area_notes:' + name] = notes; _syncSetting('area_notes:' + name, notes); }
 
 function openAreaDetail(name) {
   _currentAreaName = name;
@@ -47,7 +47,8 @@ function renderAreaDetail() {
     // rename notes key
     const notes = getAreaNotes(name);
     saveAreaNotes(newName, notes);
-    MEM['area_notes:' + name] = undefined;
+    delete MEM['area_notes:' + name];
+    _syncSetting('area_notes:' + name, []);   // clear the old row server-side
     // update goals
     [todayKey(), tomorrowKey()].forEach(k => {
       const goals = storeGet(k) || [];
@@ -223,6 +224,7 @@ document.getElementById('areaDetailDelete').addEventListener('click', () => {
   const areas = getAreas();
   const idx = areas.findIndex(a => a.name === name);
   if (idx !== -1) { areas.splice(idx, 1); saveAreas(areas); }
+  if (getAreaNotes(name).length) saveAreaNotes(name, []);   // drop this area's notes
   [todayKey(), tomorrowKey()].forEach(k => {
     const goals = storeGet(k) || [];
     let changed = false;

@@ -1,0 +1,217 @@
+  /* ── Diet tab ── */
+
+  /* Segmented range / filter bars. Same look as .habit-sort-bar but its own
+     class names — .habit-sort-btn and .job-sort-btn are claimed by
+     document-level click handlers in habits.js / jobs.js. */
+  .diet-seg-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .diet-seg-label { font-size: 11px; color: var(--text-tertiary); font-weight: 500; margin-right: 2px; }
+  .diet-seg-btn {
+    font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08); background: transparent;
+    color: var(--text-tertiary); cursor: pointer; font-family: var(--font-body);
+    transition: background .15s, color .15s;
+  }
+  .diet-seg-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.05); }
+  .diet-seg-btn.active {
+    background: rgba(255,255,255,0.08); color: var(--text-primary); border-color: rgba(255,255,255,0.15);
+  }
+
+  .diet-hint { font-size: 12px; color: var(--text-tertiary); font-style: italic; }
+
+  /* ── Entry form ── */
+  .diet-form { display: flex; flex-direction: column; gap: 14px; }
+  .diet-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .diet-cal-input { width: 200px; }
+
+  .diet-import-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 14px; margin-bottom: 2px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .diet-import-row .btn-polish { padding: 9px 16px; font-size: 12.5px; }
+
+  .diet-macro-row { gap: 8px; }
+  .diet-macro-input { width: 110px; flex: 1; min-width: 90px; }
+
+  .diet-field { display: flex; flex-direction: column; gap: 8px; }
+  .diet-field-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-tertiary);
+  }
+
+  .diet-cat-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .diet-cat-btn {
+    font-size: 12.5px; font-weight: 600; padding: 8px 16px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+    color: var(--text-tertiary); cursor: pointer; font-family: var(--font-body);
+    transition: background .18s, color .18s, border-color .18s;
+  }
+  .diet-cat-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.07); }
+
+  .diet-chips { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .diet-chip {
+    font-size: 11.5px; font-weight: 500; padding: 4px 11px; border-radius: 20px;
+    border: 1px dashed rgba(255,255,255,0.15); background: transparent;
+    color: rgba(255,255,255,0.45); cursor: pointer; font-family: var(--font-body);
+    white-space: nowrap; transition: background .15s, color .15s, border-color .15s;
+  }
+  .diet-chip:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.28); }
+  .diet-chip.active {
+    border-style: solid; color: #fff;
+    background: rgba(74,158,255,0.28); border-color: rgba(74,158,255,0.55);
+  }
+  /* Faint hue on the resting chip so you can see which list it belongs to */
+  .diet-chip-healthy   { border-color: rgba(82,201,122,0.30); color: rgba(111,219,151,0.75); }
+  .diet-chip-unhealthy { border-color: rgba(226,75,74,0.30);  color: rgba(240,136,134,0.75); }
+  .diet-chip-healthy.active   { background: rgba(82,201,122,0.28); border-color: rgba(82,201,122,0.6); color: #fff; }
+  .diet-chip-unhealthy.active { background: rgba(226,75,74,0.28);  border-color: rgba(226,75,74,0.6);  color: #fff; }
+
+  .diet-ingredient-add { display: flex; gap: 8px; margin-top: 2px; }
+  .diet-ingredient-add .goal-input { font-size: 12.5px; padding: 9px 12px; }
+
+  .diet-form-actions {
+    display: flex; align-items: center; gap: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;
+  }
+
+  /* ── History ── */
+  .diet-entry {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px; margin-bottom: 6px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+    transition: background 0.2s;
+  }
+  .diet-entry:hover { background: rgba(255,255,255,0.055); }
+  .diet-entry:hover .diet-entry-del { opacity: 1; }
+  .diet-entry-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .diet-entry-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .diet-entry-desc { font-size: 13.5px; color: var(--text-primary); word-break: break-word; }
+  .diet-pill {
+    font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 20px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .diet-entry-meta {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary);
+  }
+  .diet-entry-cal {
+    background: rgba(255,255,255,0.06); border-radius: 4px; padding: 1px 6px;
+    color: var(--text-secondary);
+  }
+  .diet-entry-macros { letter-spacing: 0.02em; }
+  .diet-entry-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+  .diet-tag {
+    font-size: 10.5px; font-weight: 500; padding: 2px 8px; border-radius: 20px;
+    white-space: nowrap; background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.55);
+  }
+  .diet-tag-healthy   { background: rgba(82,201,122,0.18); color: #6FDB97; }
+  .diet-tag-unhealthy { background: rgba(226,75,74,0.18);  color: #F08886; }
+
+  .diet-entry-del {
+    background: none; border: none; cursor: pointer; color: var(--text-tertiary);
+    font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 6px;
+    opacity: 0; flex-shrink: 0; transition: opacity 0.2s, color 0.2s;
+  }
+  .diet-entry-del:hover { color: var(--danger); }
+
+  /* ── Stat rows (priority + healthy/unhealthy food lists) ── */
+  .diet-stat-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; margin-bottom: 6px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+    transition: background 0.2s;
+  }
+  .diet-stat-row:hover { background: rgba(255,255,255,0.055); }
+  .diet-stat-row:hover .diet-entry-del { opacity: 1; }
+  .diet-stat-name {
+    flex: 1; min-width: 0; font-size: 13.5px; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px; word-break: break-word;
+  }
+  .diet-stat-nums {
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+  }
+  .diet-stat-num b { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .diet-stat-num i { font-style: normal; letter-spacing: 0.06em; }
+  .diet-stat-last { color: var(--text-secondary); min-width: 62px; text-align: right; }
+
+  .diet-kind-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .diet-kind-healthy   { background: #52C97A; }
+  .diet-kind-unhealthy { background: #E24B4A; }
+
+  /* Add-a-food rows */
+  .diet-add-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; margin-top: 14px;
+  }
+  /* ── Healthy vs unhealthy summary ── */
+  .diet-hu-summary {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
+  }
+  .diet-hu-figure {
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+    padding: 16px 10px; background: rgba(255,255,255,0.04); border-radius: 14px;
+  }
+  .diet-hu-count {
+    font-family: var(--font-mono); font-size: 28px; font-weight: 800;
+    letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  .diet-hu-count.healthy   { color: #6FDB97; }
+  .diet-hu-count.unhealthy { color: #F08886; }
+  .diet-hu-label {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-tertiary); text-align: center;
+  }
+  .diet-hu-bar {
+    display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+    background: rgba(255,255,255,0.07); margin-bottom: 4px;
+  }
+  .diet-hu-bar-fill { height: 100%; transition: width 0.5s cubic-bezier(0.22,1,0.36,1); }
+  .diet-hu-bar-fill.healthy   { background: #52C97A; }
+  .diet-hu-bar-fill.unhealthy { background: #E24B4A; }
+
+  /* Two-column manage lists (Healthy Ingredients | Unhealthy Foods) */
+  .diet-food-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+  .diet-food-col > .diet-field-label { margin-bottom: 10px; display: block; }
+  .diet-food-col .diet-stat-row { padding: 8px 12px; gap: 8px; }
+  .diet-food-col .diet-stat-name { font-size: 12.5px; }
+  .diet-food-col .diet-stat-nums { gap: 8px; font-size: 10px; }
+  .diet-food-col .diet-stat-last { min-width: 0; }
+  .diet-food-col .diet-add-row { padding-top: 12px; margin-top: 10px; }
+
+  /* ── Category breakdown ── */
+  .diet-bar-row { margin-bottom: 14px; }
+  .diet-bar-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin-bottom: 6px;
+  }
+  .diet-bar-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .diet-bar-label i {
+    font-style: normal; font-size: 10px; font-weight: 500;
+    color: var(--text-tertiary); margin-left: 7px; letter-spacing: 0.04em;
+  }
+  .diet-bar-val {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+    color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .diet-bar-val i { font-style: normal; font-weight: 500; color: var(--text-tertiary); }
+  .diet-bar { height: 8px; background: rgba(255,255,255,0.07); border-radius: 4px; overflow: hidden; }
+  .diet-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.22,1,0.36,1); }
+  .diet-breakdown-note { display: block; line-height: 1.6; margin-top: 16px; }
+
+  /* Responsive */
+  @media (max-width: 620px) {
+    .diet-food-cols { grid-template-columns: 1fr; gap: 20px; }
+  }
+  @media (max-width: 480px) {
+    .diet-cal-input { width: 100%; }
+    .diet-macro-input { width: auto; min-width: 0; }
+    .diet-hu-summary { gap: 6px; }
+    .diet-hu-count { font-size: 21px; }
+    .diet-hu-figure { padding: 14px 6px; }
+    .diet-stat-nums { gap: 8px; }
+    .diet-stat-last { min-width: 0; }
+  }

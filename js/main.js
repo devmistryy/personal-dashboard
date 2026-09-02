@@ -8,7 +8,11 @@
 //  invocations to the feature files.
 // ══════════════════════════════════════════════════════════════════════════
 
-const ANTHROPIC_API_KEY = '';
+const ANTHROPIC_API_KEY = '';           // goal "Polish" (js/todo.js)
+// Diet-tab "Import from screenshot" (js/diet.js) — OCR.space. 'helloworld' is the
+// shared free test key (rate-limited); get your own free key (25k/month) at
+// https://ocr.space/ocrapi/freekey and paste it here.
+const OCR_SPACE_API_KEY = 'helloworld';
 const WAKE_HOUR  = 8;
 const SLEEP_HOUR = 24;
 
@@ -62,6 +66,13 @@ function _seedLocalData() {
     'jobs:list': [
       { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
     ],
+    'diet_healthy_v1': ['Eggs', 'Kiwi', 'Chicken', 'Spinach', 'Lentils'],
+    'diet_unhealthy_v1': ['Soda', 'Fries'],
+    'diet_entries_v1': [
+      { id: 'd_seed1', date: today, time: '13:00', desc: 'Dal, rice and salad', calories: 620,
+        protein: 24, carbs: 82, fats: 14,
+        category: 'Homecooked Meal', healthyIngredients: ['Lentils', 'Spinach'], unhealthyFoods: [] },
+    ],
   };
 }
 
@@ -74,7 +85,7 @@ function getAreas() {
   const raw = MEM['areas:list'] || [];
   return raw.map(a => typeof a === 'string' ? { name: a, color: AREA_COLORS[0] } : a);
 }
-function saveAreas(areas) { MEM['areas:list'] = areas; }
+function saveAreas(areas) { MEM['areas:list'] = areas; _syncSetting('areas:list', areas); }
 function storeSet(key, value) {
   MEM[key] = value;
   if (key.startsWith('goals:')) {
@@ -399,6 +410,7 @@ async function _syncGoals(dateStr, goals) {
     const { error } = await sb.from('goals').insert(goals.map(g => ({
       user_id: uid, date: dateStr, text: g.text,
       done: g.done || false, done_at: g.doneAt || null, queued: g.queued || false,
+      area: g.area || null, priority: g.priority || 'Medium',
     })));
     if (error) console.error('[sync] goals insert failed:', error);
   }
@@ -467,7 +479,8 @@ async function loadFromSupabase() {
   goals.forEach(g => {
     const k = 'goals:' + g.date;
     if (!MEM[k]) MEM[k] = [];
-    MEM[k].push({ text: g.text, done: g.done, doneAt: g.done_at, queued: g.queued });
+    MEM[k].push({ text: g.text, done: g.done, doneAt: g.done_at, queued: g.queued,
+      area: g.area || null, priority: g.priority || 'Medium' });
   });
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
@@ -510,7 +523,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs();
+  rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet();
   tick(true); // refresh the goal ticker immediately with the loaded data
 }
 
@@ -613,4 +626,5 @@ setInterval(updateDayBar, 60 * 1000);
 
 startTicker();
 renderAreas();
+renderDiet();
 initApp();

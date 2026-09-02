@@ -9,11 +9,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=1">
+<link rel="stylesheet" href="css/main.css?v=2">
 <link rel="stylesheet" href="css/todo.css?v=1">
 <link rel="stylesheet" href="css/habits.css?v=12">
 <link rel="stylesheet" href="css/jobs.css?v=1">
 <link rel="stylesheet" href="css/areas.css?v=1">
+<link rel="stylesheet" href="css/diet.css?v=4">
 </head>
 <body>
 <div class="page-wrap">
@@ -81,6 +82,7 @@
     <button class="tab-btn" data-tab="habits">Habits</button>
     <button class="tab-btn" data-tab="jobs">Jobs</button>
     <button class="tab-btn" data-tab="areas">Areas</button>
+    <button class="tab-btn" data-tab="diet">Diet</button>
   </div>
 
   <!-- Tab: Tasks -->
@@ -234,6 +236,103 @@
     </div>
   </div>
 
+  <!-- Tab: Diet -->
+  <div class="tab-panel" id="tab-diet">
+    <div class="section">
+      <div class="section-title">Log a Meal</div>
+      <div class="card gm-card">
+        <div class="diet-form">
+          <div class="diet-import-row">
+            <button class="btn-polish" id="dietImportBtn" type="button">⬆ Import from screenshot</button>
+            <input type="file" id="dietImportFile" accept="image/*" hidden>
+            <span class="polish-status" id="dietImportStatus"></span>
+          </div>
+          <div class="diet-form-row">
+            <input type="date" class="habit-date-input" id="dietDate">
+            <input type="time" class="habit-date-input" id="dietTime">
+            <input type="number" class="habit-date-input diet-cal-input" id="dietCalories"
+              placeholder="Calories (optional)" min="0" step="1">
+          </div>
+          <input type="text" class="goal-input" id="dietDesc" placeholder="What did you eat?">
+          <div class="diet-field">
+            <span class="diet-field-label">Macros (optional, grams)</span>
+            <div class="diet-form-row diet-macro-row">
+              <input type="number" class="habit-date-input diet-macro-input" id="dietProtein" placeholder="Protein" min="0" step="1">
+              <input type="number" class="habit-date-input diet-macro-input" id="dietCarbs" placeholder="Carbs" min="0" step="1">
+              <input type="number" class="habit-date-input diet-macro-input" id="dietFats" placeholder="Fats" min="0" step="1">
+            </div>
+          </div>
+          <div class="diet-field">
+            <span class="diet-field-label">Category</span>
+            <div class="diet-cat-btns" id="dietCatBtns"></div>
+          </div>
+          <div class="diet-field">
+            <span class="diet-field-label">Healthy ingredients in this meal</span>
+            <div class="diet-chips" id="dietHealthyChips"></div>
+            <div class="diet-ingredient-add">
+              <input type="text" class="goal-input" id="dietHealthyInput" placeholder="Add a healthy ingredient (e.g. Spinach)…">
+              <button class="btn-add" id="dietHealthyAdd" type="button">+ Add</button>
+            </div>
+          </div>
+          <div class="diet-field">
+            <span class="diet-field-label">Unhealthy foods in this meal</span>
+            <div class="diet-chips" id="dietUnhealthyChips"></div>
+            <div class="diet-ingredient-add">
+              <input type="text" class="goal-input" id="dietUnhealthyInput" placeholder="Add an unhealthy food (e.g. Donut)…">
+              <button class="btn-add" id="dietUnhealthyAdd" type="button">+ Add</button>
+            </div>
+          </div>
+          <div class="diet-form-actions">
+            <button class="btn-add" id="dietAddBtn">+ Log meal</button>
+            <span class="polish-status" id="dietFormStatus"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Meal History</div>
+      <div class="card gm-card">
+        <div class="diet-seg-bar" id="dietHistoryFilter"></div>
+        <div id="dietHistoryList"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Healthy Ingredients vs Unhealthy Foods</div>
+      <div class="card gm-card">
+        <div class="diet-seg-bar" id="dietFoodRange"></div>
+        <div id="dietFoodFeedback"></div>
+        <div class="diet-food-cols">
+          <div class="diet-food-col">
+            <div class="diet-field-label">Healthy ingredients</div>
+            <div id="dietHealthyManage"></div>
+            <div class="diet-add-row">
+              <input type="text" class="goal-input" id="dietHealthyListInput" placeholder="Add an ingredient…">
+              <button class="btn-add" id="dietHealthyListAdd" type="button">+ Add</button>
+            </div>
+          </div>
+          <div class="diet-food-col">
+            <div class="diet-field-label">Unhealthy foods</div>
+            <div id="dietUnhealthyManage"></div>
+            <div class="diet-add-row">
+              <input type="text" class="goal-input" id="dietUnhealthyListInput" placeholder="Add a food…">
+              <button class="btn-add" id="dietUnhealthyListAdd" type="button">+ Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Category Breakdown</div>
+      <div class="card gm-card">
+        <div class="diet-seg-bar" id="dietCatRange"></div>
+        <div id="dietCatBreakdown"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Job status/platform/location dropdown -->
@@ -318,8 +417,9 @@
      is the only file with bare top-level calls. Keep this order. -->
 <script src="js/todo.js?v=3"></script>
 <script src="js/habits.js?v=15"></script>
-<script src="js/jobs.js?v=1"></script>
-<script src="js/areas.js?v=1"></script>
-<script src="js/main.js?v=3"></script>
+<script src="js/jobs.js?v=2"></script>
+<script src="js/areas.js?v=2"></script>
+<script src="js/diet.js?v=8"></script>
+<script src="js/main.js?v=9"></script>
 </body>
 </html>

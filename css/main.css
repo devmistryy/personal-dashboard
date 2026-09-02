@@ -368,6 +368,10 @@
   /* Responsive */
   @media (max-width: 480px) {
     .dash-title { font-size: 22px; }
+    /* Five tabs no longer fit on one narrow row — wrap instead of squeezing
+       each label onto two lines. */
+    .tab-bar { flex-wrap: wrap; }
+    .tab-btn { padding: 8px 14px; white-space: nowrap; }
     .goal-ticker { padding: 9px 12px; }
     .goal-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
     .goal-ticker-row { font-size: 12px; }

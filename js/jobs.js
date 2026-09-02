@@ -42,6 +42,11 @@ async function _syncJobs(jobs) {
   }
 }
 
+function _jobId() {
+  return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 function _todayStr() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -253,7 +258,7 @@ document.addEventListener('keydown', (e) => {
   const name = e.target.value.trim();
   if (!name) return;
   const jobs = getJobs();
-  jobs.unshift({ id: Date.now().toString(36), company:name, platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
+  jobs.unshift({ id: _jobId(), company:name, platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
   saveJobs(jobs);
   e.target.value = '';
   renderJobs();
