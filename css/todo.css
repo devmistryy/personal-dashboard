@@ -444,3 +444,51 @@
 
   /* Drag over indicator */
   .goal-row.drag-over { border-top: 2px solid rgba(255,255,255,0.3); }
+
+  /* ── Sunday Reset ── */
+  .gm-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .sunday-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 13px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.18s, color 0.18s, border-color 0.18s;
+  }
+  .sunday-reset-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.20);
+  }
+
+  .sunday-reset-intro {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-tertiary);
+    margin: 0 0 20px;
+  }
+
+  .sunday-reset-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sunday-reset-row { cursor: default; }

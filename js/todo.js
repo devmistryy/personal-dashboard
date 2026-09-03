@@ -413,3 +413,187 @@ document.getElementById('gmPushBtn').addEventListener('click', () => {
   loadToday();
   loadTomorrow();
 });
+
+
+// ── Sunday Reset — weekly recurring to-dos ─────────────────────────────────
+// A fixed Sunday-only checklist. Entries are managed in a slide-in view and
+// auto-injected into Sunday's To Do list, rolling over normally if unfinished.
+// Persisted as two `settings` keys (rehydrated generically in loadFromSupabase):
+//   sunday_reset_v1     – [{ id, text, area }] templates
+//   sunday_reset_log_v1 – { "<Sunday YYYY-MM-DD>": [injected template ids] }
+
+function getSundayReset()      { return MEM['sunday_reset_v1'] || []; }
+function saveSundayReset(list) { MEM['sunday_reset_v1'] = list; _syncSetting('sunday_reset_v1', list); }
+
+function _srId() {
+  return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function _isSunday(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay() === 0;
+}
+
+// Inject not-yet-added Sunday Reset entries into the active day's goals, but only
+// when the active day is a Sunday. Idempotent per (Sunday date × entry id) via
+// the log map, so deleting an injected goal doesn't resurrect it on the next
+// refresh, while an entry added mid-Sunday still lands in today's list.
+function applySundayReset() {
+  const ds = getActiveDateString();
+  if (!_isSunday(ds)) return;
+  const items = getSundayReset();
+  if (!items.length) return;
+
+  const log   = MEM['sunday_reset_log_v1'] || {};
+  const done  = log[ds] || [];
+  const goals = storeGet('goals:' + ds) || [];
+  const texts = new Set(goals.map(g => g.text));
+
+  let added = false;
+  items.forEach(it => {
+    if (done.includes(it.id)) return;
+    if (!texts.has(it.text)) {
+      goals.push({ text: it.text, done: false, priority: 'Medium', area: it.area || null });
+      texts.add(it.text);
+      added = true;
+    }
+    done.push(it.id);
+  });
+
+  log[ds] = done;
+  Object.keys(log).sort().slice(0, -8).forEach(k => delete log[k]); // keep ~8 Sundays
+  MEM['sunday_reset_log_v1'] = log;
+  _syncSetting('sunday_reset_log_v1', log);
+
+  if (added) storeSet('goals:' + ds, goals); // persists + fires goals-changed
+}
+
+// ── Sunday Reset slide-in view ──
+function _syncSundayResetBtn() {
+  const btn = document.getElementById('sundayResetBtn');
+  if (!btn) return;
+  const n = getSundayReset().length;
+  btn.textContent = n ? `↻ Sunday Reset · ${n}` : '↻ Sunday Reset';
+}
+
+function _nextSundayLabel() {
+  const ds = getActiveDateString();
+  if (_isSunday(ds)) return 'Today';
+  const [y, m, d] = ds.split('-').map(Number);
+  const base = new Date(y, m - 1, d);
+  base.setDate(base.getDate() + ((7 - base.getDay()) % 7));
+  return formatDate(_localDateStr(base));
+}
+
+function _afterSundayResetChange() {
+  renderSundayResetPage();
+  _syncSundayResetBtn();
+  if (_isSunday(getActiveDateString())) { applySundayReset(); loadToday(); }
+}
+
+// Small inline text editor for a Sunday Reset row (the shared makeInlineEdit is
+// coupled to storeSet's key-based persistence, which these entries don't use).
+function _srInlineEdit(el, item) {
+  let original = '';
+  el.addEventListener('click', () => {
+    if (el.contentEditable === 'true') return;
+    original = item.text;
+    el.contentEditable = 'true';
+    el.focus();
+    const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
+  el.addEventListener('blur', commit);
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { el.textContent = item.text; el.contentEditable = 'false'; }
+  });
+  function commit() {
+    const val = el.textContent.trim();
+    el.contentEditable = 'false';
+    if (val && val !== item.text) {
+      item.text = val;
+      saveSundayReset(getSundayReset());
+      _afterSundayResetChange();
+    } else if (!val) {
+      el.textContent = item.text;
+    }
+  }
+}
+
+function renderSundayResetPage() {
+  const body = document.getElementById('sundayResetBody');
+  if (!body) return;
+  const items = getSundayReset();
+
+  body.innerHTML = `
+    <p class="sunday-reset-intro">
+      These tasks drop into your To&nbsp;Do list every Sunday and roll over if you
+      don't finish them. Next reset: <strong>${_nextSundayLabel()}</strong>.
+    </p>
+    <ul class="sunday-reset-list" id="sundayResetList"></ul>
+    <div id="sundayResetEmpty" class="empty-state"${items.length ? ' style="display:none;"' : ''}>No weekly tasks yet — add one below.</div>
+    <div class="goal-input-wrap gm-input-wrap">
+      <input type="text" class="goal-input" id="sundayResetInput" placeholder="Add a weekly task…">
+      <button class="btn-add" id="sundayResetAdd">+ Add</button>
+    </div>`;
+
+  const list = document.getElementById('sundayResetList');
+  items.forEach(it => {
+    const li = document.createElement('li');
+    li.className = 'goal-row sunday-reset-row';
+
+    const txt = document.createElement('span');
+    txt.className = 'goal-text';
+    txt.textContent = it.text;
+    _srInlineEdit(txt, it);
+    li.appendChild(txt);
+
+    li.appendChild(buildAreaPill(it.area || null, newArea => {
+      it.area = newArea;
+      saveSundayReset(getSundayReset());
+      _afterSundayResetChange();
+    }));
+
+    const del = document.createElement('button');
+    del.className = 'goal-delete';
+    del.textContent = '×';
+    del.title = 'Remove from Sunday Reset';
+    del.addEventListener('click', () => {
+      saveSundayReset(getSundayReset().filter(x => x.id !== it.id));
+      _afterSundayResetChange();
+    });
+    li.appendChild(del);
+
+    list.appendChild(li);
+  });
+
+  const inp = document.getElementById('sundayResetInput');
+  const add = () => {
+    const text = inp.value.trim();
+    if (!text) return;
+    saveSundayReset(getSundayReset().concat({ id: _srId(), text, area: null }));
+    _afterSundayResetChange();
+    document.getElementById('sundayResetInput').focus();
+  };
+  document.getElementById('sundayResetAdd').addEventListener('click', add);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+}
+
+function openSundayReset() {
+  renderSundayResetPage();
+  const page = document.getElementById('sundayResetPage');
+  page.scrollTop = 0;
+  page.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSundayReset() {
+  document.getElementById('sundayResetPage').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('sundayResetBtn').addEventListener('click', openSundayReset);
+document.getElementById('sundayResetBack').addEventListener('click', closeSundayReset);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('sundayResetPage').classList.contains('open')) closeSundayReset();
+});

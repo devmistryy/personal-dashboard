@@ -508,6 +508,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+// ── Re-check the "active day" when returning to an already-open tab ──
+// The app otherwise only rolls the date over on a full page load / sign-in.
+let _lastActiveDate = getActiveDateString();
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const now = getActiveDateString();
+  if (now === _lastActiveDate) return;
+  _lastActiveDate = now;
+  rollover(); checkStreak(); applySundayReset();
+  loadToday(); loadTomorrow(); renderStreak(); tick(true);
+});
+
 // Console helpers for the local test account:
 //   exitLocalMode()  – sign out of the local account (keeps saved data)
 //   resetLocalData() – wipe the local account's data and reseed samples
@@ -523,7 +535,8 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  rollover(); checkStreak(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet();
+  rollover(); checkStreak(); applySundayReset(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet();
+  _syncSundayResetBtn();
   tick(true); // refresh the goal ticker immediately with the loaded data
 }
 
@@ -598,6 +611,7 @@ document.getElementById('loginPassword').addEventListener('keydown', e => {
 //    The only bare top-level calls in the codebase live here. Keep last. ──
 rollover();
 checkStreak();
+applySundayReset();
 
 makeAddHandlers(
   document.getElementById('goalInput'),
