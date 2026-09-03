@@ -491,6 +491,25 @@ function _afterSundayResetChange() {
   if (_isSunday(getActiveDateString())) { applySundayReset(); loadToday(); }
 }
 
+// When an entry is deleted on a Sunday, also pull the goal it injected out of
+// today's To Do list (matched by text, the same way injection dedups) and drop
+// its id from today's injection log so state stays consistent.
+function _removeInjectedGoal(entry) {
+  const ds = getActiveDateString();
+  if (!_isSunday(ds)) return;
+
+  const goals = storeGet('goals:' + ds) || [];
+  const next  = goals.filter(g => g.text !== entry.text);
+  if (next.length !== goals.length) storeSet('goals:' + ds, next);
+
+  const log = MEM['sunday_reset_log_v1'] || {};
+  if (log[ds] && log[ds].includes(entry.id)) {
+    log[ds] = log[ds].filter(id => id !== entry.id);
+    MEM['sunday_reset_log_v1'] = log;
+    _syncSetting('sunday_reset_log_v1', log);
+  }
+}
+
 // Small inline text editor for a Sunday Reset row (the shared makeInlineEdit is
 // coupled to storeSet's key-based persistence, which these entries don't use).
 function _srInlineEdit(el, item) {
@@ -560,6 +579,7 @@ function renderSundayResetPage() {
     del.textContent = '×';
     del.title = 'Remove from Sunday Reset';
     del.addEventListener('click', () => {
+      _removeInjectedGoal(it);
       saveSundayReset(getSundayReset().filter(x => x.id !== it.id));
       _afterSundayResetChange();
     });
@@ -582,18 +602,21 @@ function renderSundayResetPage() {
 
 function openSundayReset() {
   renderSundayResetPage();
-  const page = document.getElementById('sundayResetPage');
-  page.scrollTop = 0;
-  page.classList.add('open');
+  const modal = document.getElementById('sundayResetModal');
+  modal.classList.add('open');
+  modal.querySelector('.sr-modal-card').scrollTop = 0;
   document.body.style.overflow = 'hidden';
 }
 function closeSundayReset() {
-  document.getElementById('sundayResetPage').classList.remove('open');
+  document.getElementById('sundayResetModal').classList.remove('open');
   document.body.style.overflow = '';
 }
 
 document.getElementById('sundayResetBtn').addEventListener('click', openSundayReset);
-document.getElementById('sundayResetBack').addEventListener('click', closeSundayReset);
+document.getElementById('sundayResetClose').addEventListener('click', closeSundayReset);
+document.getElementById('sundayResetModal').addEventListener('click', e => {
+  if (e.target.id === 'sundayResetModal') closeSundayReset(); // backdrop click only
+});
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('sundayResetPage').classList.contains('open')) closeSundayReset();
+  if (e.key === 'Escape' && document.getElementById('sundayResetModal').classList.contains('open')) closeSundayReset();
 });

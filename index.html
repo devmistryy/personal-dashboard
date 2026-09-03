@@ -10,7 +10,7 @@
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
 <link rel="stylesheet" href="css/main.css?v=2">
-<link rel="stylesheet" href="css/todo.css?v=3">
+<link rel="stylesheet" href="css/todo.css?v=4">
 <link rel="stylesheet" href="css/habits.css?v=12">
 <link rel="stylesheet" href="css/jobs.css?v=1">
 <link rel="stylesheet" href="css/areas.css?v=1">
@@ -415,10 +415,10 @@
   </div>
 </div>
 
-<div id="sundayResetPage" class="habit-detail-page">
-  <div class="habit-detail-wrap">
-    <button id="sundayResetBack" class="habit-detail-back">← Back</button>
-    <h2 class="habit-detail-name">Sunday Reset</h2>
+<div id="sundayResetModal" class="sr-modal">
+  <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Sunday Reset">
+    <button id="sundayResetClose" class="sr-modal-close" aria-label="Close">×</button>
+    <h2 class="sr-modal-title">Sunday Reset</h2>
     <div id="sundayResetBody"></div>
   </div>
 </div>
@@ -426,7 +426,7 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=5"></script>
+<script src="js/todo.js?v=7"></script>
 <script src="js/habits.js?v=15"></script>
 <script src="js/jobs.js?v=2"></script>
 <script src="js/areas.js?v=2"></script>

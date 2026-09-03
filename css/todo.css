@@ -476,6 +476,56 @@
     border-color: rgba(255,255,255,0.20);
   }
 
+  /* Sunday Reset — modal overlay stacked in front of the page */
+  .sr-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(0,0,0,0.6);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .sr-modal.open { display: flex; }
+
+  .sr-modal-card {
+    position: relative;
+    background: #1e1e22;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 26px 26px 22px;
+    width: 460px;
+    max-width: 92vw;
+    max-height: 82vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+
+  .sr-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 6px;
+    transition: color 0.15s;
+  }
+  .sr-modal-close:hover { color: var(--text-primary); }
+
+  .sr-modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px;
+  }
+
   .sunday-reset-intro {
     font-size: 13px;
     line-height: 1.55;
