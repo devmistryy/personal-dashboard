@@ -553,15 +553,14 @@ function renderHabitDetailPage(habit, allHabits) {
   const isExpired = isTimed && today > habit.endDate;
   const isArchived = !!habit.archived;
 
-  // Count total completions across all log keys
+  // Count total completions across the habit's tracked window. Check-ins live in
+  // MEM ('habits:log:<date>'), not localStorage — the old localStorage scan never
+  // matched, so this always read 0.
   let totalDone = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith('habits:log:')) {
-      const ds = k.replace('habits:log:', '');
-      if (ds >= startDate && ds <= today && getHabitLog(ds).includes(habit.id)) totalDone++;
-    }
-  }
+  storeListKeys('habits:log:').forEach(k => {
+    const ds = k.slice('habits:log:'.length);
+    if (ds >= startDate && ds <= today && getHabitLog(ds).includes(habit.id)) totalDone++;
+  });
   const daysTracked = Math.max(1, daysBetween(startDate, today) + 1);
   const rate = Math.round(totalDone / daysTracked * 100);
 
