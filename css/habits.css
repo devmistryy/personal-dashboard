@@ -374,17 +374,7 @@
     color: var(--text-tertiary);
   }
 
-  /* Start date card */
-  .habit-detail-start-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    padding: 14px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
+  /* Start date / End of Day row fields — wrapper is .habit-detail-row-field */
   .habit-detail-start-label {
     font-size: 13px;
     color: var(--text-secondary);
@@ -412,8 +402,54 @@
     cursor: pointer;
   }
 
+  /* Merged Started + End of Day row — ONE card, two content clusters pushed to
+     its ends. (Two separately-boxed flex:1 halves looked broken: "End of Day" +
+     a small checkbox is far shorter content than the date field, so splitting
+     it into its own 50%-width box with space-between stretched a tiny label and
+     checkbox to opposite edges of that box, leaving a huge dead gap.) */
+  .habit-detail-row-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .habit-detail-row-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .habit-detail-row-field-toggle .habit-detail-start-label { white-space: nowrap; }
+
+  /* Merged Archive + Delete row */
+  .habit-detail-danger-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .habit-detail-danger-row .btn-danger { flex: 1; padding: 10px 16px; }
+
+  /* Overview tab: stats/actions in a left column, calendar in a right column.
+     Scoped to the habit detail page only — .habit-detail-wrap is shared by
+     Area/Day detail and the Mobility session/exercise detail pages. */
+  #habitDetailPage .habit-detail-wrap { max-width: 960px; }
+  /* The shared .habit-detail-page bottom padding (60px) is generous for a
+     single scrolling column; the Overview tab doesn't need as much to clear. */
+  #habitDetailPage { padding-bottom: 36px; }
+  .habit-detail-cols {
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+
   /* History calendar */
-  .habit-history-section { margin-bottom: 24px; }
+  .habit-history-section { margin-bottom: 14px; }
 
   .habit-cal-month { margin-bottom: 16px; }
   .habit-cal-nav {
@@ -455,6 +491,7 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 5px;
+    max-width: 520px;
   }
   .habit-cal-day-label {
     font-family: var(--font-mono);
@@ -670,21 +707,7 @@
     white-space: nowrap;
   }
 
-  /* Danger zone */
-  .habit-detail-danger {
-    border: 1px solid rgba(255,107,107,0.18);
-    border-radius: 14px;
-    padding: 14px 20px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .habit-detail-danger-label {
-    font-size: 13px;
-    color: var(--text-tertiary);
-  }
+  /* Danger zone — row wrapper is .habit-detail-danger-row, defined above */
   .btn-danger {
     background: rgba(255,107,107,0.10);
     border: 1px solid rgba(255,107,107,0.25);
@@ -839,6 +862,13 @@
   .area-note-entry:hover .hd-note-del { opacity: 1; }
 
   /* Responsive */
+  @media (max-width: 680px) {
+    /* Narrower than the two-column layout needs — stack, and keep the
+       calendar moderate-sized (centered) instead of letting it sprawl
+       to the full column width. */
+    .habit-detail-cols { grid-template-columns: 1fr; }
+    .habit-cal-grid { max-width: 420px; margin: 0 auto; }
+  }
   @media (max-width: 480px) {
     .habit-week { display: none; }
     .habit-detail-stats-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -846,4 +876,5 @@
     .habit-detail-name { font-size: 22px; }
     .day-detail-head .day-detail-date { font-size: 18px; }
     .hd-tab { padding: 7px 14px; }
+    .habit-detail-row-split { flex-direction: column; align-items: stretch; }
   }

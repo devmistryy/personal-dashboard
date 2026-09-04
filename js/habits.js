@@ -638,25 +638,24 @@ function renderHabitDetailPage(habit, allHabits) {
         <span class="habit-cb-box"></span>
       </label>
     </div>
-    <div class="habit-detail-start-card">
-      <span class="habit-detail-start-label">Started</span>
-      <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
-        value="${startDate}" max="${today}">
-    </div>
-    <div class="habit-detail-start-card">
-      <span class="habit-detail-start-label">End of Day (excluded from daily %)</span>
-      <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-        <input type="checkbox" id="habitDetailEod" ${habit.endOfDay ? 'checked' : ''}>
-        <span class="habit-cb-box"></span>
-      </label>
-    </div>
-    <div class="habit-detail-danger">
-      <span class="habit-detail-danger-label">Archive this habit</span>
-      <button class="btn-danger" id="habitDetailArchive">Archive</button>
+    <div class="habit-detail-row-split">
+      <div class="habit-detail-row-field">
+        <span class="habit-detail-start-label">Started</span>
+        <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
+          value="${startDate}" max="${today}">
+      </div>
+      <div class="habit-detail-row-field habit-detail-row-field-toggle"
+        title="Excluded from the day's completion % until the day is over">
+        <span class="habit-detail-start-label">End of Day</span>
+        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+          <input type="checkbox" id="habitDetailEod" ${habit.endOfDay ? 'checked' : ''}>
+          <span class="habit-cb-box"></span>
+        </label>
+      </div>
     </div>
     ` : ''}
-    <div class="habit-detail-danger">
-      <span class="habit-detail-danger-label">Permanently delete this habit</span>
+    <div class="habit-detail-danger-row">
+      ${!isArchived ? `<button class="btn-danger" id="habitDetailArchive">Archive</button>` : ''}
       <button class="btn-danger" id="habitDetailDelete">Delete</button>
     </div>
   `;
