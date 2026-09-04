@@ -209,6 +209,12 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     tag.textContent = `Day ${dayNum} · ongoing`;
   }
   meta.appendChild(tag);
+  if (habit.endOfDay) {
+    const eodTag = document.createElement('span');
+    eodTag.className = 'habit-meta-tag eod';
+    eodTag.textContent = 'End of Day';
+    meta.appendChild(eodTag);
+  }
   nameCol.appendChild(meta);
 
   // Progress bar for timed habits
@@ -433,7 +439,7 @@ function renderHabitOverviewCalendar() {
     const isToday = ds === today;
     const isFuture = ds > today;
 
-    const scheduled = habits.filter(h => _habitScheduledOn(h, ds));
+    const scheduled = habits.filter(h => _habitScheduledOn(h, ds) && !(h.endOfDay && isToday));
     const doneIds = getHabitLog(ds);
     const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
     const pct = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
@@ -637,6 +643,13 @@ function renderHabitDetailPage(habit, allHabits) {
       <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
         value="${startDate}" max="${today}">
     </div>
+    <div class="habit-detail-start-card">
+      <span class="habit-detail-start-label">End of Day (excluded from daily %)</span>
+      <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+        <input type="checkbox" id="habitDetailEod" ${habit.endOfDay ? 'checked' : ''}>
+        <span class="habit-cb-box"></span>
+      </label>
+    </div>
     <div class="habit-detail-danger">
       <span class="habit-detail-danger-label">Archive this habit</span>
       <button class="btn-danger" id="habitDetailArchive">Archive</button>
@@ -669,6 +682,13 @@ function renderHabitDetailPage(habit, allHabits) {
     _startInput.addEventListener('blur', _saveStartDate);
     _startInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); _startInput.blur(); }
+    });
+
+    document.getElementById('habitDetailEod').addEventListener('change', (e) => {
+      habit.endOfDay = e.target.checked;
+      saveHabits(allHabits);
+      renderHabits();
+      renderHabitOverviewCalendar();
     });
 
     document.getElementById('habitDetailArchive').addEventListener('click', () => {
@@ -885,10 +905,11 @@ function renderDayDetail(ds) {
   const today     = habitDateStr(0);
   const habits    = getHabits();
   const scheduled = habits.filter(h => _habitScheduledOn(h, ds));
+  const counted   = scheduled.filter(h => !(h.endOfDay && ds === today));
   const doneIds   = getHabitLog(ds);
-  const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
-  const pct       = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
-  const isMissed  = ds < today && scheduled.length > 0 && doneCount === 0;
+  const doneCount = counted.filter(h => doneIds.includes(h.id)).length;
+  const pct       = counted.length ? Math.round(doneCount / counted.length * 100) : 0;
+  const isMissed  = ds < today && counted.length > 0 && doneCount === 0;
 
   const R = 15.5, C = 2 * Math.PI * R;
   const arc = doneCount > 0
@@ -902,8 +923,8 @@ function renderDayDetail(ds) {
   const prevDisabled = ds <= _dayDetailFloor();
   const nextDisabled = ds >= today;
 
-  const summary = scheduled.length
-    ? `${doneCount} of ${scheduled.length} habit${scheduled.length === 1 ? '' : 's'} completed`
+  const summary = counted.length
+    ? `${doneCount} of ${counted.length} habit${counted.length === 1 ? '' : 's'} completed`
     : 'No habits were active on this day.';
 
   const mode    = getHabitSort();
@@ -927,6 +948,7 @@ function renderDayDetail(ds) {
         <span class="habit-cb-box"></span>
       </label>
       <span class="day-detail-habit-name">${h.name}</span>
+      ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${areaTag}
     </div>`;
   }).join('');
@@ -1005,7 +1027,7 @@ function addHabit() {
   const name    = input.value.trim();
   if (!name) return;
   const today   = habitDateStr(0);
-  const entry   = { id: Date.now().toString(36), name, startDate: today, archived: false, createdAt: new Date().toISOString() };
+  const entry   = { id: Date.now().toString(36), name, startDate: today, archived: false, endOfDay: false, createdAt: new Date().toISOString() };
   if (endDate.value && endDate.value > today) entry.endDate = endDate.value;
   const habits = getHabits();
   habits.push(entry);

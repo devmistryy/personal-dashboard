@@ -125,6 +125,7 @@
   .habit-meta-tag.timed { color: #A78BFA; background: rgba(167,139,250,0.12); }
   .habit-meta-tag.ongoing { color: var(--text-tertiary); }
   .habit-meta-tag.expired { color: var(--warning); background: rgba(242,192,99,0.12); }
+  .habit-meta-tag.eod { color: #5EEAD4; background: rgba(94,234,212,0.12); }
 
   .habit-progress-wrap {
     height: 3px;

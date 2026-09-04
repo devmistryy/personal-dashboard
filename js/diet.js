@@ -1,9 +1,10 @@
 // Diet tab: meal log entry form, history, the Healthy Ingredients vs Unhealthy
 // Foods lists + feedback, and the category breakdown. Loaded before main.js.
 //
-// Storage rides on the existing `settings` key/value sync (_syncSetting), the
-// same path habit_sort_v1 / goal_streak_v1 use — no new tables, and it falls
-// back to localStorage in LOCAL_MODE for free.
+// Persistence: the diet_entries and diet_foods tables, via _syncDietEntries /
+// _syncDietFoods in js/main.js (upsert + delete-missing, like _syncHabits).
+// MEM still holds the flat blob shape (diet_entries_v1 / diet_healthy_v1 /
+// diet_unhealthy_v1); LOCAL_MODE falls back to localStorage for free.
 //
 // Healthy things are tracked as *ingredients* (whole foods — eggs, kiwi, chicken)
 // because that's what they are; unhealthy things are tracked as whole *foods*
@@ -22,13 +23,15 @@ const DIET_CATEGORY_STYLE = {
 const DIET_RANGES = [['7', 'Week'], ['30', 'Month'], ['all', 'All time']];
 
 // ── Store ──
+// MEM keeps the flat blob shape; persistence goes to the diet_entries / diet_foods
+// tables (see _syncDietEntries / _syncDietFoods in js/main.js).
 function getDietEntries()      { return MEM['diet_entries_v1'] || []; }
-function saveDietEntries(list) { MEM['diet_entries_v1'] = list; _syncSetting('diet_entries_v1', list); }
+function saveDietEntries(list) { MEM['diet_entries_v1'] = list; _syncDietEntries(list); }
 
 function getHealthyIngredients()      { return MEM['diet_healthy_v1'] || []; }
-function saveHealthyIngredients(list) { MEM['diet_healthy_v1'] = list; _syncSetting('diet_healthy_v1', list); }
+function saveHealthyIngredients(list) { MEM['diet_healthy_v1'] = list; _syncDietFoods('healthy', list); }
 function getUnhealthyFoods()          { return MEM['diet_unhealthy_v1'] || []; }
-function saveUnhealthyFoods(list)     { MEM['diet_unhealthy_v1'] = list; _syncSetting('diet_unhealthy_v1', list); }
+function saveUnhealthyFoods(list)     { MEM['diet_unhealthy_v1'] = list; _syncDietFoods('unhealthy', list); }
 
 // One-time move off the old model: priority foods + the healthy side of the old
 // combined list → Healthy Ingredients; the unhealthy side → Unhealthy Foods.

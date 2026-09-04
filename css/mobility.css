@@ -1,0 +1,273 @@
+  /* ── Mobility tab ── */
+
+  /* Field label — same look as .diet-field-label, own name to stay independent. */
+  .mob-field { display: flex; flex-direction: column; gap: 8px; }
+  .mob-field[hidden] { display: none; }   /* [hidden] alone loses to the rule above */
+  .mob-field-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-tertiary);
+  }
+
+  /* ── Today's routine ── */
+  .mob-today-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .mob-today-day { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+  .mob-today-sub {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+  }
+
+  .mob-routines { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mob-routine-title {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 10px;
+  }
+
+  /* Session entry-point card (opens the session detail page) */
+  .mob-session-card {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 12px 13px; border-radius: 12px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.07);
+    font-family: var(--font-body);
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .mob-session-card:hover {
+    background: rgba(74,158,255,0.10); border-color: rgba(74,158,255,0.4);
+  }
+  .mob-scard-items { display: flex; flex-direction: column; gap: 6px; }
+  .mob-scard-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 13px; color: var(--text-primary);
+  }
+  .mob-scard-row.is-logged { color: var(--text-tertiary); }
+  .mob-scard-row > span:first-child { min-width: 0; word-break: break-word; }
+  .mob-scard-tick { color: #6FDB97; margin-right: 5px; font-weight: 700; }
+  .mob-scard-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 11px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.06);
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary);
+  }
+  .mob-scard-go { color: #7FBBFF; font-weight: 700; }
+
+  /* Dose badge */
+  .mob-dose {
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    padding: 2px 8px; border-radius: 6px; white-space: nowrap; flex-shrink: 0;
+    background: rgba(255,255,255,0.07); color: var(--text-secondary);
+  }
+  .mob-dose-hold { background: rgba(74,158,255,0.16);  color: #7FBBFF; }
+  .mob-dose-reps { background: rgba(167,139,250,0.18); color: #BCA6FB; }
+
+  /* ── Week overview ── */
+  .mob-week-grid {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px;
+  }
+  .mob-day {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 9px 4px; border-radius: 10px; cursor: pointer;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    color: var(--text-secondary); font-family: var(--font-body);
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .mob-day:hover { background: rgba(255,255,255,0.08); }
+  .mob-day.is-today { border-color: rgba(74,158,255,0.5); }
+  .mob-day.is-open  { background: rgba(74,158,255,0.16); border-color: rgba(74,158,255,0.5); }
+  .mob-day.is-empty { opacity: 0.5; }
+  .mob-day-name {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-tertiary);
+  }
+  .mob-day-count {
+    font-family: var(--font-mono); font-size: 17px; font-weight: 800;
+    color: var(--text-primary); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .mob-day-split { font-family: var(--font-mono); font-size: 9px; color: var(--text-tertiary); }
+
+  .mob-week-detail {
+    margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .mob-wd-title {
+    font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px;
+  }
+  .mob-wd-legend {
+    font-size: 10px; font-weight: 500; color: var(--text-tertiary);
+    letter-spacing: 0.02em; margin-left: 8px;
+  }
+  .mob-wd-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mob-wd-label {
+    display: flex; align-items: baseline; gap: 8px; width: 100%;
+    background: none; border: none; padding: 0 0 8px; cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .mob-wd-label:hover .mob-wd-open { color: #7FBBFF; }
+  .mob-wd-open { letter-spacing: 0.04em; color: var(--text-tertiary); font-weight: 600; }
+  .mob-wd-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 12.5px; color: var(--text-secondary);
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .mob-wd-row:last-child { border-bottom: none; }
+  .mob-wd-row span:first-child { min-width: 0; word-break: break-word; }
+  .mob-wd-empty { font-size: 12px; color: var(--text-tertiary); font-style: italic; padding: 5px 0; }
+
+  /* ── Add-exercise call to action + modal form ── */
+  .mob-add-cta {
+    width: 100%; padding: 14px; border-radius: 12px;
+    border: 1px dashed rgba(255,255,255,0.16); background: rgba(255,255,255,0.03);
+    color: var(--text-secondary); font-family: var(--font-body);
+    font-size: 13.5px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer;
+    transition: background .18s, color .18s, border-color .18s;
+  }
+  .mob-add-cta:hover {
+    background: rgba(74,158,255,0.12); border-color: rgba(74,158,255,0.45);
+    color: var(--text-primary);
+  }
+
+  .mob-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+  .mob-form .goal-input { font-size: 13px; }
+
+  .mob-modal-actions {
+    display: flex; align-items: center; gap: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; margin-top: 2px;
+  }
+  .mob-modal-actions .btn-add { flex-shrink: 0; }
+
+  .mob-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mob-seg-btn {
+    font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 9px;
+    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+    color: var(--text-tertiary); cursor: pointer; font-family: var(--font-body);
+    min-width: 38px; transition: background .16s, color .16s, border-color .16s;
+  }
+  .mob-seg-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.07); }
+  .mob-seg-btn.active {
+    background: rgba(74,158,255,0.2); border-color: rgba(74,158,255,0.5); color: #fff;
+  }
+
+  .mob-num { width: 130px; flex: 0 0 auto; }
+
+  /* ── Exercise list ── */
+  .mob-list { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .mob-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px; margin-bottom: 6px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .mob-row:hover { background: rgba(255,255,255,0.055); }
+  .mob-row:hover .mob-row-btn { opacity: 1; }
+  .mob-row.is-editing { border-color: rgba(74,158,255,0.5); background: rgba(74,158,255,0.08); }
+  .mob-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .mob-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mob-row-name {
+    background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+    font-family: var(--font-body); font-size: 13.5px; color: var(--text-primary);
+    word-break: break-word; border-bottom: 1px solid transparent; transition: border-color 0.15s;
+  }
+  .mob-row-name:hover { border-bottom-color: rgba(255,255,255,0.35); }
+  .mob-row-from { color: var(--text-tertiary); }
+
+  .mob-tag {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+  }
+  .mob-tag-morning { background: rgba(242,192,99,0.18); color: #F2C063; }
+  .mob-tag-night   { background: rgba(120,130,180,0.22); color: #A9B2D6; }
+
+  .mob-row-meta {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary);
+  }
+  .mob-row-days { display: flex; gap: 3px; }
+  .mob-di {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 4px; font-size: 9px; font-weight: 700;
+    background: rgba(255,255,255,0.05); color: var(--text-tertiary);
+  }
+  .mob-di.on { background: rgba(74,158,255,0.28); color: #fff; }
+
+  .mob-row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .mob-row-btn {
+    background: none; border: none; cursor: pointer; color: var(--text-tertiary);
+    font-size: 14px; line-height: 1; padding: 3px 5px; border-radius: 6px;
+    opacity: 0; transition: opacity 0.2s, color 0.2s;
+  }
+  .mob-row-btn:hover { color: var(--text-primary); }
+  .mob-row-del:hover { color: var(--danger); }
+
+  /* ── Session detail page ── */
+  .mob-session-sub {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .mob-session-count {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); white-space: nowrap;
+  }
+  .mob-srow-list { display: flex; flex-direction: column; gap: 8px; }
+  .mob-srow {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 13px 14px; border-radius: 12px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: background 0.18s, border-color 0.18s;
+  }
+  .mob-srow.is-logged { border-color: rgba(82,201,122,0.35); background: rgba(82,201,122,0.07); }
+  .mob-srow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .mob-srow-name {
+    align-self: flex-start;
+    background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+    font-family: var(--font-body); font-size: 14px; color: var(--text-primary);
+    border-bottom: 1px solid transparent; transition: border-color 0.15s;
+  }
+  .mob-srow-name:hover { border-bottom-color: rgba(255,255,255,0.35); }
+  .mob-srow-inputs { display: flex; gap: 10px; flex-wrap: wrap; }
+  .mob-srow-f {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .mob-srow-f input {
+    width: 62px; padding: 7px 8px; border-radius: 8px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .mob-srow-f input:focus { outline: none; border-color: rgba(74,158,255,0.6); }
+
+  /* ── Exercise detail page ── */
+  .mob-exd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .mob-exd-head .mob-row-btn { opacity: 1; font-size: 12px; font-weight: 600; padding: 6px 12px;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: var(--text-secondary); flex-shrink: 0; }
+  .mob-exd-head .mob-row-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .mob-exd-meta {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+  }
+  .mob-stat-dose { font-size: 20px; }
+  .mob-trend { margin-bottom: 24px; }
+  .mob-trend .diet-bar-row { margin-bottom: 10px; }
+  .mob-logrow-dose { font-family: var(--font-mono); color: var(--text-secondary); }
+  .mob-logrow { cursor: pointer; }
+  .mob-logrow:hover { background: rgba(255,255,255,0.04); border-radius: 10px; }
+  .mob-exd-danger { margin-top: 36px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.06); }
+
+  /* Responsive */
+  @media (max-width: 620px) {
+    .mob-routines { grid-template-columns: 1fr; gap: 20px; }
+    .mob-wd-cols { grid-template-columns: 1fr; gap: 16px; }
+  }
+  @media (max-width: 480px) {
+    .mob-week-grid { gap: 3px; }
+    .mob-day { padding: 8px 2px; }
+    .mob-day-count { font-size: 15px; }
+    .mob-num { width: 100%; }
+    .habit-detail-stats-grid { gap: 6px; }
+    .mob-stat-dose { font-size: 15px; }
+  }

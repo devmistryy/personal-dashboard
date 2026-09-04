@@ -45,6 +45,8 @@ function _loadLocal() {
 function _seedLocalData() {
   const d = new Date();
   const today = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const dayAgo = n => { const x = new Date(d); x.setDate(x.getDate() - n);
+    return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
   const h1 = 'h_' + Math.random().toString(36).slice(2, 10);
   const h2 = 'h_' + Math.random().toString(36).slice(2, 10);
   return {
@@ -72,6 +74,29 @@ function _seedLocalData() {
       { id: 'd_seed1', date: today, time: '13:00', desc: 'Dal, rice and salad', calories: 620,
         protein: 24, carbs: 82, fats: 14,
         category: 'Homecooked Meal', healthyIngredients: ['Lentils', 'Spinach'], unhealthyFoods: [] },
+    ],
+    'mobility_exercises_v1': [
+      { id: 's_seed1', createdAt: Date.now() - 32 * 86400000, name: 'Deep squat hold',
+        session: 'morning', measure: 'hold', sets: 1, holdSeconds: 40, reps: null, frequency: 7 },
+      { id: 's_seed2', createdAt: Date.now() - 30000, name: 'Couch stretch',
+        session: 'night', measure: 'hold', sets: 2, holdSeconds: 45, reps: null, frequency: 4 },
+      { id: 's_seed3', createdAt: Date.now() - 28 * 86400000, name: 'Side plank',
+        session: 'morning', measure: 'hold', sets: 2, holdSeconds: 20, reps: null, frequency: 3 },
+      { id: 's_seed4', createdAt: Date.now() - 10000, name: 'Quadruped thoracic rotation',
+        session: 'night', measure: 'reps', sets: 1, holdSeconds: null, reps: 10, frequency: 2 },
+    ],
+    'mobility_progress:s_seed1': [
+      { id: 'mp_s1a', date: dayAgo(28), sets: 1, measure: 'hold', holdSeconds: 40, reps: null },
+      { id: 'mp_s1b', date: dayAgo(21), sets: 1, measure: 'hold', holdSeconds: 45, reps: null },
+      { id: 'mp_s1c', date: dayAgo(14), sets: 1, measure: 'hold', holdSeconds: 50, reps: null },
+      { id: 'mp_s1d', date: dayAgo(7),  sets: 1, measure: 'hold', holdSeconds: 55, reps: null },
+      { id: 'mp_s1e', date: dayAgo(1),  sets: 1, measure: 'hold', holdSeconds: 60, reps: null },
+    ],
+    'mobility_progress:s_seed3': [
+      { id: 'mp_s3a', date: dayAgo(24), sets: 2, measure: 'hold', holdSeconds: 20, reps: null },
+      { id: 'mp_s3b', date: dayAgo(17), sets: 3, measure: 'hold', holdSeconds: 20, reps: null },
+      { id: 'mp_s3c', date: dayAgo(10), sets: 3, measure: 'hold', holdSeconds: 25, reps: null },
+      { id: 'mp_s3d', date: dayAgo(3),  sets: 3, measure: 'hold', holdSeconds: 30, reps: null },
     ],
   };
 }
@@ -376,7 +401,7 @@ async function _syncHabits(habits) {
       id: h.id, user_id: uid, name: h.name,
       start_date: h.startDate || null, end_date: h.endDate || null,
       archived: h.archived || false, archived_at: h.archivedAt || null,
-      sort_order: i, area: h.area || null,
+      sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
     })), { onConflict: 'id' });
     if (error) console.error('[sync] habits upsert failed:', error);
   }
@@ -437,6 +462,107 @@ async function _syncHabitNotes(habitId, notes) {
   }
 }
 
+// ── Mobility (dedicated tables; MEM keeps the old blob shape) ──
+async function _syncMobExercises(list) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (list.length) {
+    const { error } = await sb.from('mobility_exercises').upsert(list.map(ex => ({
+      id: ex.id, user_id: uid, name: ex.name,
+      session: ex.session || 'morning', measure: ex.measure || 'hold',
+      sets: ex.sets || 1, hold_seconds: ex.holdSeconds ?? null, reps: ex.reps ?? null,
+      frequency: ex.frequency || 3,
+      created_at: new Date(ex.createdAt || Date.now()).toISOString(),
+    })), { onConflict: 'id' });
+    if (error) console.error('[sync] mobility_exercises upsert failed:', error);
+  }
+  const { data: existing = [], error: selErr } =
+    await sb.from('mobility_exercises').select('id').eq('user_id', uid);
+  if (selErr) { console.error('[sync] mobility_exercises select failed:', selErr); return; }
+  const keep = new Set(list.map(ex => ex.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    // FK on delete cascade also clears mobility_logs for these exercises.
+    const { error: delErr } = await sb.from('mobility_exercises').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) console.error('[sync] mobility_exercises delete failed:', delErr);
+  }
+}
+
+async function _syncMobLog(exerciseId, entries) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  const rows = entries.map(e => ({
+    user_id: uid, exercise_id: exerciseId, date: e.date,
+    sets: e.sets || 1, measure: e.measure || 'hold',
+    hold_seconds: e.holdSeconds ?? null, reps: e.reps ?? null,
+  }));
+  if (rows.length) {
+    let { error } = await sb.from('mobility_logs').upsert(rows, { onConflict: 'user_id,exercise_id,date' });
+    if (error && error.code === '23503') {   // FK: parent exercise not synced yet
+      await _syncMobExercises(getMobExercises());
+      ({ error } = await sb.from('mobility_logs').upsert(rows, { onConflict: 'user_id,exercise_id,date' }));
+    }
+    if (error) console.error('[sync] mobility_logs upsert failed:', error);
+  }
+  const keepDates = new Set(entries.map(e => e.date));
+  const { data: existing = [], error: selErr } =
+    await sb.from('mobility_logs').select('date').eq('user_id', uid).eq('exercise_id', exerciseId);
+  if (selErr) { console.error('[sync] mobility_logs select failed:', selErr); return; }
+  const staleDates = (existing || []).map(r => r.date).filter(d => !keepDates.has(d));
+  if (staleDates.length) {
+    const { error: delErr } = await sb.from('mobility_logs')
+      .delete().eq('user_id', uid).eq('exercise_id', exerciseId).in('date', staleDates);
+    if (delErr) console.error('[sync] mobility_logs delete failed:', delErr);
+  }
+}
+
+// ── Diet (dedicated tables; MEM keeps the old blob shape) ──
+async function _syncDietEntries(list) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (list.length) {
+    const { error } = await sb.from('diet_entries').upsert(list.map(e => ({
+      id: e.id, user_id: uid, date: e.date, time: e.time || null,
+      description: e.desc || null,
+      calories: e.calories ?? null, protein: e.protein ?? null,
+      carbs: e.carbs ?? null, fats: e.fats ?? null, category: e.category || null,
+      healthy_ingredients: e.healthyIngredients || [],
+      unhealthy_foods: e.unhealthyFoods || [],
+    })), { onConflict: 'id' });
+    if (error) console.error('[sync] diet_entries upsert failed:', error);
+  }
+  const { data: existing = [], error: selErr } =
+    await sb.from('diet_entries').select('id').eq('user_id', uid);
+  if (selErr) { console.error('[sync] diet_entries select failed:', selErr); return; }
+  const keep = new Set(list.map(e => e.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('diet_entries').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) console.error('[sync] diet_entries delete failed:', delErr);
+  }
+}
+
+async function _syncDietFoods(kind, names) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (names.length) {
+    const { error } = await sb.from('diet_foods').upsert(
+      names.map(n => ({ user_id: uid, name: n, kind })),
+      { onConflict: 'user_id,name,kind', ignoreDuplicates: true });
+    if (error) console.error('[sync] diet_foods upsert failed:', error);
+  }
+  const { data: existing = [], error: selErr } =
+    await sb.from('diet_foods').select('name').eq('user_id', uid).eq('kind', kind);
+  if (selErr) { console.error('[sync] diet_foods select failed:', selErr); return; }
+  const keep = new Set(names);
+  const staleNames = (existing || []).map(r => r.name).filter(n => !keep.has(n));
+  if (staleNames.length) {
+    const { error: delErr } = await sb.from('diet_foods')
+      .delete().eq('user_id', uid).eq('kind', kind).in('name', staleNames);
+    if (delErr) console.error('[sync] diet_foods delete failed:', delErr);
+  }
+}
+
 // ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
   if (LOCAL_MODE) return _loadLocal();
@@ -454,6 +580,10 @@ async function loadFromSupabase() {
     sb.from('settings').select('key,value').eq('user_id', uid),
     sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
     sb.from('habit_notes').select('*').eq('user_id', uid).order('created_at'),
+    sb.from('mobility_exercises').select('*').eq('user_id', uid),
+    sb.from('mobility_logs').select('*').eq('user_id', uid).order('date'),
+    sb.from('diet_entries').select('*').eq('user_id', uid).order('date'),
+    sb.from('diet_foods').select('*').eq('user_id', uid),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -463,11 +593,15 @@ async function loadFromSupabase() {
   const goals   = results[2].data || [];
   const jobs    = results[4].data || [];
   const hNotes  = results[5].data || [];
+  const mobEx   = results[6].data || [];
+  const mobLogs = results[7].data || [];
+  const dietEnt = results[8].data || [];
+  const dietFds = results[9].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
-    area: h.area || null, createdAt: h.created_at,
+    area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
   }));
 
   logs.forEach(l => {
@@ -495,6 +629,29 @@ async function loadFromSupabase() {
     const k = 'habit_notes:' + n.habit_id;
     (MEM[k] = MEM[k] || []).push({ id: n.id, text: n.text, createdAt: Date.parse(n.created_at) });
   });
+
+  MEM['mobility_exercises_v1'] = mobEx.map(r => ({
+    id: r.id, name: r.name, session: r.session, measure: r.measure,
+    sets: r.sets, holdSeconds: r.hold_seconds, reps: r.reps,
+    frequency: r.frequency, createdAt: Date.parse(r.created_at),
+  }));
+  mobLogs.forEach(r => {
+    const k = 'mobility_progress:' + r.exercise_id;
+    (MEM[k] = MEM[k] || []).push({
+      id: r.id, date: r.date, sets: r.sets, measure: r.measure,
+      holdSeconds: r.hold_seconds, reps: r.reps,
+    });
+  });
+
+  MEM['diet_entries_v1'] = dietEnt.map(r => ({
+    id: r.id, date: r.date, time: r.time || '', desc: r.description || '',
+    calories: r.calories, protein: r.protein, carbs: r.carbs, fats: r.fats,
+    category: r.category,
+    healthyIngredients: r.healthy_ingredients || [],
+    unhealthyFoods: r.unhealthy_foods || [],
+  }));
+  MEM['diet_healthy_v1']   = dietFds.filter(r => r.kind === 'healthy').map(r => r.name);
+  MEM['diet_unhealthy_v1'] = dietFds.filter(r => r.kind === 'unhealthy').map(r => r.name);
 }
 
 
@@ -535,7 +692,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  rollover(); checkStreak(); applySundayReset(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet();
+  rollover(); checkStreak(); applySundayReset(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the goal ticker immediately with the loaded data
 }
@@ -641,4 +798,5 @@ setInterval(updateDayBar, 60 * 1000);
 startTicker();
 renderAreas();
 renderDiet();
+renderMobility();
 initApp();
