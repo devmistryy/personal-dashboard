@@ -297,6 +297,27 @@
     padding: 2px 4px;
   }
 
+  /* Goal name + its source tag share the row's flexible space so the tag sits
+     right after the name, not out by the area pill. */
+  .goal-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .goal-main > .goal-text { flex: 0 1 auto; }
+
+  /* "sunday reset" source tag, sits just right of the goal name */
+  .goal-source-tag {
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.3);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   .goal-delete {
     background: none;
     border: none;

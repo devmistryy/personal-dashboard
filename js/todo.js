@@ -292,12 +292,24 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
     });
   });
 
-  // Text
+  // Text + its optional "sunday reset" tag share one flex wrapper, so the tag
+  // sits right after the goal name instead of out by the area pill.
+  const main = document.createElement('div');
+  main.className = 'goal-main';
+
   const txt = document.createElement('span');
   txt.className = 'goal-text';
   txt.textContent = g.text;
   makeInlineEdit(txt, g, key, reload);
-  li.appendChild(txt);
+  main.appendChild(txt);
+
+  if (isSundayResetGoal(g)) {
+    const tag = document.createElement('span');
+    tag.className = 'goal-source-tag';
+    tag.textContent = 'sunday reset';
+    main.appendChild(tag);
+  }
+  li.appendChild(main);
 
   // Area pill + dropdown
   li.appendChild(buildAreaPill(g.area, newArea => {
@@ -602,6 +614,12 @@ document.getElementById('plannerDateInput').addEventListener('change', e => {
 
 function getSundayReset()      { return MEM['sunday_reset_v1'] || []; }
 function saveSundayReset(list) { MEM['sunday_reset_v1'] = list; _syncSetting('sunday_reset_v1', list); }
+
+// True when a goal came from a Sunday Reset template — matched by text, the same
+// identity applySundayReset() and _removeInjectedGoal() use. Drives the row tag.
+function isSundayResetGoal(g) {
+  return getSundayReset().some(it => it.text === g.text);
+}
 
 function _srId() {
   return (crypto && crypto.randomUUID) ? crypto.randomUUID()

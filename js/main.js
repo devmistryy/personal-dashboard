@@ -427,31 +427,57 @@ async function _syncHabits(habits) {
   }
 }
 
+// Both of the day-scoped syncs below (habit_logs, goals) write the current set
+// FIRST and only then delete whatever else is left for that date. If the write
+// fails — schema drift, a constraint, a dropped connection — we bail before
+// deleting anything, so a failed sync can never leave the day emptier than it
+// started. Worst case is a few duplicate rows until the next save, which the
+// same "delete everything I didn't just write" step cleans up.
+
 async function _syncHabitLog(dateStr, ids) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
-  const { error: delErr } = await sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
-  if (delErr) { console.error('[sync] habit_logs delete failed:', delErr); return; }
+
   if (ids.length) {
-    const { error } = await sb.from('habit_logs').insert(ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })));
-    if (error) console.error('[sync] habit_logs insert failed:', error);
+    const { error: insErr } = await sb.from('habit_logs').upsert(
+      ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })),
+      { onConflict: 'user_id,habit_id,date', ignoreDuplicates: true });
+    if (insErr) { console.error('[sync] habit_logs upsert failed (kept existing rows):', insErr); return; }
   }
+
+  let del = sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
+  if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
+  const { error: delErr } = await del;
+  if (delErr) console.error('[sync] habit_logs stale-delete failed:', delErr);
 }
 
 async function _syncGoals(dateStr, goals) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
-  const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
-  if (delErr) { console.error('[sync] goals delete failed:', delErr); return; }
-  if (goals.length) {
-    const { error } = await sb.from('goals').insert(goals.map(g => ({
-      user_id: uid, date: dateStr, text: g.text,
-      done: g.done || false, done_at: g.doneAt || null,
-      area: g.area || null, priority: g.priority || 'Medium',
-      gid: g.id || null, created_at: g.createdAt || null,
-    })));
-    if (error) console.error('[sync] goals insert failed:', error);
+
+  if (!goals.length) {
+    const { error } = await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
+    if (error) console.error('[sync] goals clear failed:', error);
+    return;
   }
+
+  // Insert the current set first, asking for the new rows' ids back.
+  const { data: inserted, error: insErr } = await sb.from('goals').insert(goals.map(g => ({
+    user_id: uid, date: dateStr, text: g.text,
+    done: g.done || false, done_at: g.doneAt || null,
+    area: g.area || null, priority: g.priority || 'Medium',
+    gid: g.id || null, created_at: g.createdAt || null,
+  }))).select('id');
+  if (insErr) { console.error('[sync] goals insert failed (kept existing rows):', insErr); return; }
+
+  const keepIds = (inserted || []).map(r => r.id);
+  if (!keepIds.length) { console.error('[sync] goals insert returned no ids — skipping stale-delete'); return; }
+
+  // Drop the pre-insert copies (and any leftover duplicates) for this date.
+  const { error: delErr } = await sb.from('goals').delete()
+    .eq('user_id', uid).eq('date', dateStr)
+    .not('id', 'in', `(${keepIds.join(',')})`);
+  if (delErr) console.error('[sync] goals stale-delete failed (duplicates clear on next save):', delErr);
 }
 
 async function _syncSetting(key, value) {
@@ -626,6 +652,9 @@ async function loadFromSupabase() {
   goals.forEach(g => {
     const k = 'goals:' + g.date;
     if (!MEM[k]) MEM[k] = [];
+    // Collapse duplicate rows a failed stale-delete may have left (see
+    // _syncGoals). Query is ordered by id, so the earliest row wins.
+    if (g.gid && MEM[k].some(x => x.id === g.gid)) return;
     const goal = { id: g.gid || _goalId(), text: g.text, done: g.done,
       area: g.area || null, priority: g.priority || 'Medium',
       createdAt: g.created_at || null };

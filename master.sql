@@ -6,8 +6,10 @@
 --    1. Schema — every table + RLS policy the app uses.
 --    2. One-time backfill — copies any Diet/Mobility data still sitting in
 --       the old `settings` key/value blobs into their new dedicated tables.
---       Also idempotent (`on conflict do nothing`) — running it twice, or
---       against an account with nothing to migrate, is a no-op either way.
+--       Idempotent and re-run-safe: each block is a no-op once the target
+--       table holds any row for that user (guarded), and `on conflict do
+--       nothing` covers the first run, so it can never overwrite live data
+--       or bring back a record deleted after the initial migration.
 --
 --  Storage rule for future tables:
 --    • Collections of records (habits, goals, meals, exercises, sessions, …)
@@ -236,6 +238,12 @@ end $$;
 -- expands the jsonb array — `jsonb_array_elements` errors on non-array values,
 -- so it must never see rows like `habit_sort_v1` (a string) or `goal_streak_v1`
 -- (an object). No-op (touches 0 rows) once the source settings rows are gone.
+--
+-- Every block also carries a `not exists (… destination table …)` guard: once a
+-- user has ANY row in the target table the whole block is skipped, so a re-run
+-- can never resurrect a Diet/Mobility record deleted since the first migration.
+-- (The `settings` blobs stopped updating when those tabs moved to their own
+-- tables, so without this guard they'd be a stale source of deleted rows.)
 
 -- mobility_exercises
 insert into mobility_exercises
@@ -257,6 +265,7 @@ from (
 ) s
 cross join lateral jsonb_array_elements(s.value) e
 where coalesce(e->>'id', '') <> '' and coalesce(e->>'name', '') <> ''
+  and not exists (select 1 from mobility_exercises m where m.user_id = s.user_id)
 on conflict (id) do nothing;
 
 -- mobility_logs (depends on mobility_exercises, above, in this same transaction)
@@ -277,6 +286,7 @@ from (
 cross join lateral jsonb_array_elements(s.value) e
 where e ? 'date'
   and split_part(s.key, ':', 2) in (select id from mobility_exercises)
+  and not exists (select 1 from mobility_logs ml where ml.user_id = s.user_id)
 on conflict (user_id, exercise_id, date) do nothing;
 
 -- diet_entries
@@ -302,6 +312,7 @@ from (
 ) s
 cross join lateral jsonb_array_elements(s.value) e
 where coalesce(e->>'id', '') <> '' and e ? 'date'
+  and not exists (select 1 from diet_entries d where d.user_id = s.user_id)
 on conflict (id) do nothing;
 
 -- diet_foods
@@ -313,6 +324,7 @@ from (
 ) s
 cross join lateral jsonb_array_elements_text(s.value) f
 where coalesce(f, '') <> ''
+  and not exists (select 1 from diet_foods df where df.user_id = s.user_id and df.kind = 'healthy')
 on conflict (user_id, name, kind) do nothing;
 
 insert into diet_foods (user_id, name, kind)
@@ -323,6 +335,7 @@ from (
 ) s
 cross join lateral jsonb_array_elements_text(s.value) f
 where coalesce(f, '') <> ''
+  and not exists (select 1 from diet_foods df where df.user_id = s.user_id and df.kind = 'unhealthy')
 on conflict (user_id, name, kind) do nothing;
 
 commit;
