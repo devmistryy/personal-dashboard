@@ -40,7 +40,19 @@ function _loadLocal() {
   if (!data || Object.keys(data).length === 0) data = _seedLocalData();
   Object.keys(MEM).forEach(k => delete MEM[k]);
   Object.assign(MEM, data);
+  _normalizeGoals();
   _saveLocal();
+}
+
+// Guarantee every stored goal has a stable id + ISO createdAt. New goals get
+// these at creation; this backfills anything older (local blobs, pre-id rows).
+function _normalizeGoals() {
+  Object.keys(MEM).filter(k => k.startsWith('goals:')).forEach(k => {
+    (MEM[k] || []).forEach(g => {
+      if (!g.id) g.id = _goalId();
+      if (!g.createdAt) g.createdAt = new Date().toISOString();
+    });
+  });
 }
 function _seedLocalData() {
   const d = new Date();
@@ -61,8 +73,8 @@ function _seedLocalData() {
     ],
     ['habits:log:' + today]: [h1],
     ['goals:' + today]: [
-      { text: 'Try out the local test account', done: true,  doneAt: new Date().toISOString(), queued: false },
-      { text: 'Add my own goal',                done: false, doneAt: null, queued: false },
+      { id: 'g_seed1', text: 'Try out the local test account', done: true,  doneAt: new Date().toISOString(), priority: 'Medium', area: null, createdAt: new Date(Date.now() - 3600000).toISOString() },
+      { id: 'g_seed2', text: 'Add my own goal',                done: false, priority: 'Medium', area: null, createdAt: new Date().toISOString() },
     ],
     'goal_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
@@ -116,8 +128,8 @@ function storeSet(key, value) {
   if (key.startsWith('goals:')) {
     window.dispatchEvent(new CustomEvent('goals-changed'));
     _syncGoals(key.slice(6), value);
-  } else if (key === 'goal_streak_v1') {
-    _syncSetting('goal_streak_v1', value);
+  } else if (key === 'goal_streak_v1' || key === 'goal_rollover_v1') {
+    _syncSetting(key, value);
   }
 }
 function storeDelete(key) {
@@ -434,8 +446,9 @@ async function _syncGoals(dateStr, goals) {
   if (goals.length) {
     const { error } = await sb.from('goals').insert(goals.map(g => ({
       user_id: uid, date: dateStr, text: g.text,
-      done: g.done || false, done_at: g.doneAt || null, queued: g.queued || false,
+      done: g.done || false, done_at: g.doneAt || null,
       area: g.area || null, priority: g.priority || 'Medium',
+      gid: g.id || null, created_at: g.createdAt || null,
     })));
     if (error) console.error('[sync] goals insert failed:', error);
   }
@@ -613,8 +626,11 @@ async function loadFromSupabase() {
   goals.forEach(g => {
     const k = 'goals:' + g.date;
     if (!MEM[k]) MEM[k] = [];
-    MEM[k].push({ text: g.text, done: g.done, doneAt: g.done_at, queued: g.queued,
-      area: g.area || null, priority: g.priority || 'Medium' });
+    const goal = { id: g.gid || _goalId(), text: g.text, done: g.done,
+      area: g.area || null, priority: g.priority || 'Medium',
+      createdAt: g.created_at || null };
+    if (g.done_at) goal.doneAt = g.done_at;
+    MEM[k].push(goal);
   });
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
@@ -652,6 +668,8 @@ async function loadFromSupabase() {
   }));
   MEM['diet_healthy_v1']   = dietFds.filter(r => r.kind === 'healthy').map(r => r.name);
   MEM['diet_unhealthy_v1'] = dietFds.filter(r => r.kind === 'unhealthy').map(r => r.name);
+
+  _normalizeGoals();
 }
 
 
@@ -673,8 +691,8 @@ document.addEventListener('visibilitychange', () => {
   const now = getActiveDateString();
   if (now === _lastActiveDate) return;
   _lastActiveDate = now;
-  rollover(); checkStreak(); applySundayReset();
-  loadToday(); loadTomorrow(); renderStreak(); tick(true);
+  checkStreak(); rollover(); applySundayReset();
+  loadToday(); loadUpcoming(); renderStreak(); tick(true);
 });
 
 // Console helpers for the local test account:
@@ -692,7 +710,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  rollover(); checkStreak(); applySundayReset(); renderHabits(); loadToday(); loadTomorrow(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the goal ticker immediately with the loaded data
 }
@@ -766,8 +784,8 @@ document.getElementById('loginPassword').addEventListener('keydown', e => {
 
 // ── Bootstrap — runs after every file above has defined its functions.
 //    The only bare top-level calls in the codebase live here. Keep last. ──
-rollover();
 checkStreak();
+rollover();
 applySundayReset();
 
 makeAddHandlers(
@@ -783,13 +801,13 @@ makeAddHandlers(
   document.getElementById('tomorrowInput'),
   document.getElementById('tomorrowAddBtn'),
   document.getElementById('tomorrowPolishBtn'),
-  tomorrowKey,
+  () => 'goals:' + plannerTargetDate(),
   document.getElementById('tomorrowStatus'),
-  loadTomorrow
+  loadUpcoming
 );
 
 loadToday();
-loadTomorrow();
+loadUpcoming();
 renderStreak();
 
 updateDayBar();

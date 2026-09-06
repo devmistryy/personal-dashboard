@@ -66,24 +66,42 @@ alter table habit_notes enable row level security;
 
 -- ─────────────────────────── goals ────────────────────────────
 create table if not exists goals (
-  id       bigserial primary key,
-  user_id  uuid references auth.users not null,
-  date     date not null,
-  text     text not null,
-  done     boolean default false,
-  done_at  bigint,
-  queued   boolean default false,
-  area     text,
-  priority text default 'Medium'
+  id         bigserial primary key,
+  user_id    uuid references auth.users not null,
+  date       date not null,
+  text       text not null,
+  done       boolean default false,
+  done_at    timestamptz,
+  area       text,
+  priority   text default 'Medium',
+  gid        text,          -- stable client-generated id (g_…), used for dedup + history
+  created_at timestamptz
 );
-alter table goals add column if not exists area     text;
-alter table goals add column if not exists priority text default 'Medium';
+alter table goals add column if not exists area       text;
+alter table goals add column if not exists priority   text default 'Medium';
+alter table goals add column if not exists gid        text;
+alter table goals add column if not exists created_at timestamptz;
+-- Queue feature removed.
+alter table goals drop column if exists queued;
+-- done_at migrated bigint(epoch ms) → timestamptz. Guarded so re-runs are no-ops.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'goals' and column_name = 'done_at' and data_type = 'bigint'
+  ) then
+    alter table goals
+      alter column done_at type timestamptz
+      using case when done_at is null then null
+                 else to_timestamp(done_at / 1000.0) end;
+  end if;
+end $$;
 alter table goals enable row level security;
 
 -- ────────────────────────── settings ──────────────────────────
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
--- Backs: habit_sort_v1, goal_streak_v1, sunday_reset_v1, sunday_reset_log_v1,
---        areas:list, area_notes:<name>
+-- Backs: habit_sort_v1, goal_sort_v1, goal_streak_v1, goal_rollover_v1,
+--        sunday_reset_v1, sunday_reset_log_v1, areas:list, area_notes:<name>
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
   user_id uuid references auth.users not null,

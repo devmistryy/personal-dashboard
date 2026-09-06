@@ -4,8 +4,7 @@
 // ── Areas ──
 function getAllGoalAreas() {
   const all = [];
-  const keys = [todayKey(), tomorrowKey()];
-  keys.forEach(k => {
+  goalScopeKeys().forEach(k => {
     (storeGet(k) || []).forEach(g => { if (g.area) all.push(g.area); });
   });
   return all;
@@ -50,7 +49,7 @@ function renderAreaDetail() {
     delete MEM['area_notes:' + name];
     _syncSetting('area_notes:' + name, []);   // clear the old row server-side
     // update goals
-    [todayKey(), tomorrowKey()].forEach(k => {
+    goalScopeKeys().forEach(k => {
       const goals = storeGet(k) || [];
       let changed = false;
       goals.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
@@ -106,7 +105,10 @@ function renderAreaGoals() {
   titleEl.textContent = 'Goals';
   wrap.appendChild(titleEl);
   const all = [];
-  [{ k: todayKey(), label: 'Today' }, { k: tomorrowKey(), label: 'Tomorrow' }].forEach(({ k, label }) => {
+  const active = getActiveDateString();
+  goalScopeKeys().forEach(k => {
+    const date = k.slice(6);
+    const label = date === active ? 'Today' : formatDate(date);
     (storeGet(k) || []).filter(g => g.area === name).forEach(g => all.push({ g, label }));
   });
   if (all.length === 0) {
@@ -225,7 +227,7 @@ document.getElementById('areaDetailDelete').addEventListener('click', () => {
   const idx = areas.findIndex(a => a.name === name);
   if (idx !== -1) { areas.splice(idx, 1); saveAreas(areas); }
   if (getAreaNotes(name).length) saveAreaNotes(name, []);   // drop this area's notes
-  [todayKey(), tomorrowKey()].forEach(k => {
+  goalScopeKeys().forEach(k => {
     const goals = storeGet(k) || [];
     let changed = false;
     goals.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });

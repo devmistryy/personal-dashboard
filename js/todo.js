@@ -1,21 +1,159 @@
 // To Do tab: rollover, streak, goal rows, drag-reorder, inline edit,
 // quick-add + polish. Loaded before main.js.
 
+// Stable client-side goal id (mirrors the habits `h_…` convention).
+function _goalId() {
+  return 'g_' + ((crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2));
+}
+
+// A goal object created right now, with a stable id + ISO creation stamp.
+function makeGoal(fields) {
+  return Object.assign({
+    id: _goalId(),
+    text: '',
+    done: false,
+    priority: 'Medium',
+    area: null,
+    createdAt: new Date().toISOString(),
+  }, fields);
+}
+
+// True when `list` already contains `g` — by stable id, falling back to an
+// exact text match against an unfinished entry (covers pre-id rows).
+function _goalInList(g, list) {
+  return list.some(x =>
+    (g.id && x.id && x.id === g.id) ||
+    (!x.done && x.text === g.text));
+}
+
+// ── Upcoming (future-dated) goals ──
+// The planner card creates goals for tomorrow or later only. `plannerDate` is
+// the target date for new goals; it lazily defaults to tomorrow and is never
+// allowed to point at today or the past.
+let plannerDate = null;
+function plannerTargetDate() {
+  const min = getTomorrowDateString();
+  if (!plannerDate || plannerDate < min) plannerDate = min;
+  return plannerDate;
+}
+
+// Dates strictly after the active day that currently hold goals, ascending.
+function upcomingDateKeys() {
+  const active = getActiveDateString();
+  return storeListKeys('goals:')
+    .map(k => k.slice(6))
+    .filter(d => d > active)
+    .sort();
+}
+
+// Every goal list a user can currently edit: today + all future days.
+// Used by the Areas tab so area rename/delete/tagging reaches future goals.
+function goalScopeKeys() {
+  return [todayKey()].concat(upcomingDateKeys().map(d => 'goals:' + d));
+}
+
+// ── Goal sort mode ── (shared by the Today and Upcoming lists)
+// 'custom' = the stored array order, reorderable by drag. 'priority' and 'area'
+// are display-only views; the stored order is never mutated by them.
+const _GOAL_SORT_MODES = [['custom', 'Custom'], ['priority', 'Priority'], ['area', 'Area']];
+const _GOAL_PRI_RANK = { High: 0, Medium: 1, Low: 2 };
+
+function getGoalSort()     { return MEM['goal_sort_v1'] || 'custom'; }
+function setGoalSort(mode) {
+  MEM['goal_sort_v1'] = mode;
+  _syncSetting('goal_sort_v1', mode);
+  loadToday();
+  loadUpcoming();
+}
+
+// Returns a new array ordered for display. Never mutates the input — the stored
+// order stays canonical (it's the 'custom' order and the tiebreak for the rest).
+function sortGoalsForDisplay(goals, mode) {
+  const pos = new Map(goals.map((g, i) => [g, i]));
+  const byCustom = (a, b) => pos.get(a) - pos.get(b);
+  const arr = [...goals];
+  if (mode === 'priority') {
+    arr.sort((a, b) =>
+      (_GOAL_PRI_RANK[a.priority || 'Medium'] - _GOAL_PRI_RANK[b.priority || 'Medium']) || byCustom(a, b));
+  } else if (mode === 'area') {
+    arr.sort((a, b) => {
+      const aa = a.area || '', ba = b.area || '';
+      if (!!aa !== !!ba) return aa ? -1 : 1;            // no-area group last
+      return aa.localeCompare(ba, undefined, { sensitivity: 'base' }) || byCustom(a, b);
+    });
+  }
+  return arr; // 'custom' / unknown → stored order
+}
+
+function paintGoalSortBar(el, count) {
+  if (!el) return;
+  el.hidden = !(count > 1);           // nothing to sort with 0–1 goals
+  if (el.hidden) { el.innerHTML = ''; return; }
+  const mode = getGoalSort();
+  el.innerHTML = `<span class="goal-sort-label">Sort</span>` +
+    _GOAL_SORT_MODES.map(([v, l]) =>
+      `<button class="goal-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('');
+}
+
+// One delegated listener covers both cards' sort bars.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.goal-sort-btn');
+  if (btn && btn.dataset.sort !== getGoalSort()) setGoalSort(btn.dataset.sort);
+});
+
+// Move a goal within its stored day array, matched by stable id (so it works
+// regardless of the current display sort). Bails unless sort is 'custom'.
+function reorderGoalByDrag(key, fromEl, toEl) {
+  if (getGoalSort() !== 'custom') return;
+  const arr = storeGet(key) || [];
+  const from = arr.findIndex(g => g.id === fromEl.dataset.goalId);
+  const to   = arr.findIndex(g => g.id === toEl.dataset.goalId);
+  if (from < 0 || to < 0 || from === to) return;
+  const [item] = arr.splice(from, 1);
+  arr.splice(to, 0, item);
+  storeSet(key, arr);
+  if (key === todayKey()) loadToday(); else loadUpcoming();
+}
+
 // ── Rollover ──
+// Carry every unfinished goal from days between the last processed date and
+// today into today's list, preserving the whole object (id, priority, area,
+// createdAt). Past days are left intact as history; a `goal_rollover_v1`
+// marker keeps this idempotent so retained history isn't re-carried on reload.
 function rollover() {
   const activeDate = getActiveDateString();
-  const keys = storeListKeys('goals:').filter(k => k.slice(6) < activeDate);
+  const marker = storeGet('goal_rollover_v1') || { lastProcessedDate: null };
+  const from = marker.lastProcessedDate;
+
+  const keys = storeListKeys('goals:')
+    .filter(k => {
+      const d = k.slice(6);
+      return d < activeDate && (!from || d > from);
+    })
+    .sort();
+  if (keys.length === 0) return;
+
+  const todayGoals = storeGet(todayKey()) || [];
+  let added = false;
+
   keys.forEach(k => {
-    const goals = storeGet(k) || [];
-    const undone = goals.filter(g => !g.done);
-    if (undone.length > 0) {
-      const todayGoals = storeGet(todayKey()) || [];
-      const existingTexts = new Set(todayGoals.map(g => g.text));
-      undone.forEach(g => { if (!existingTexts.has(g.text)) todayGoals.push({ text: g.text, done: false }); });
-      storeSet(todayKey(), todayGoals);
-    }
-    storeDelete(k);
+    (storeGet(k) || []).filter(g => !g.done).forEach(g => {
+      if (_goalInList(g, todayGoals)) return;
+      todayGoals.push(Object.assign({}, g, { done: false }));
+      delete todayGoals[todayGoals.length - 1].doneAt;
+      added = true;
+    });
   });
+
+  if (added) storeSet(todayKey(), todayGoals);
+
+  const newest = keys[keys.length - 1].slice(6);
+  if (newest !== from) {
+    marker.lastProcessedDate = newest;
+    storeSet('goal_rollover_v1', marker);
+  }
 }
 
 // ── Streak check ──
@@ -82,32 +220,47 @@ function renderStreak() {
   else el.classList.remove('gm-streak-active');
 }
 
-function renderTomorrowCount() {
-  const goals = storeGet(tomorrowKey()) || [];
-  document.getElementById('gmTomorrowCount').textContent = `${goals.length} planned`;
-  document.getElementById('tomorrowLabel').textContent = `Plan tomorrow — ${formatDate(getTomorrowDateString())}`;
+function renderUpcomingCount() {
+  const total = upcomingDateKeys()
+    .reduce((n, d) => n + (storeGet('goals:' + d) || []).length, 0);
+  document.getElementById('gmTomorrowCount').textContent = `${total} planned`;
 }
 
 
 // ── Build goal row ──
-function buildGoalRow(g, idx, goals, key, readOnly) {
+// Handlers resolve the goal by stable id against the live stored array, so they
+// stay correct no matter how the visible list is sorted. `readOnly` locks the
+// checkbox (future days); `draggable` enables drag-reorder (custom sort only).
+function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
   const priority = g.priority || 'Medium';
   const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[priority] || 'goal-priority-med';
   const li = document.createElement('li');
-  li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '') + (g.queued && !g.done ? ' is-queued' : '');
+  li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '');
   li.dataset.idx = idx;
-  li.draggable = !readOnly;
+  li.dataset.goalId = g.id || '';
+  li.draggable = !!draggable;
+
+  const reload = () => { if (key === todayKey()) loadToday(); else loadUpcoming(); };
+  const mutate = fn => {
+    const arr = storeGet(key) || [];
+    const i = arr.findIndex(x => x.id === g.id);
+    if (i < 0) return;
+    fn(arr, i);
+    storeSet(key, arr);
+    reload();
+  };
 
   // Priority click strip (invisible, covers left border area)
   const priBtn = document.createElement('button');
   priBtn.className = 'goal-priority-btn';
   priBtn.title = `Priority: ${priority} — click to change`;
   priBtn.addEventListener('click', () => {
-    const order = ['High', 'Medium', 'Low'];
-    const cur = goals[idx].priority || 'Medium';
-    goals[idx].priority = order[(order.indexOf(cur) + 1) % order.length];
-    storeSet(key, goals);
-    reload();
+    // Cycle by colour: High (red) → Low (green) → Medium (yellow) → High …
+    const order = ['High', 'Low', 'Medium'];
+    mutate((arr, i) => {
+      const cur = arr[i].priority || 'Medium';
+      arr[i].priority = order[(order.indexOf(cur) + 1) % order.length];
+    });
   });
   li.appendChild(priBtn);
 
@@ -124,7 +277,7 @@ function buildGoalRow(g, idx, goals, key, readOnly) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = !!g.done;
-  if (readOnly) { cb.disabled = true; cb.title = 'Activates at 6 AM tomorrow'; }
+  if (readOnly) { cb.disabled = true; cb.title = 'Unlocks when this day starts (6 AM)'; }
   const cbBox = document.createElement('span');
   cbBox.className = 'goal-cb-box';
   cbWrap.appendChild(cb);
@@ -132,40 +285,24 @@ function buildGoalRow(g, idx, goals, key, readOnly) {
   li.appendChild(cbWrap);
 
   cb.addEventListener('change', () => {
-    goals[idx].done = cb.checked;
-    if (cb.checked) goals[idx].doneAt = Date.now();
-    else delete goals[idx].doneAt;
-    storeSet(key, goals);
-    reload();
+    mutate((arr, i) => {
+      arr[i].done = cb.checked;
+      if (cb.checked) arr[i].doneAt = new Date().toISOString();
+      else delete arr[i].doneAt;
+    });
   });
 
   // Text
   const txt = document.createElement('span');
   txt.className = 'goal-text';
   txt.textContent = g.text;
-  makeInlineEdit(txt, idx, goals, key, reload);
+  makeInlineEdit(txt, g, key, reload);
   li.appendChild(txt);
 
   // Area pill + dropdown
   li.appendChild(buildAreaPill(g.area, newArea => {
-    goals[idx].area = newArea;
-    storeSet(key, goals);
-    reload();
+    mutate((arr, i) => { arr[i].area = newArea; });
   }));
-
-  // Queue button
-  const qBtn = document.createElement('button');
-  qBtn.className = 'gm-queue-btn' + (g.queued ? ' is-queued' : '');
-  qBtn.textContent = '⚡';
-  qBtn.title = 'Toggle productivity queue';
-  if (readOnly) qBtn.disabled = true;
-  qBtn.addEventListener('click', () => {
-    goals[idx].queued = !goals[idx].queued;
-    storeSet(key, goals);
-    li.classList.add('is-queue-flashing');
-    setTimeout(reload, 480);
-  });
-  li.appendChild(qBtn);
 
   // Delete
   const del = document.createElement('button');
@@ -173,25 +310,18 @@ function buildGoalRow(g, idx, goals, key, readOnly) {
   del.textContent = '×';
   del.title = 'Delete goal';
   del.addEventListener('click', () => {
-    goals.splice(idx, 1);
-    storeSet(key, goals);
-    reload();
+    mutate((arr, i) => { arr.splice(i, 1); });
   });
   li.appendChild(del);
 
   return li;
-
-  function reload() {
-    if (key === todayKey()) loadToday();
-    else loadTomorrow();
-  }
 }
 
-function makeInlineEdit(el, idx, goals, key, reload) {
+function makeInlineEdit(el, g, key, reload) {
   let original = '';
   el.addEventListener('click', () => {
     if (el.contentEditable === 'true') return;
-    original = goals[idx].text;
+    original = g.text;
     el.contentEditable = 'true';
     el.focus();
     const range = document.createRange();
@@ -210,9 +340,9 @@ function makeInlineEdit(el, idx, goals, key, reload) {
     const val = el.textContent.trim();
     el.contentEditable = 'false';
     if (val && val !== original) {
-      goals[idx].text = val;
-      storeSet(key, goals);
-      reload();
+      const arr = storeGet(key) || [];
+      const i = arr.findIndex(x => x.id === g.id);
+      if (i >= 0) { arr[i].text = val; storeSet(key, arr); reload(); }
     } else if (!val) {
       el.textContent = original;
     }
@@ -264,9 +394,10 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
     emptyEl.style.display = 'none';
     listEl.style.display = '';
 
+    const canDrag = !readOnly && getGoalSort() === 'custom';
     const visible = (goals.length > LIMIT && !showAll) ? goals.slice(0, LIMIT) : goals;
     visible.forEach((g, i) => {
-      listEl.appendChild(buildGoalRow(g, i, goals, key, readOnly));
+      listEl.appendChild(buildGoalRow(g, i, goals, key, readOnly, canDrag));
     });
 
     if (goals.length > LIMIT && !showAll) {
@@ -292,35 +423,67 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
 
   if (!readOnly && !listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'goal-row', (fromEl, toEl) => {
-      const from = parseInt(fromEl.dataset.idx);
-      const to   = parseInt(toEl.dataset.idx);
-      const arr = storeGet(key) || [];
-      const [item] = arr.splice(from, 1);
-      arr.splice(to, 0, item);
-      storeSet(key, arr);
-      if (key === todayKey()) loadToday(); else loadTomorrow();
-    });
+    wireDragReorder(listEl, 'goal-row', (fromEl, toEl) =>
+      reorderGoalByDrag(todayKey(), fromEl, toEl));
   }
 
   if (key === todayKey()) renderTodayHeader();
-  else renderTomorrowCount();
+  else renderUpcomingCount();
 }
 
 function loadToday() {
   const goals = storeGet(todayKey()) || [];
-  renderListInto(goals,
+  renderListInto(sortGoalsForDisplay(goals, getGoalSort()),
     document.getElementById('goalList'),
     document.getElementById('emptyState'),
     todayKey(), false);
+  paintGoalSortBar(document.getElementById('todaySortBar'), goals.length);
 }
 
-function loadTomorrow() {
-  const goals = storeGet(tomorrowKey()) || [];
-  renderListInto(goals,
-    document.getElementById('tomorrowList'),
-    document.getElementById('tomorrowEmptyState'),
-    tomorrowKey(), true);
+// The "Upcoming" card: every future day that has goals, grouped by date,
+// soonest first. Rows are read-only (checkbox locked until the day starts)
+// but priority / area / text / delete stay editable.
+function loadUpcoming() {
+  const wrap    = document.getElementById('upcomingList');
+  const emptyEl = document.getElementById('tomorrowEmptyState');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+
+  const target = plannerTargetDate();
+  const dateInput = document.getElementById('plannerDateInput');
+  if (dateInput) {
+    dateInput.min = getTomorrowDateString();
+    if (dateInput.value !== target) dateInput.value = target;
+  }
+  const inp = document.getElementById('tomorrowInput');
+  if (inp) inp.placeholder = `Add a goal for ${formatDate(target)}…`;
+
+  document.getElementById('tomorrowLabel').textContent = 'Upcoming';
+
+  const mode = getGoalSort();
+  const canDrag = mode === 'custom';
+  const days = upcomingDateKeys().filter(d => (storeGet('goals:' + d) || []).length > 0);
+  const totalUpcoming = days.reduce((n, d) => n + storeGet('goals:' + d).length, 0);
+  paintGoalSortBar(document.getElementById('upcomingSortBar'), totalUpcoming);
+  renderUpcomingCount();
+  emptyEl.style.display = days.length ? 'none' : 'block';
+
+  days.forEach(date => {
+    const key   = 'goals:' + date;
+    const goals = storeGet(key) || [];
+    const head = document.createElement('div');
+    head.className = 'upcoming-day';
+    head.innerHTML = `<span>${formatDate(date)}</span>` +
+      `<span class="upcoming-day-count">${goals.length}</span>`;
+    wrap.appendChild(head);
+
+    const ul = document.createElement('ul');
+    ul.className = 'goal-list';
+    sortGoalsForDisplay(goals, mode).forEach((g, i) =>
+      ul.appendChild(buildGoalRow(g, i, goals, key, true, canDrag)));
+    if (canDrag) wireDragReorder(ul, 'goal-row', (fromEl, toEl) => reorderGoalByDrag(key, fromEl, toEl));
+    wrap.appendChild(ul);
+  });
 }
 
 // ── Status message helper ──
@@ -366,7 +529,7 @@ function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
   function addGoal(text) {
     if (!text) return;
     const goals = storeGet(getKey()) || [];
-    goals.push({ text, done: false, priority: 'Medium', area: null });
+    goals.push(makeGoal({ text }));
     storeSet(getKey(), goals);
     inputEl.value = '';
     reload();
@@ -404,14 +567,29 @@ document.getElementById('gmPushBtn').addEventListener('click', () => {
   if (!confirm('Push all unchecked goals to tomorrow?')) return;
   const todayGoals    = storeGet(todayKey()) || [];
   const tomorrowGoals = storeGet(tomorrowKey()) || [];
-  const existingTexts = new Set(tomorrowGoals.map(g => g.text));
   const unchecked = todayGoals.filter(g => !g.done);
-  unchecked.forEach(g => { if (!existingTexts.has(g.text)) tomorrowGoals.push({ text: g.text, done: false, priority: g.priority || 'Medium', area: g.area || null }); });
+  unchecked.forEach(g => {
+    if (_goalInList(g, tomorrowGoals)) return;
+    const carried = Object.assign({}, g, { done: false });
+    delete carried.doneAt;
+    tomorrowGoals.push(carried);
+  });
   storeSet(tomorrowKey(), tomorrowGoals);
   const remaining = todayGoals.filter(g => g.done);
   storeSet(todayKey(), remaining);
   loadToday();
-  loadTomorrow();
+  loadUpcoming();
+});
+
+// ── Upcoming card: date picker for the target day of new goals ──
+// (min/value are seeded by loadUpcoming(), which runs after main.js loads the
+// date helpers; here we only wire the change handler.)
+document.getElementById('plannerDateInput').addEventListener('change', e => {
+  const input = e.target;
+  const min = getTomorrowDateString();
+  if (!input.value || input.value < min) input.value = min;
+  plannerDate = input.value;
+  loadUpcoming();
 });
 
 
@@ -453,7 +631,7 @@ function applySundayReset() {
   items.forEach(it => {
     if (done.includes(it.id)) return;
     if (!texts.has(it.text)) {
-      goals.push({ text: it.text, done: false, priority: 'Medium', area: it.area || null });
+      goals.push(makeGoal({ text: it.text, area: it.area || null }));
       texts.add(it.text);
       added = true;
     }
@@ -619,4 +797,103 @@ document.getElementById('sundayResetModal').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('sundayResetModal').classList.contains('open')) closeSundayReset();
+});
+
+
+// ── Goal history — read-only view of past days ─────────────────────────────
+// Past days' `goals:` entries are retained (rollover no longer deletes them);
+// this lists them newest-first so you can see what was set and what got done.
+const GOAL_HISTORY_DAYS = 90; // matches loadFromSupabase's 90-day window
+
+// Display-only area pill (buildAreaPill always wires a click-to-edit dropdown).
+// Returns null when the goal has no (known) area, so history rows stay clean.
+function _historyAreaPill(areaName) {
+  if (!areaName) return null;
+  const areaObj = getAreas().find(a => a.name === areaName);
+  if (!areaObj) return null;
+  const pill = document.createElement('span');
+  pill.className = 'goal-area-pill';
+  pill.textContent = areaName;
+  pill.style.background = areaObj.color + 'BF';
+  pill.style.color = '#fff';
+  return pill;
+}
+
+function renderGoalHistory() {
+  const body = document.getElementById('goalHistoryBody');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const activeDate = getActiveDateString();
+  const days = storeListKeys('goals:')
+    .map(k => k.slice(6))
+    .filter(d => d < activeDate)
+    .sort()
+    .reverse()
+    .slice(0, GOAL_HISTORY_DAYS);
+
+  if (days.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No past days yet — history builds up as days roll over.';
+    body.appendChild(empty);
+    return;
+  }
+
+  days.forEach(date => {
+    const goals = storeGet('goals:' + date) || [];
+    const done  = goals.filter(g => g.done).length;
+
+    const head = document.createElement('div');
+    head.className = 'goal-history-day';
+    head.innerHTML = `<span>${formatDate(date)}</span>` +
+      `<span class="goal-history-count">${done}/${goals.length}</span>`;
+    body.appendChild(head);
+
+    if (goals.length === 0) return;
+
+    const ul = document.createElement('ul');
+    ul.className = 'goal-list goal-history-list';
+    goals.forEach(g => {
+      const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[g.priority || 'Medium'] || 'goal-priority-med';
+      const li = document.createElement('li');
+      li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '');
+
+      const mark = document.createElement('span');
+      mark.className = 'goal-history-mark';
+      mark.textContent = g.done ? '✓' : '○';
+      li.appendChild(mark);
+
+      const txt = document.createElement('span');
+      txt.className = 'goal-text';
+      txt.textContent = g.text;
+      li.appendChild(txt);
+
+      const pill = _historyAreaPill(g.area || null);
+      if (pill) li.appendChild(pill);
+      ul.appendChild(li);
+    });
+    body.appendChild(ul);
+  });
+}
+
+function openGoalHistory() {
+  renderGoalHistory();
+  const modal = document.getElementById('goalHistoryModal');
+  modal.classList.add('open');
+  modal.querySelector('.sr-modal-card').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+function closeGoalHistory() {
+  document.getElementById('goalHistoryModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('goalHistoryBtn').addEventListener('click', openGoalHistory);
+document.getElementById('goalHistoryClose').addEventListener('click', closeGoalHistory);
+document.getElementById('goalHistoryModal').addEventListener('click', e => {
+  if (e.target.id === 'goalHistoryModal') closeGoalHistory(); // backdrop click only
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('goalHistoryModal').classList.contains('open')) closeGoalHistory();
 });

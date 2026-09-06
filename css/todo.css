@@ -3,6 +3,40 @@
     margin-bottom: 14px;
   }
 
+  /* Sort bar (Today + Upcoming) */
+  .goal-sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .goal-sort-bar[hidden] { display: none; }
+  .goal-sort-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    margin-right: 2px;
+  }
+  .goal-sort-btn {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: background .15s, color .15s;
+  }
+  .goal-sort-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.05); }
+  .goal-sort-btn.active {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.15);
+  }
+
   .gm-header {
     display: flex;
     justify-content: space-between;
@@ -263,33 +297,6 @@
     padding: 2px 4px;
   }
 
-  .gm-queue-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--text-tertiary);
-    opacity: 0.55;
-    padding: 2px 4px;
-    border-radius: 6px;
-    transition: opacity 0.2s, filter 0.2s;
-    flex-shrink: 0;
-  }
-
-  .gm-queue-btn.is-queued {
-    color: var(--warning);
-    opacity: 1;
-    filter: drop-shadow(0 0 4px rgba(242,192,99,0.65));
-  }
-
-  @keyframes gm-queue-flash {
-    0%   { background: transparent; transform: scale(1); }
-    40%  { background: rgba(242,192,99,0.32); transform: scale(1.015); }
-    100% { background: transparent; transform: scale(1); }
-  }
-
-  .is-queue-flashing { animation: gm-queue-flash 0.48s ease forwards; }
-
   .goal-delete {
     background: none;
     border: none;
@@ -315,13 +322,6 @@
     text-decoration: line-through;
     text-decoration-color: rgba(255,255,255,0.4);
   }
-
-  /* Queued row */
-  .goal-row.is-queued {
-    background: rgba(242,192,99,0.10);
-    box-shadow: inset 3px 0 0 0 var(--warning);
-  }
-  .goal-row.is-queued .goal-text { color: #FFE2A8; }
 
   /* All done card */
   .gm-all-done {
@@ -364,6 +364,7 @@
   /* Input row */
   .goal-input-wrap {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     align-items: center;
     border-top: 1px solid rgba(255,255,255,0.06);
@@ -385,6 +386,41 @@
   }
   .goal-input:focus { border-color: rgba(255,255,255,0.28); }
   .goal-input::placeholder { color: var(--text-tertiary); }
+
+  /* Date picker on the Upcoming card */
+  .goal-date-input {
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    color-scheme: dark;
+    transition: border-color 0.2s;
+  }
+  .goal-date-input:focus { border-color: rgba(255,255,255,0.28); }
+
+  /* Upcoming card — future days grouped by date */
+  .upcoming-list { display: flex; flex-direction: column; }
+  .upcoming-day {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 14px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .upcoming-list .upcoming-day:first-child { margin-top: 0; }
+  .upcoming-day-count { font-weight: 600; color: var(--text-tertiary); }
+  .upcoming-list .goal-list { margin: 0; }
 
   .btn-add {
     background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
@@ -542,3 +578,35 @@
     gap: 8px;
   }
   .sunday-reset-row { cursor: default; }
+
+  /* Goal history — read-only past days */
+  .goal-history-day {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 16px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .goal-history-day:first-child { margin-top: 4px; }
+  .goal-history-count {
+    font-weight: 600;
+    color: var(--text-tertiary);
+  }
+
+  .goal-history-list { margin: 0; }
+  .goal-history-list .goal-row {
+    cursor: default;
+    padding-left: 10px;
+  }
+  .goal-history-mark {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+  .goal-history-list .goal-row.is-done .goal-history-mark { color: var(--success, #6BE3A4); }
