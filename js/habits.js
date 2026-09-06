@@ -16,6 +16,46 @@ function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncH
 function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
 function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
 
+// ── Step-linked habits ──
+// A habit with autoSource === 'steps' + a numeric autoGoal is auto-checked once
+// per day when that day's step count (getStepCount, from the step_counts feed)
+// clears the goal. It only ever ADDS a check-in, and only once per (habit, day)
+// — tracked in the `step_autocheck_v1` settings blob — so a manual uncheck
+// afterwards sticks. Runs from main.js (_enterApp) and when the link changes.
+function _stepAutocheckApplied() {
+  const v = MEM['step_autocheck_v1'];
+  return Array.isArray(v) ? v : [];
+}
+function _saveStepAutocheckApplied(keys) {
+  const floor = habitDateStr(-21);                       // drop stale entries
+  const pruned = keys.filter(k => (k.split(':')[1] || '') >= floor);
+  MEM['step_autocheck_v1'] = pruned;
+  _syncSetting('step_autocheck_v1', pruned);
+}
+function _reconcileStepHabits() {
+  if (typeof getStepCount !== 'function') return;
+  const linked = getHabits().filter(h =>
+    h.autoSource === 'steps' && Number(h.autoGoal) > 0 && !h.archived);
+  if (!linked.length) return;
+  const applied = new Set(_stepAutocheckApplied());
+  const dates = [habitDateStr(0), habitDateStr(-1)];
+  let changed = false;
+  linked.forEach(h => {
+    dates.forEach(ds => {
+      if (ds < (h.startDate || ds)) return;
+      const key = h.id + ':' + ds;
+      if (applied.has(key)) return;
+      const steps = getStepCount(ds);
+      if (steps == null || steps < Number(h.autoGoal)) return;
+      const log = getHabitLog(ds);
+      if (!log.includes(h.id)) { log.push(h.id); saveHabitLog(ds, log); }
+      applied.add(key);
+      changed = true;
+    });
+  });
+  if (changed) _saveStepAutocheckApplied([...applied]);
+}
+
 // ── Habit sort mode ──
 function getHabitSort()      { return MEM['habit_sort_v1'] || 'custom'; }
 function setHabitSort(mode)  { MEM['habit_sort_v1'] = mode; _syncSetting('habit_sort_v1', mode); renderHabits(); }
@@ -226,6 +266,26 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     fill.style.width = pct + '%';
     barWrap.appendChild(fill);
     nameCol.appendChild(barWrap);
+  }
+
+  // Step-linked habits: today's step count vs goal
+  if (!isArchived && habit.autoSource === 'steps' && Number(habit.autoGoal) > 0) {
+    const goal = Number(habit.autoGoal);
+    const steps = typeof getStepCount === 'function' ? getStepCount(today) : null;
+    const stepPct = steps == null ? 0 : Math.min(100, steps / goal * 100);
+    const sWrap = document.createElement('div');
+    sWrap.className = 'habit-progress-wrap habit-step-wrap';
+    const sFill = document.createElement('div');
+    sFill.className = 'habit-progress-fill habit-step-fill' + (stepPct >= 100 ? ' complete' : '');
+    sFill.style.width = stepPct + '%';
+    sWrap.appendChild(sFill);
+    nameCol.appendChild(sWrap);
+    const sLabel = document.createElement('div');
+    sLabel.className = 'habit-step-label';
+    sLabel.textContent = steps == null
+      ? `steps: — / ${goal.toLocaleString()}`
+      : `${steps.toLocaleString()} / ${goal.toLocaleString()} steps`;
+    nameCol.appendChild(sLabel);
   }
 
   li.appendChild(nameCol);
@@ -653,6 +713,38 @@ function renderHabitDetailPage(habit, allHabits) {
         </label>
       </div>
     </div>
+    <div class="habit-steplink">
+      <div class="habit-steplink-head">
+        <div>
+          <div class="habit-detail-checkin-label">Auto-check from step count</div>
+          <div class="habit-detail-checkin-sub">Ticks this habit once a day when steps reach the goal</div>
+        </div>
+        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+          <input type="checkbox" id="habitStepToggle" ${habit.autoSource === 'steps' ? 'checked' : ''}>
+          <span class="habit-cb-box"></span>
+        </label>
+      </div>
+      <div class="habit-steplink-body" id="habitStepBody"${habit.autoSource === 'steps' ? '' : ' hidden'}>
+        <div class="habit-detail-row-field">
+          <span class="habit-detail-start-label">Daily step goal</span>
+          <input type="number" class="habit-detail-start-input" id="habitStepGoal"
+            value="${Number(habit.autoGoal) > 0 ? habit.autoGoal : 8000}" min="500" step="500">
+        </div>
+        <div class="habit-steplink-today" id="habitStepToday"></div>
+        <div class="habit-steplink-sync">
+          <span class="habit-detail-start-label">iOS Shortcut sync</span>
+          <div class="habit-steplink-field">
+            <code id="habitStepUrl"></code>
+            <button type="button" class="habit-steplink-copy" data-copy="url">Copy URL</button>
+          </div>
+          <div class="habit-steplink-field">
+            <code id="habitStepToken"></code>
+            <button type="button" class="habit-steplink-copy" data-copy="token">Copy token</button>
+          </div>
+          <div class="habit-steplink-hint">Shortcut: Find Health Samples &rarr; Steps, today, Source contains &ldquo;WHOOP&rdquo; &rarr; Sum &rarr; POST <code>{ token, date, steps }</code> to the URL.</div>
+        </div>
+      </div>
+    </div>
     ` : ''}
     <div class="habit-detail-danger-row">
       ${!isArchived ? `<button class="btn-danger" id="habitDetailArchive">Archive</button>` : ''}
@@ -697,6 +789,66 @@ function renderHabitDetailPage(habit, allHabits) {
       saveHabits(allHabits);
       renderHabits();
       closeHabitDetail();
+    });
+
+    // Step-count link
+    const _stepToggle = document.getElementById('habitStepToggle');
+    const _stepBody   = document.getElementById('habitStepBody');
+    const _stepGoal   = document.getElementById('habitStepGoal');
+    const _stepToday  = document.getElementById('habitStepToday');
+    const _stepUrlEl  = document.getElementById('habitStepUrl');
+    const _stepTokEl  = document.getElementById('habitStepToken');
+
+    const _paintStepSync = () => {
+      _stepUrlEl.textContent = STEP_SYNC_URL;
+      _stepTokEl.textContent = getStepIngestToken();
+      const s = getStepCount(today);
+      const g = Number(_stepGoal.value) || Number(habit.autoGoal) || 0;
+      _stepToday.textContent = s == null
+        ? 'No steps synced yet today.'
+        : `Today: ${s.toLocaleString()}${g ? ' / ' + g.toLocaleString() : ''} steps${g && s >= g ? '  ✓' : ''}`;
+    };
+    if (habit.autoSource === 'steps') _paintStepSync();
+
+    _stepToggle.addEventListener('change', () => {
+      if (_stepToggle.checked) {
+        habit.autoSource = 'steps';
+        habit.autoGoal = Math.max(1, Math.round(Number(_stepGoal.value) || 8000));
+        _stepBody.hidden = false;
+        _paintStepSync();
+      } else {
+        habit.autoSource = null;
+      }
+      saveHabits(allHabits);
+      _reconcileStepHabits();
+      renderHabits();
+      renderHabitDetailPage(habit, allHabits);
+    });
+
+    const _saveStepGoal = () => {
+      const g = Math.max(1, Math.round(Number(_stepGoal.value) || 0));
+      _stepGoal.value = g;
+      if (habit.autoSource === 'steps' && g !== habit.autoGoal) {
+        habit.autoGoal = g;
+        saveHabits(allHabits);
+        _reconcileStepHabits();
+        renderHabits();
+      }
+      _paintStepSync();
+    };
+    _stepGoal.addEventListener('blur', _saveStepGoal);
+    _stepGoal.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); _stepGoal.blur(); }
+    });
+
+    _stepBody.querySelectorAll('.habit-steplink-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const txt = btn.dataset.copy === 'token' ? getStepIngestToken() : STEP_SYNC_URL;
+        navigator.clipboard && navigator.clipboard.writeText(txt);
+        const orig = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = orig; }, 1400);
+      });
     });
   }
 

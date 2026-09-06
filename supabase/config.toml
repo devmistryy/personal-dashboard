@@ -1,0 +1,10 @@
+# Supabase project config. Only the pieces this repo needs are set here — the
+# dashboard frontend talks to Supabase directly from the browser and has no
+# other server-side code.
+
+project_id = "tlqjmlocxxsdlxseumxw"
+
+[functions.steps-ingest]
+# Called by an external iOS Shortcut with a static per-user token in the body,
+# not a Supabase JWT — so skip JWT verification and check the token ourselves.
+verify_jwt = false

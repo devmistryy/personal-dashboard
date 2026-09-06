@@ -38,11 +38,15 @@ create table if not exists habits (
   archived_at date,
   sort_order  integer,
   end_of_day  boolean default false,
+  auto_source text,                       -- 'steps' when the habit is linked to a data feed
+  auto_goal   integer,                    -- daily threshold that auto-checks the habit
   created_at  timestamptz default now()
 );
-alter table habits add column if not exists area       text;
-alter table habits add column if not exists sort_order integer;
-alter table habits add column if not exists end_of_day boolean default false;
+alter table habits add column if not exists area        text;
+alter table habits add column if not exists sort_order  integer;
+alter table habits add column if not exists end_of_day  boolean default false;
+alter table habits add column if not exists auto_source text;
+alter table habits add column if not exists auto_goal   integer;
 alter table habits enable row level security;
 
 -- ───────────────────────── habit_logs ─────────────────────────
@@ -212,13 +216,27 @@ create index if not exists mobility_logs_user_ex_idx
   on mobility_logs (user_id, exercise_id);
 alter table mobility_logs enable row level security;
 
+-- ─────────────────────── step_counts ──────────────────────────
+-- one row per day. Written by the steps-ingest Edge Function (an iOS Shortcut
+-- pushes the day's WHOOP-sourced step total from Apple Health). The "own" RLS
+-- policy below is `for all`, so the client could also upsert its own rows.
+create table if not exists step_counts (
+  user_id    uuid references auth.users not null,
+  date       date not null,
+  steps      integer not null,
+  source     text,                          -- e.g. 'whoop_via_healthkit'
+  updated_at timestamptz not null default now(),
+  primary key (user_id, date)
+);
+alter table step_counts enable row level security;
+
 -- ──────────────── RLS policies (create only if missing) ───────
 do $$
 declare t text;
 begin
   foreach t in array array[
     'habits','habit_logs','habit_notes','goals','settings','job_applications','areas',
-    'diet_entries','diet_foods','mobility_exercises','mobility_logs'
+    'diet_entries','diet_foods','mobility_exercises','mobility_logs','step_counts'
   ] loop
     if not exists (
       select 1 from pg_policies

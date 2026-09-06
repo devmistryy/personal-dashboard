@@ -69,7 +69,7 @@ function _seedLocalData() {
     'habit_sort_v1': 'custom',
     'habits:list': [
       { id: h1, name: 'Read 20 minutes', startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date(Date.now() - 60000).toISOString() },
-      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date().toISOString() },
+      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date().toISOString(), autoSource: 'steps', autoGoal: 7000 },
     ],
     ['habits:log:' + today]: [h1],
     ['goals:' + today]: [
@@ -110,6 +110,10 @@ function _seedLocalData() {
       { id: 'mp_s3c', date: dayAgo(10), sets: 3, measure: 'hold', holdSeconds: 25, reps: null },
       { id: 'mp_s3d', date: dayAgo(3),  sets: 3, measure: 'hold', holdSeconds: 30, reps: null },
     ],
+    'step_counts_v1': [
+      { date: dayAgo(1), steps: 11207 },
+      { date: today,     steps: 8432 },
+    ],
   };
 }
 
@@ -123,6 +127,27 @@ function getAreas() {
   return raw.map(a => typeof a === 'string' ? { name: a, color: AREA_COLORS[0] } : a);
 }
 function saveAreas(areas) { MEM['areas:list'] = areas; _syncSetting('areas:list', areas); }
+
+// ── Step counts ──
+// Written by the steps-ingest Edge Function (an iOS Shortcut posts the day's
+// WHOOP-sourced step total from Apple Health). The client only reads them.
+function getStepCount(dateStr) {
+  const row = (MEM['step_counts_v1'] || []).find(r => r.date === dateStr);
+  return row ? row.steps : null;
+}
+// Per-user secret the "Sync WHOOP Steps" Shortcut sends back with each POST.
+// Generated lazily the first time the habit-link UI needs it.
+function getStepIngestToken() {
+  let tok = MEM['step_ingest_token_v1'];
+  if (!tok) {
+    tok = (crypto && crypto.randomUUID) ? crypto.randomUUID()
+      : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    MEM['step_ingest_token_v1'] = tok;
+    _syncSetting('step_ingest_token_v1', tok);
+  }
+  return tok;
+}
+const STEP_SYNC_URL = SUPABASE_URL + '/functions/v1/steps-ingest';
 function storeSet(key, value) {
   MEM[key] = value;
   if (key.startsWith('goals:')) {
@@ -408,13 +433,23 @@ async function _uid() { return (await sb.auth.getSession()).data.session?.user?.
 async function _syncHabits(habits) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
+  // Only send the step-link columns once the feature is actually in use, so an
+  // install that hasn't run the latest master.sql yet still syncs habits fine.
+  const withAuto = habits.some(h => h.autoSource);
   if (habits.length) {
-    const { error } = await sb.from('habits').upsert(habits.map((h, i) => ({
-      id: h.id, user_id: uid, name: h.name,
-      start_date: h.startDate || null, end_date: h.endDate || null,
-      archived: h.archived || false, archived_at: h.archivedAt || null,
-      sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
-    })), { onConflict: 'id' });
+    const { error } = await sb.from('habits').upsert(habits.map((h, i) => {
+      const row = {
+        id: h.id, user_id: uid, name: h.name,
+        start_date: h.startDate || null, end_date: h.endDate || null,
+        archived: h.archived || false, archived_at: h.archivedAt || null,
+        sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
+      };
+      if (withAuto) {
+        row.auto_source = h.autoSource || null;
+        row.auto_goal   = h.autoGoal ?? null;
+      }
+      return row;
+    }), { onConflict: 'id' });
     if (error) console.error('[sync] habits upsert failed:', error);
   }
   const { data: existing = [], error: selErr } = await sb.from('habits').select('id').eq('user_id', uid);
@@ -623,6 +658,7 @@ async function loadFromSupabase() {
     sb.from('mobility_logs').select('*').eq('user_id', uid).order('date'),
     sb.from('diet_entries').select('*').eq('user_id', uid).order('date'),
     sb.from('diet_foods').select('*').eq('user_id', uid),
+    sb.from('step_counts').select('*').eq('user_id', uid).gte('date', fromStr),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -636,11 +672,13 @@ async function loadFromSupabase() {
   const mobLogs = results[7].data || [];
   const dietEnt = results[8].data || [];
   const dietFds = results[9].data || [];
+  const stepRows = results[10].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
     area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
+    autoSource: h.auto_source || null, autoGoal: h.auto_goal ?? null,
   }));
 
   logs.forEach(l => {
@@ -698,6 +736,8 @@ async function loadFromSupabase() {
   MEM['diet_healthy_v1']   = dietFds.filter(r => r.kind === 'healthy').map(r => r.name);
   MEM['diet_unhealthy_v1'] = dietFds.filter(r => r.kind === 'unhealthy').map(r => r.name);
 
+  MEM['step_counts_v1'] = stepRows.map(r => ({ date: r.date, steps: r.steps }));
+
   _normalizeGoals();
 }
 
@@ -739,7 +779,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); _reconcileStepHabits(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the goal ticker immediately with the loaded data
 }
