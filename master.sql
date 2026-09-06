@@ -106,7 +106,7 @@ alter table goals enable row level security;
 
 -- ────────────────────────── settings ──────────────────────────
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
--- Backs: habit_sort_v1, goal_sort_v1, goal_streak_v1, goal_rollover_v1,
+-- Backs: habit_sort_v1, goal_sort_v1, goal_streak_v1, goal_dismissed_v1,
 --        sunday_reset_v1, sunday_reset_log_v1, areas:list, area_notes:<name>
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (

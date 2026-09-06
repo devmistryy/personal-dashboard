@@ -117,43 +117,101 @@ function reorderGoalByDrag(key, fromEl, toEl) {
   if (key === todayKey()) loadToday(); else loadUpcoming();
 }
 
-// ── Rollover ──
-// Carry every unfinished goal from days between the last processed date and
-// today into today's list, preserving the whole object (id, priority, area,
-// createdAt). Past days are left intact as history; a `goal_rollover_v1`
-// marker keeps this idempotent so retained history isn't re-carried on reload.
+// ── Rollover + overdue ──
+// Any unfinished goal from a past day that you haven't finished or dismissed
+// rides forward onto today's list — shown as overdue — until you do one or the
+// other, no matter how old it is. Past days keep their copies as history.
+//
+// There is deliberately NO "last processed" marker: a stale one used to strand
+// goals when a carry-forward write failed (the Sept 2026 data-loss bug). The
+// guards are per-goal instead. A past-day goal is carried onto today unless:
+//   • it's done, or
+//   • its id is already placed on today or any later day (so "Push to tomorrow"
+//     and future-dated planner goals aren't yanked back), or
+//   • its id is in goal_dismissed_v1 — set when you delete a carried goal off
+//     today's list, so rollover leaves it alone from then on.
+// (The old goal_rollover_v1 setting is no longer read; a leftover row is inert.)
 function rollover() {
   const activeDate = getActiveDateString();
-  const marker = storeGet('goal_rollover_v1') || { lastProcessedDate: null };
-  const from = marker.lastProcessedDate;
+  const dismissed = new Set(storeGet('goal_dismissed_v1') || []);
 
-  const keys = storeListKeys('goals:')
-    .filter(k => {
-      const d = k.slice(6);
-      return d < activeDate && (!from || d > from);
-    })
-    .sort();
-  if (keys.length === 0) return;
+  // Every goal id already scheduled for today or a future day.
+  const placedAhead = new Set();
+  storeListKeys('goals:').forEach(k => {
+    if (k.slice(6) >= activeDate)
+      (storeGet(k) || []).forEach(g => { if (g.id) placedAhead.add(g.id); });
+  });
 
   const todayGoals = storeGet(todayKey()) || [];
   let added = false;
 
-  keys.forEach(k => {
-    (storeGet(k) || []).filter(g => !g.done).forEach(g => {
-      if (_goalInList(g, todayGoals)) return;
-      todayGoals.push(Object.assign({}, g, { done: false }));
-      delete todayGoals[todayGoals.length - 1].doneAt;
-      added = true;
+  storeListKeys('goals:')
+    .filter(k => k.slice(6) < activeDate)
+    .sort()
+    .forEach(k => {
+      (storeGet(k) || []).forEach(g => {
+        if (g.done || !g.id) return;
+        if (placedAhead.has(g.id) || dismissed.has(g.id)) return;
+        if (_goalInList(g, todayGoals)) return;
+        const carried = Object.assign({}, g, { done: false });
+        delete carried.doneAt;
+        todayGoals.push(carried);
+        placedAhead.add(g.id);
+        added = true;
+      });
     });
-  });
 
   if (added) storeSet(todayKey(), todayGoals);
+  _pruneDismissedGoals();
+}
 
-  const newest = keys[keys.length - 1].slice(6);
-  if (newest !== from) {
-    marker.lastProcessedDate = newest;
-    storeSet('goal_rollover_v1', marker);
-  }
+// Keep goal_dismissed_v1 bounded: drop ids that no longer appear on any loaded
+// day (their history aged out of loadFromSupabase's window), since rollover
+// can't reach them anyway.
+function _pruneDismissedGoals() {
+  const dismissed = storeGet('goal_dismissed_v1') || [];
+  if (!dismissed.length) return;
+  const live = new Set();
+  storeListKeys('goals:').forEach(k =>
+    (storeGet(k) || []).forEach(g => { if (g.id) live.add(g.id); }));
+  const kept = dismissed.filter(id => live.has(id));
+  if (kept.length !== dismissed.length) storeSet('goal_dismissed_v1', kept);
+}
+
+// Record a goal id as dismissed so rollover stops carrying it forward.
+function dismissGoal(id) {
+  const list = storeGet('goal_dismissed_v1') || [];
+  if (!id || list.includes(id)) return;
+  storeSet('goal_dismissed_v1', list.concat(id));
+}
+
+// True when this goal id also sits on an earlier day — i.e. it was carried
+// forward, so deleting it from today should dismiss it.
+function goalAppearsEarlier(g) {
+  if (!g.id) return false;
+  const active = getActiveDateString();
+  return storeListKeys('goals:').some(k =>
+    k.slice(6) < active && (storeGet(k) || []).some(x => x.id === g.id));
+}
+
+// Whole days a still-unfinished goal has already spent on earlier lists — how
+// overdue it is. 0 when it isn't overdue (first appears today or later, or done).
+function goalOverdueDays(g) {
+  if (!g.id || g.done) return 0;
+  const active = getActiveDateString();
+  let earliest = null;
+  storeListKeys('goals:').forEach(k => {
+    const d = k.slice(6);
+    if (d >= active) return;
+    if ((storeGet(k) || []).some(x => x.id === g.id) && (!earliest || d < earliest)) earliest = d;
+  });
+  return earliest ? _daysApart(earliest, active) : 0;
+}
+
+function _daysApart(a, b) {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 }
 
 // ── Streak check ──
@@ -292,8 +350,8 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
     });
   });
 
-  // Text + its optional "sunday reset" tag share one flex wrapper, so the tag
-  // sits right after the goal name instead of out by the area pill.
+  // Text + its optional tags (overdue, sunday reset) share one flex wrapper, so
+  // they sit right after the goal name instead of out by the area pill.
   const main = document.createElement('div');
   main.className = 'goal-main';
 
@@ -302,6 +360,16 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
   txt.textContent = g.text;
   makeInlineEdit(txt, g, key, reload);
   main.appendChild(txt);
+
+  const overdueDays = readOnly ? 0 : goalOverdueDays(g);
+  if (overdueDays > 0) {
+    li.classList.add('is-overdue');
+    const od = document.createElement('span');
+    od.className = 'goal-overdue-tag';
+    od.textContent = `overdue · ${overdueDays}d`;
+    od.title = `Carried over — first added ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago`;
+    main.appendChild(od);
+  }
 
   if (isSundayResetGoal(g)) {
     const tag = document.createElement('span');
@@ -322,6 +390,9 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
   del.textContent = '×';
   del.title = 'Delete goal';
   del.addEventListener('click', () => {
+    // A carried-over goal also lives on earlier days; dismiss its id so
+    // rollover doesn't just bring it back tomorrow.
+    if (key === todayKey() && goalAppearsEarlier(g)) dismissGoal(g.id);
     mutate((arr, i) => { arr.splice(i, 1); });
   });
   li.appendChild(del);

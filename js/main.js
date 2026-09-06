@@ -153,7 +153,7 @@ function storeSet(key, value) {
   if (key.startsWith('goals:')) {
     window.dispatchEvent(new CustomEvent('goals-changed'));
     _syncGoals(key.slice(6), value);
-  } else if (key === 'goal_streak_v1' || key === 'goal_rollover_v1') {
+  } else if (key === 'goal_streak_v1' || key === 'goal_dismissed_v1') {
     _syncSetting(key, value);
   }
 }
