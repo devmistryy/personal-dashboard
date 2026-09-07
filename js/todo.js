@@ -185,13 +185,30 @@ function dismissGoal(id) {
   storeSet('goal_dismissed_v1', list.concat(id));
 }
 
-// True when this goal id also sits on an earlier day — i.e. it was carried
-// forward, so deleting it from today should dismiss it.
+// True when this goal also sits on an earlier day — i.e. it was carried
+// forward, so deleting it from today should dismiss + purge it. Matches the
+// same way _goalInList does (id, or an unfinished text match) so it still
+// fires when a pre-gid row's id drifted between loads.
 function goalAppearsEarlier(g) {
-  if (!g.id) return false;
   const active = getActiveDateString();
   return storeListKeys('goals:').some(k =>
-    k.slice(6) < active && (storeGet(k) || []).some(x => x.id === g.id));
+    k.slice(6) < active && (storeGet(k) || []).some(x =>
+      (g.id && x.id && x.id === g.id) || (!x.done && x.text === g.text)));
+}
+
+// Drop every earlier-day copy of a goal being deleted off today — the ones
+// rollover would otherwise carry straight back. Matches by id, and by text for
+// unfinished copies whose id drifted (pre-gid rows are re-minted each load).
+// Completed copies stay put as real history.
+function purgeGoalHistory(g) {
+  const active = getActiveDateString();
+  storeListKeys('goals:').forEach(k => {
+    if (k.slice(6) >= active) return;
+    const arr = storeGet(k) || [];
+    const next = arr.filter(x =>
+      !((g.id && x.id && x.id === g.id) || (!x.done && x.text === g.text)));
+    if (next.length !== arr.length) storeSet(k, next);
+  });
 }
 
 // Whole days a still-unfinished goal has already spent on earlier lists — how
@@ -390,9 +407,13 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
   del.textContent = '×';
   del.title = 'Delete goal';
   del.addEventListener('click', () => {
-    // A carried-over goal also lives on earlier days; dismiss its id so
-    // rollover doesn't just bring it back tomorrow.
-    if (key === todayKey() && goalAppearsEarlier(g)) dismissGoal(g.id);
+    // A carried-over goal also lives on earlier days. Dismiss its id AND purge
+    // those copies, so rollover can't resurrect it after a reload even if the
+    // dismissed id no longer matches (pre-gid rows drift on each load).
+    if (key === todayKey() && goalAppearsEarlier(g)) {
+      dismissGoal(g.id);
+      if (!isSundayResetGoal(g)) purgeGoalHistory(g);
+    }
     mutate((arr, i) => { arr.splice(i, 1); });
   });
   li.appendChild(del);

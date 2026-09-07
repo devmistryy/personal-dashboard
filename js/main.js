@@ -687,18 +687,31 @@ async function loadFromSupabase() {
     MEM[k].push(l.habit_id);
   });
 
+  // Rows written before the gid migration have gid = null. Without a stable
+  // id, _normalizeGoals mints a fresh one every load, so rollover dedup and
+  // "dismiss on delete" (goal_dismissed_v1 is keyed by id) never stick — a
+  // deleted overdue goal reappears on the next reload. Mint the id once here
+  // and write it back so it's permanent.
+  const gidBackfill = [];
   goals.forEach(g => {
     const k = 'goals:' + g.date;
     if (!MEM[k]) MEM[k] = [];
     // Collapse duplicate rows a failed stale-delete may have left (see
     // _syncGoals). Query is ordered by id, so the earliest row wins.
     if (g.gid && MEM[k].some(x => x.id === g.gid)) return;
-    const goal = { id: g.gid || _goalId(), text: g.text, done: g.done,
+    const gid = g.gid || _goalId();
+    const goal = { id: gid, text: g.text, done: g.done,
       area: g.area || null, priority: g.priority || 'Medium',
       createdAt: g.created_at || null };
     if (g.done_at) goal.doneAt = g.done_at;
     MEM[k].push(goal);
+    if (!g.gid) gidBackfill.push({ ...g, gid });
   });
+
+  if (!LOCAL_MODE && gidBackfill.length) {
+    const { error } = await sb.from('goals').upsert(gidBackfill);
+    if (error) console.error('[sync] goal gid backfill failed (run master.sql?):', error);
+  }
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
 
