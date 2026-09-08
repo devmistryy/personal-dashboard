@@ -130,7 +130,7 @@
   }
 
   .mob-form { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-  .mob-form .goal-input { font-size: 13px; }
+  .mob-form .task-input { font-size: 13px; }
 
   .mob-modal-actions {
     display: flex; align-items: center; gap: 12px;

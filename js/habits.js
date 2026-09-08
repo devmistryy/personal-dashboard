@@ -17,9 +17,9 @@ function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
 function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
 
 // ── Step-linked habits ──
-// A habit with autoSource === 'steps' + a numeric autoGoal is auto-checked once
+// A habit with autoSource === 'steps' + a numeric stepTarget is auto-checked once
 // per day when that day's step count (getStepCount, from the step_counts feed)
-// clears the goal. It only ever ADDS a check-in, and only once per (habit, day)
+// clears the target. It only ever ADDS a check-in, and only once per (habit, day)
 // — tracked in the `step_autocheck_v1` settings blob — so a manual uncheck
 // afterwards sticks. Runs from main.js (_enterApp) and when the link changes.
 function _stepAutocheckApplied() {
@@ -35,7 +35,7 @@ function _saveStepAutocheckApplied(keys) {
 function _reconcileStepHabits() {
   if (typeof getStepCount !== 'function') return;
   const linked = getHabits().filter(h =>
-    h.autoSource === 'steps' && Number(h.autoGoal) > 0 && !h.archived);
+    h.autoSource === 'steps' && Number(h.stepTarget) > 0 && !h.archived);
   if (!linked.length) return;
   const applied = new Set(_stepAutocheckApplied());
   const dates = [habitDateStr(0), habitDateStr(-1)];
@@ -46,7 +46,7 @@ function _reconcileStepHabits() {
       const key = h.id + ':' + ds;
       if (applied.has(key)) return;
       const steps = getStepCount(ds);
-      if (steps == null || steps < Number(h.autoGoal)) return;
+      if (steps == null || steps < Number(h.stepTarget)) return;
       const log = getHabitLog(ds);
       if (!log.includes(h.id)) { log.push(h.id); saveHabitLog(ds, log); }
       applied.add(key);
@@ -268,11 +268,11 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     nameCol.appendChild(barWrap);
   }
 
-  // Step-linked habits: today's step count vs goal
-  if (!isArchived && habit.autoSource === 'steps' && Number(habit.autoGoal) > 0) {
-    const goal = Number(habit.autoGoal);
+  // Step-linked habits: today's step count vs target
+  if (!isArchived && habit.autoSource === 'steps' && Number(habit.stepTarget) > 0) {
+    const target = Number(habit.stepTarget);
     const steps = typeof getStepCount === 'function' ? getStepCount(today) : null;
-    const stepPct = steps == null ? 0 : Math.min(100, steps / goal * 100);
+    const stepPct = steps == null ? 0 : Math.min(100, steps / target * 100);
     const sWrap = document.createElement('div');
     sWrap.className = 'habit-progress-wrap habit-step-wrap';
     const sFill = document.createElement('div');
@@ -283,8 +283,8 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     const sLabel = document.createElement('div');
     sLabel.className = 'habit-step-label';
     sLabel.textContent = steps == null
-      ? `steps: — / ${goal.toLocaleString()}`
-      : `${steps.toLocaleString()} / ${goal.toLocaleString()} steps`;
+      ? `steps: — / ${target.toLocaleString()}`
+      : `${steps.toLocaleString()} / ${target.toLocaleString()} steps`;
     nameCol.appendChild(sLabel);
   }
 
@@ -717,7 +717,7 @@ function renderHabitDetailPage(habit, allHabits) {
       <div class="habit-steplink-head">
         <div>
           <div class="habit-detail-checkin-label">Auto-check from step count</div>
-          <div class="habit-detail-checkin-sub">Ticks this habit once a day when steps reach the goal</div>
+          <div class="habit-detail-checkin-sub">Ticks this habit once a day when steps reach the target</div>
         </div>
         <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
           <input type="checkbox" id="habitStepToggle" ${habit.autoSource === 'steps' ? 'checked' : ''}>
@@ -726,9 +726,9 @@ function renderHabitDetailPage(habit, allHabits) {
       </div>
       <div class="habit-steplink-body" id="habitStepBody"${habit.autoSource === 'steps' ? '' : ' hidden'}>
         <div class="habit-detail-row-field">
-          <span class="habit-detail-start-label">Daily step goal</span>
-          <input type="number" class="habit-detail-start-input" id="habitStepGoal"
-            value="${Number(habit.autoGoal) > 0 ? habit.autoGoal : 8000}" min="500" step="500">
+          <span class="habit-detail-start-label">Daily step target</span>
+          <input type="number" class="habit-detail-start-input" id="habitStepTarget"
+            value="${Number(habit.stepTarget) > 0 ? habit.stepTarget : 8000}" min="500" step="500">
         </div>
         <div class="habit-steplink-today" id="habitStepToday"></div>
         <div class="habit-steplink-sync">
@@ -794,7 +794,7 @@ function renderHabitDetailPage(habit, allHabits) {
     // Step-count link
     const _stepToggle = document.getElementById('habitStepToggle');
     const _stepBody   = document.getElementById('habitStepBody');
-    const _stepGoal   = document.getElementById('habitStepGoal');
+    const _stepTarget   = document.getElementById('habitStepTarget');
     const _stepToday  = document.getElementById('habitStepToday');
     const _stepUrlEl  = document.getElementById('habitStepUrl');
     const _stepTokEl  = document.getElementById('habitStepToken');
@@ -803,7 +803,7 @@ function renderHabitDetailPage(habit, allHabits) {
       _stepUrlEl.textContent = STEP_SYNC_URL;
       _stepTokEl.textContent = getStepIngestToken();
       const s = getStepCount(today);
-      const g = Number(_stepGoal.value) || Number(habit.autoGoal) || 0;
+      const g = Number(_stepTarget.value) || Number(habit.stepTarget) || 0;
       _stepToday.textContent = s == null
         ? 'No steps synced yet today.'
         : `Today: ${s.toLocaleString()}${g ? ' / ' + g.toLocaleString() : ''} steps${g && s >= g ? '  ✓' : ''}`;
@@ -813,7 +813,7 @@ function renderHabitDetailPage(habit, allHabits) {
     _stepToggle.addEventListener('change', () => {
       if (_stepToggle.checked) {
         habit.autoSource = 'steps';
-        habit.autoGoal = Math.max(1, Math.round(Number(_stepGoal.value) || 8000));
+        habit.stepTarget = Math.max(1, Math.round(Number(_stepTarget.value) || 8000));
         _stepBody.hidden = false;
         _paintStepSync();
       } else {
@@ -825,20 +825,20 @@ function renderHabitDetailPage(habit, allHabits) {
       renderHabitDetailPage(habit, allHabits);
     });
 
-    const _saveStepGoal = () => {
-      const g = Math.max(1, Math.round(Number(_stepGoal.value) || 0));
-      _stepGoal.value = g;
-      if (habit.autoSource === 'steps' && g !== habit.autoGoal) {
-        habit.autoGoal = g;
+    const _saveStepTarget = () => {
+      const g = Math.max(1, Math.round(Number(_stepTarget.value) || 0));
+      _stepTarget.value = g;
+      if (habit.autoSource === 'steps' && g !== habit.stepTarget) {
+        habit.stepTarget = g;
         saveHabits(allHabits);
         _reconcileStepHabits();
         renderHabits();
       }
       _paintStepSync();
     };
-    _stepGoal.addEventListener('blur', _saveStepGoal);
-    _stepGoal.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); _stepGoal.blur(); }
+    _stepTarget.addEventListener('blur', _saveStepTarget);
+    _stepTarget.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); _stepTarget.blur(); }
     });
 
     _stepBody.querySelectorAll('.habit-steplink-copy').forEach(btn => {

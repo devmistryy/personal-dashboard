@@ -2,9 +2,9 @@
 // Loaded before main.js.
 
 // ── Areas ──
-function getAllGoalAreas() {
+function getAllTaskAreas() {
   const all = [];
-  goalScopeKeys().forEach(k => {
+  taskScopeKeys().forEach(k => {
     (storeGet(k) || []).forEach(g => { if (g.area) all.push(g.area); });
   });
   return all;
@@ -48,12 +48,12 @@ function renderAreaDetail() {
     saveAreaNotes(newName, notes);
     delete MEM['area_notes:' + name];
     _syncSetting('area_notes:' + name, []);   // clear the old row server-side
-    // update goals
-    goalScopeKeys().forEach(k => {
-      const goals = storeGet(k) || [];
+    // update tasks
+    taskScopeKeys().forEach(k => {
+      const tasks = storeGet(k) || [];
       let changed = false;
-      goals.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
-      if (changed) storeSet(k, goals);
+      tasks.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
+      if (changed) storeSet(k, tasks);
     });
     _currentAreaName = newName;
   };
@@ -90,23 +90,23 @@ function renderAreaDetail() {
     colorRow.appendChild(sw);
   });
 
-  renderAreaGoals();
+  renderAreaTasks();
   renderAreaHabits();
   renderAreaNotes();
 }
 
-function renderAreaGoals() {
+function renderAreaTasks() {
   const name = _currentAreaName;
-  const wrap = document.getElementById('areaDetailGoals');
+  const wrap = document.getElementById('areaDetailTasks');
   wrap.innerHTML = '';
   const titleEl = document.createElement('div');
   titleEl.className = 'habit-detail-section-title';
   titleEl.style.marginBottom = '16px';
-  titleEl.textContent = 'Goals';
+  titleEl.textContent = 'Tasks';
   wrap.appendChild(titleEl);
   const all = [];
   const active = getActiveDateString();
-  goalScopeKeys().forEach(k => {
+  taskScopeKeys().forEach(k => {
     const date = k.slice(6);
     const label = date === active ? 'Today' : formatDate(date);
     (storeGet(k) || []).filter(g => g.area === name).forEach(g => all.push({ g, label }));
@@ -114,20 +114,20 @@ function renderAreaGoals() {
   if (all.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'area-detail-empty';
-    empty.textContent = 'No goals assigned to this area yet.';
+    empty.textContent = 'No tasks assigned to this area yet.';
     wrap.appendChild(empty);
     return;
   }
   all.forEach(({ g, label }) => {
     const row = document.createElement('div');
-    row.className = 'area-detail-goal-row';
+    row.className = 'area-detail-task-row';
     const cb = document.createElement('div');
-    cb.className = 'area-detail-goal-cb' + (g.done ? ' done' : '');
+    cb.className = 'area-detail-task-cb' + (g.done ? ' done' : '');
     const txt = document.createElement('span');
-    txt.className = 'area-detail-goal-text' + (g.done ? ' done' : '');
+    txt.className = 'area-detail-task-text' + (g.done ? ' done' : '');
     txt.textContent = g.text;
     const key = document.createElement('span');
-    key.className = 'area-detail-goal-key';
+    key.className = 'area-detail-task-key';
     key.textContent = label;
     row.appendChild(cb); row.appendChild(txt); row.appendChild(key);
     wrap.appendChild(row);
@@ -159,12 +159,12 @@ function renderAreaHabits() {
 
   habits.forEach(h => {
     const row = document.createElement('div');
-    row.className = 'area-detail-goal-row';
+    row.className = 'area-detail-task-row';
     const cb = document.createElement('div');
     const done = todayLog.includes(h.id);
-    cb.className = 'area-detail-goal-cb' + (done ? ' done' : '');
+    cb.className = 'area-detail-task-cb' + (done ? ' done' : '');
     const txt = document.createElement('span');
-    txt.className = 'area-detail-goal-text' + (done ? ' done' : '');
+    txt.className = 'area-detail-task-text' + (done ? ' done' : '');
     txt.textContent = h.name;
     row.appendChild(cb);
     row.appendChild(txt);
@@ -221,17 +221,17 @@ document.getElementById('areaNoteInput').addEventListener('keydown', e => {
 
 document.getElementById('areaDetailDelete').addEventListener('click', () => {
   if (!_currentAreaName) return;
-  if (!confirm(`Delete area "${_currentAreaName}"? Goals assigned to it will lose their area tag.`)) return;
+  if (!confirm(`Delete area "${_currentAreaName}"? Tasks assigned to it will lose their area tag.`)) return;
   const name = _currentAreaName;
   const areas = getAreas();
   const idx = areas.findIndex(a => a.name === name);
   if (idx !== -1) { areas.splice(idx, 1); saveAreas(areas); }
   if (getAreaNotes(name).length) saveAreaNotes(name, []);   // drop this area's notes
-  goalScopeKeys().forEach(k => {
-    const goals = storeGet(k) || [];
+  taskScopeKeys().forEach(k => {
+    const tasks = storeGet(k) || [];
     let changed = false;
-    goals.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });
-    if (changed) storeSet(k, goals);
+    tasks.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });
+    if (changed) storeSet(k, tasks);
   });
   closeAreaDetail();
 });
@@ -248,11 +248,11 @@ function renderAreas() {
     wrap.appendChild(empty);
     return;
   }
-  const allGoalAreas = getAllGoalAreas();
+  const allTaskAreas = getAllTaskAreas();
   let _areaDragFrom = null;
 
   areas.forEach((area, idx) => {
-    const count = allGoalAreas.filter(a => a === area.name).length;
+    const count = allTaskAreas.filter(a => a === area.name).length;
     const card = document.createElement('div');
     card.className = 'area-card';
     card.dataset.idx = idx;

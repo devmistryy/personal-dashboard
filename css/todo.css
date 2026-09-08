@@ -1,24 +1,21 @@
   /* ── To Do List ── */
-  .gm-card {
-    margin-bottom: 14px;
-  }
 
   /* Sort bar (Today + Upcoming) */
-  .goal-sort-bar {
+  .task-sort-bar {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
     margin-bottom: 12px;
   }
-  .goal-sort-bar[hidden] { display: none; }
-  .goal-sort-label {
+  .task-sort-bar[hidden] { display: none; }
+  .task-sort-label {
     font-size: 11px;
     color: var(--text-tertiary);
     font-weight: 500;
     margin-right: 2px;
   }
-  .goal-sort-btn {
+  .task-sort-btn {
     font-size: 11px;
     font-weight: 500;
     padding: 3px 10px;
@@ -30,14 +27,14 @@
     font-family: var(--font-body);
     transition: background .15s, color .15s;
   }
-  .goal-sort-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.05); }
-  .goal-sort-btn.active {
+  .task-sort-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.05); }
+  .task-sort-btn.active {
     background: rgba(255,255,255,0.08);
     color: var(--text-primary);
     border-color: rgba(255,255,255,0.15);
   }
 
-  .gm-header {
+  .tm-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -46,9 +43,9 @@
     margin-bottom: 14px;
   }
 
-  .gm-header-left { display: flex; flex-direction: column; gap: 4px; }
+  .tm-header-left { display: flex; flex-direction: column; gap: 4px; }
 
-  .gm-eyebrow {
+  .tm-eyebrow {
     font-size: 10.5px;
     font-weight: 700;
     letter-spacing: 0.18em;
@@ -57,13 +54,13 @@
     margin-bottom: 6px;
   }
 
-  .gm-progress-row {
+  .tm-progress-row {
     display: flex;
     align-items: baseline;
     gap: 6px;
   }
 
-  .gm-progress-num {
+  .tm-progress-num {
     font-size: 42px;
     font-weight: 700;
     letter-spacing: -0.045em;
@@ -71,13 +68,13 @@
     line-height: 1;
   }
 
-  .gm-progress-total {
+  .tm-progress-total {
     font-family: var(--font-mono);
     font-size: 18px;
     color: var(--text-tertiary);
   }
 
-  .gm-progress-label {
+  .tm-progress-label {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.10em;
@@ -85,7 +82,7 @@
     color: var(--text-tertiary);
   }
 
-  .gm-streak {
+  .tm-streak {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -99,22 +96,22 @@
     border: 1px solid transparent;
   }
 
-  .gm-streak.gm-streak-active {
+  .tm-streak.tm-streak-active {
     background: rgba(242,192,99,0.10);
     color: var(--warning);
     border-color: rgba(242,192,99,0.32);
   }
 
-  .gm-streak-icon { font-size: 13px; }
-  .gm-streak-active .gm-streak-icon { filter: drop-shadow(0 0 6px rgba(242,192,99,0.6)); }
+  .tm-streak-icon { font-size: 13px; }
+  .tm-streak-active .tm-streak-icon { filter: drop-shadow(0 0 6px rgba(242,192,99,0.6)); }
 
-  .gm-streak-num {
+  .tm-streak-num {
     font-family: var(--font-mono);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
 
-  .gm-streak-label {
+  .tm-streak-label {
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.10em;
@@ -122,26 +119,26 @@
   }
 
   /* Segmented bar */
-  .gm-bar {
+  .tm-bar {
     display: flex;
     gap: 4px;
     height: 6px;
     margin-bottom: 16px;
   }
-  .gm-bar:empty { display: none; }
-  .gm-bar-seg {
+  .tm-bar:empty { display: none; }
+  .tm-bar-seg {
     flex: 1;
     border-radius: 3px;
     background: rgba(255,255,255,0.08);
     transition: background 0.4s, box-shadow 0.4s;
   }
-  .gm-bar-seg-done {
+  .tm-bar-seg-done {
     background: var(--success);
     box-shadow: 0 0 6px rgba(107,227,164,0.40);
   }
 
-  /* Goal list */
-  .goal-list {
+  /* Task list */
+  .task-list {
     list-style: none;
     margin-bottom: 4px;
   }
@@ -154,7 +151,7 @@
     text-align: center;
   }
 
-  .goal-row {
+  .task-row {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -166,58 +163,58 @@
     transition: background 0.2s;
     position: relative;
   }
-  .goal-priority-high { box-shadow: inset 3px 0 0 0 #E24B4A; }
-  .goal-priority-med  { box-shadow: inset 3px 0 0 0 #EF9F27; }
-  .goal-priority-low  { box-shadow: inset 3px 0 0 0 #52C97A; }
-  .goal-priority-btn {
+  .task-priority-high { box-shadow: inset 3px 0 0 0 #E24B4A; }
+  .task-priority-med  { box-shadow: inset 3px 0 0 0 #EF9F27; }
+  .task-priority-low  { box-shadow: inset 3px 0 0 0 #52C97A; }
+  .task-priority-btn {
     position: absolute; left: 0; top: 0; bottom: 0; width: 18px;
     background: transparent; border: none; cursor: pointer; padding: 0;
     border-radius: 12px 0 0 12px; z-index: 1;
   }
-  .goal-area-pill {
+  .task-area-pill {
     font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px;
     white-space: nowrap; flex-shrink: 0; cursor: pointer; transition: opacity 0.15s;
     background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.5);
   }
-  .goal-area-pill:hover { opacity: 0.8; }
-  .goal-area-pill.is-empty {
+  .task-area-pill:hover { opacity: 0.8; }
+  .task-area-pill.is-empty {
     background: transparent; color: rgba(255,255,255,0.22);
     border: 1px dashed rgba(255,255,255,0.15);
   }
-  .goal-area-wrap { position: relative; flex-shrink: 0; }
-  .goal-area-dd {
+  .task-area-wrap { position: relative; flex-shrink: 0; }
+  .task-area-dd {
     position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
     width: max-content; background: #252528; border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px; overflow: hidden;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   }
-  .goal-area-dd-item {
+  .task-area-dd-item {
     padding: 9px 13px; font-size: 13px; color: rgba(255,255,255,0.8);
     cursor: pointer; display: flex; align-items: center; gap: 8px;
     transition: background 0.12s;
   }
-  .goal-area-dd-item:hover { background: rgba(255,255,255,0.07); }
-  .goal-area-dd-empty {
+  .task-area-dd-item:hover { background: rgba(255,255,255,0.07); }
+  .task-area-dd-empty {
     padding: 12px 13px; font-size: 12px; color: rgba(255,255,255,0.3);
     text-align: center; font-style: italic;
   }
-  .goal-area-dd-divider { border-top: 1px solid rgba(255,255,255,0.07); margin: 2px 0; }
-  .goal-area-dd-new {
+  .task-area-dd-divider { border-top: 1px solid rgba(255,255,255,0.07); margin: 2px 0; }
+  .task-area-dd-new {
     display: flex; align-items: center; gap: 6px;
     padding: 8px 13px; font-size: 12px; color: rgba(255,255,255,0.4); cursor: text;
   }
-  .goal-area-dd-new input {
+  .task-area-dd-new input {
     background: none; border: none; outline: none; font-size: 12px;
     color: rgba(255,255,255,0.75); font-family: inherit; flex: 1;
   }
-  .goal-area-dd-new input::placeholder { color: rgba(255,255,255,0.3); }
+  .task-area-dd-new input::placeholder { color: rgba(255,255,255,0.3); }
 
-  .goal-row:hover { background: rgba(255,255,255,0.055); }
+  .task-row:hover { background: rgba(255,255,255,0.055); }
 
-  .goal-row:hover .goal-drag-handle,
-  .goal-row:hover .goal-delete { opacity: 1; }
+  .task-row:hover .task-drag-handle,
+  .task-row:hover .task-delete { opacity: 1; }
 
-  .goal-drag-handle {
+  .task-drag-handle {
     font-size: 14px;
     width: 14px;
     color: var(--text-tertiary);
@@ -230,14 +227,14 @@
   }
 
   /* Custom checkbox */
-  .goal-cb-wrap {
+  .task-cb-wrap {
     width: 22px;
     height: 22px;
     flex-shrink: 0;
     position: relative;
   }
 
-  .goal-cb-wrap input[type="checkbox"] {
+  .task-cb-wrap input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     width: 100%;
@@ -247,7 +244,7 @@
     margin: 0;
   }
 
-  .goal-cb-box {
+  .task-cb-box {
     width: 22px;
     height: 22px;
     border-radius: 7px;
@@ -259,7 +256,7 @@
     pointer-events: none;
   }
 
-  .goal-cb-box::after {
+  .task-cb-box::after {
     content: '';
     position: absolute;
     top: 4px;
@@ -272,17 +269,17 @@
     transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  .goal-cb-wrap input:checked + .goal-cb-box {
+  .task-cb-wrap input:checked + .task-cb-box {
     background: var(--success);
     border-color: var(--success);
     box-shadow: 0 0 12px rgba(107,227,164,0.40);
   }
 
-  .goal-cb-wrap input:checked + .goal-cb-box::after {
+  .task-cb-wrap input:checked + .task-cb-box::after {
     transform: rotate(45deg) scale(1);
   }
 
-  .goal-text {
+  .task-text {
     flex: 1;
     font-size: 13.5px;
     color: var(--text-primary);
@@ -291,25 +288,25 @@
     min-width: 0;
   }
 
-  .goal-text[contenteditable="true"] {
+  .task-text[contenteditable="true"] {
     outline: 1px solid rgba(255,255,255,0.25);
     border-radius: 4px;
     padding: 2px 4px;
   }
 
-  /* Goal name + its source tag share the row's flexible space so the tag sits
+  /* Task name + its source tag share the row's flexible space so the tag sits
      right after the name, not out by the area pill. */
-  .goal-main {
+  .task-main {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: baseline;
     gap: 8px;
   }
-  .goal-main > .goal-text { flex: 0 1 auto; }
+  .task-main > .task-text { flex: 0 1 auto; }
 
-  /* "sunday reset" source tag, sits just right of the goal name */
-  .goal-source-tag {
+  /* "sunday reset" source tag, sits just right of the task name */
+  .task-source-tag {
     font-size: 10.5px;
     font-weight: 500;
     letter-spacing: 0.02em;
@@ -318,8 +315,8 @@
     flex-shrink: 0;
   }
 
-  /* Overdue (carried-over) goal — amber tag only, row background unchanged */
-  .goal-overdue-tag {
+  /* Overdue (carried-over) task — amber tag only, row background unchanged */
+  .task-overdue-tag {
     font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -328,7 +325,7 @@
     flex-shrink: 0;
   }
 
-  .goal-delete {
+  .task-delete {
     background: none;
     border: none;
     cursor: pointer;
@@ -342,24 +339,24 @@
     line-height: 1;
   }
 
-  .goal-delete:hover { color: var(--danger); }
+  .task-delete:hover { color: var(--danger); }
 
   /* Done row */
-  .goal-row.is-done {
+  .task-row.is-done {
     opacity: 0.45;
     background: rgba(107,227,164,0.04);
   }
-  .goal-row.is-done .goal-text {
+  .task-row.is-done .task-text {
     text-decoration: line-through;
     text-decoration-color: rgba(255,255,255,0.4);
   }
 
   /* All done card */
-  .gm-all-done {
+  .tm-all-done {
     background-image: radial-gradient(ellipse at 50% 0%, rgba(107,227,164,0.08) 0%, transparent 60%);
   }
-  .gm-all-done .gm-progress-num { color: var(--success); }
-  .gm-all-done .gm-progress-label { color: var(--success); }
+  .tm-all-done .tm-progress-num { color: var(--success); }
+  .tm-all-done .tm-progress-label { color: var(--success); }
 
   /* Show more toggle */
   .show-more-row {
@@ -378,7 +375,7 @@
   .show-more-row:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.22); }
 
   /* Input row */
-  .goal-input-wrap {
+  .task-input-wrap {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -388,7 +385,7 @@
     margin-top: 14px;
   }
 
-  .goal-input {
+  .task-input {
     flex: 1;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
@@ -400,11 +397,11 @@
     outline: none;
     transition: border-color 0.2s;
   }
-  .goal-input:focus { border-color: rgba(255,255,255,0.28); }
-  .goal-input::placeholder { color: var(--text-tertiary); }
+  .task-input:focus { border-color: rgba(255,255,255,0.28); }
+  .task-input::placeholder { color: var(--text-tertiary); }
 
   /* Date picker on the Upcoming card */
-  .goal-date-input {
+  .task-date-input {
     flex: 0 0 auto;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
@@ -417,7 +414,7 @@
     color-scheme: dark;
     transition: border-color 0.2s;
   }
-  .goal-date-input:focus { border-color: rgba(255,255,255,0.28); }
+  .task-date-input:focus { border-color: rgba(255,255,255,0.28); }
 
   /* Upcoming card — future days grouped by date */
   .upcoming-list { display: flex; flex-direction: column; }
@@ -436,7 +433,7 @@
   }
   .upcoming-list .upcoming-day:first-child { margin-top: 0; }
   .upcoming-day-count { font-weight: 600; color: var(--text-tertiary); }
-  .upcoming-list .goal-list { margin: 0; }
+  .upcoming-list .task-list { margin: 0; }
 
   .btn-add {
     background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
@@ -477,15 +474,15 @@
   }
 
   /* Tomorrow card specifics */
-  .gm-card-tomorrow .gm-progress-row { display: none; }
+  .tm-card-tomorrow .tm-progress-row { display: none; }
 
-  .gm-tomorrow-sub {
+  .tm-tomorrow-sub {
     font-size: 12px;
     color: var(--text-tertiary);
     margin-top: 2px;
   }
 
-  .gm-tomorrow-count {
+  .tm-tomorrow-count {
     font-family: var(--font-mono);
     font-size: 11px;
     text-transform: uppercase;
@@ -495,10 +492,10 @@
   }
 
   /* Drag over indicator */
-  .goal-row.drag-over { border-top: 2px solid rgba(255,255,255,0.3); }
+  .task-row.drag-over { border-top: 2px solid rgba(255,255,255,0.3); }
 
   /* ── Sunday Reset ── */
-  .gm-header-right {
+  .tm-header-right {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -595,8 +592,8 @@
   }
   .sunday-reset-row { cursor: default; }
 
-  /* Goal history — read-only past days */
-  .goal-history-day {
+  /* Task history — read-only past days */
+  .task-history-day {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -607,22 +604,22 @@
     padding-bottom: 4px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
   }
-  .goal-history-day:first-child { margin-top: 4px; }
-  .goal-history-count {
+  .task-history-day:first-child { margin-top: 4px; }
+  .task-history-count {
     font-weight: 600;
     color: var(--text-tertiary);
   }
 
-  .goal-history-list { margin: 0; }
-  .goal-history-list .goal-row {
+  .task-history-list { margin: 0; }
+  .task-history-list .task-row {
     cursor: default;
     padding-left: 10px;
   }
-  .goal-history-mark {
+  .task-history-mark {
     flex-shrink: 0;
     width: 14px;
     text-align: center;
     color: var(--text-tertiary);
     font-size: 12px;
   }
-  .goal-history-list .goal-row.is-done .goal-history-mark { color: var(--success, #6BE3A4); }
+  .task-history-list .task-row.is-done .task-history-mark { color: var(--success, #6BE3A4); }

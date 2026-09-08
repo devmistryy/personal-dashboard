@@ -12,7 +12,7 @@
 --       or bring back a record deleted after the initial migration.
 --
 --  Storage rule for future tables:
---    • Collections of records (habits, goals, meals, exercises, sessions, …)
+--    • Collections of records (habits, tasks, meals, exercises, sessions, …)
 --      get their own table.
 --    • Per-user scalar prefs / small singletons live in `settings` (key/value).
 --
@@ -21,6 +21,45 @@
 -- ═══════════════════════════════════════════════════════════════
 
 begin;
+
+-- ─────────────────────────────────────────────────────────────
+-- 0. RENAMES (2026-09: "goal" → "task")
+--    Guarded so a fresh install (no old objects) and a re-run (new names
+--    already in place) are both no-ops. Run before the schema section so the
+--    `create table if not exists` blocks below see the renamed objects.
+-- ─────────────────────────────────────────────────────────────
+
+do $$
+begin
+  if exists (select 1 from information_schema.tables
+             where table_schema = 'public' and table_name = 'goals')
+     and not exists (select 1 from information_schema.tables
+             where table_schema = 'public' and table_name = 'tasks') then
+    alter table goals rename to tasks;                 -- data, indexes, PK seq, RLS policy travel with it
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_name = 'tasks' and column_name = 'gid')
+     and not exists (select 1 from information_schema.columns
+             where table_name = 'tasks' and column_name = 'tid') then
+    alter table tasks rename column gid to tid;
+  end if;
+  if exists (select 1 from information_schema.columns
+             where table_name = 'habits' and column_name = 'auto_goal')
+     and not exists (select 1 from information_schema.columns
+             where table_name = 'habits' and column_name = 'step_target') then
+    alter table habits rename column auto_goal to step_target;
+  end if;
+end $$;
+
+-- settings key/value rows: goal_* → task_*  (idempotent — skips a user whose
+-- task_* row already exists, then drops the leftover goal_* row).
+update settings set key = 'task_' || substr(key, 6)
+  where key in ('goal_streak_v1', 'goal_dismissed_v1', 'goal_sort_v1')
+    and not exists (
+      select 1 from settings s2
+      where s2.user_id = settings.user_id
+        and s2.key = 'task_' || substr(settings.key, 6));
+delete from settings where key in ('goal_streak_v1', 'goal_dismissed_v1', 'goal_sort_v1', 'goal_rollover_v1');
 
 -- ─────────────────────────────────────────────────────────────
 -- 1. SCHEMA
@@ -39,14 +78,14 @@ create table if not exists habits (
   sort_order  integer,
   end_of_day  boolean default false,
   auto_source text,                       -- 'steps' when the habit is linked to a data feed
-  auto_goal   integer,                    -- daily threshold that auto-checks the habit
+  step_target integer,                    -- daily step count that auto-checks the habit
   created_at  timestamptz default now()
 );
 alter table habits add column if not exists area        text;
 alter table habits add column if not exists sort_order  integer;
 alter table habits add column if not exists end_of_day  boolean default false;
 alter table habits add column if not exists auto_source text;
-alter table habits add column if not exists auto_goal   integer;
+alter table habits add column if not exists step_target integer;
 alter table habits enable row level security;
 
 -- ───────────────────────── habit_logs ─────────────────────────
@@ -70,8 +109,8 @@ create index if not exists habit_notes_user_habit_idx
   on habit_notes (user_id, habit_id);
 alter table habit_notes enable row level security;
 
--- ─────────────────────────── goals ────────────────────────────
-create table if not exists goals (
+-- ─────────────────────────── tasks ────────────────────────────
+create table if not exists tasks (
   id         bigserial primary key,
   user_id    uuid references auth.users not null,
   date       date not null,
@@ -80,33 +119,33 @@ create table if not exists goals (
   done_at    timestamptz,
   area       text,
   priority   text default 'Medium',
-  gid        text,          -- stable client-generated id (g_…), used for dedup + history
+  tid        text,          -- stable client-generated id (g_…), used for dedup + history
   created_at timestamptz
 );
-alter table goals add column if not exists area       text;
-alter table goals add column if not exists priority   text default 'Medium';
-alter table goals add column if not exists gid        text;
-alter table goals add column if not exists created_at timestamptz;
+alter table tasks add column if not exists area       text;
+alter table tasks add column if not exists priority   text default 'Medium';
+alter table tasks add column if not exists tid        text;
+alter table tasks add column if not exists created_at timestamptz;
 -- Queue feature removed.
-alter table goals drop column if exists queued;
+alter table tasks drop column if exists queued;
 -- done_at migrated bigint(epoch ms) → timestamptz. Guarded so re-runs are no-ops.
 do $$
 begin
   if exists (
     select 1 from information_schema.columns
-    where table_name = 'goals' and column_name = 'done_at' and data_type = 'bigint'
+    where table_name = 'tasks' and column_name = 'done_at' and data_type = 'bigint'
   ) then
-    alter table goals
+    alter table tasks
       alter column done_at type timestamptz
       using case when done_at is null then null
                  else to_timestamp(done_at / 1000.0) end;
   end if;
 end $$;
-alter table goals enable row level security;
+alter table tasks enable row level security;
 
 -- ────────────────────────── settings ──────────────────────────
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
--- Backs: habit_sort_v1, goal_sort_v1, goal_streak_v1, goal_dismissed_v1,
+-- Backs: habit_sort_v1, task_sort_v1, task_streak_v1, task_dismissed_v1,
 --        sunday_reset_v1, sunday_reset_log_v1, areas:list, area_notes:<name>
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
@@ -235,7 +274,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'habits','habit_logs','habit_notes','goals','settings','job_applications','areas',
+    'habits','habit_logs','habit_notes','tasks','settings','job_applications','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs','step_counts'
   ] loop
     if not exists (
@@ -254,7 +293,7 @@ end $$;
 -- ─────────────────────────────────────────────────────────────
 -- Each block filters `settings` to the relevant keys in a subquery FIRST, then
 -- expands the jsonb array — `jsonb_array_elements` errors on non-array values,
--- so it must never see rows like `habit_sort_v1` (a string) or `goal_streak_v1`
+-- so it must never see rows like `habit_sort_v1` (a string) or `task_streak_v1`
 -- (an object). No-op (touches 0 rows) once the source settings rows are gone.
 --
 -- Every block also carries a `not exists (… destination table …)` guard: once a

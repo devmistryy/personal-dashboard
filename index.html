@@ -9,13 +9,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=2">
-<link rel="stylesheet" href="css/todo.css?v=11">
+<link rel="stylesheet" href="css/main.css?v=3">
+<link rel="stylesheet" href="css/todo.css?v=12">
 <link rel="stylesheet" href="css/habits.css?v=17">
 <link rel="stylesheet" href="css/jobs.css?v=1">
-<link rel="stylesheet" href="css/areas.css?v=1">
-<link rel="stylesheet" href="css/diet.css?v=4">
-<link rel="stylesheet" href="css/mobility.css?v=5">
+<link rel="stylesheet" href="css/areas.css?v=2">
+<link rel="stylesheet" href="css/diet.css?v=5">
+<link rel="stylesheet" href="css/mobility.css?v=6">
 </head>
 <body>
 <div class="page-wrap">
@@ -25,18 +25,18 @@
     <button id="signOutBtn" class="btn-signout" style="display:none;">Sign out</button>
   </div>
 
-  <!-- Goal Ticker -->
+  <!-- Task Ticker -->
   <div class="ticker-row">
-    <div class="goal-ticker" id="goalTicker" aria-live="polite" aria-atomic="true">
-      <div class="goal-ticker-led"><span class="goal-ticker-led-dot"></span></div>
-      <div class="goal-ticker-label">GOALS</div>
-      <div class="goal-ticker-stage" id="goalTickerStage">
-        <div class="goal-ticker-row">
-          <span class="goal-ticker-status" data-status="">—</span>
-          <span class="goal-ticker-text">Loading…</span>
+    <div class="task-ticker" id="taskTicker" aria-live="polite" aria-atomic="true">
+      <div class="task-ticker-led"><span class="task-ticker-led-dot"></span></div>
+      <div class="task-ticker-label">TASKS</div>
+      <div class="task-ticker-stage" id="taskTickerStage">
+        <div class="task-ticker-row">
+          <span class="task-ticker-status" data-status="">—</span>
+          <span class="task-ticker-text">Loading…</span>
         </div>
       </div>
-      <div class="goal-ticker-meta" id="goalTickerMeta">0/0</div>
+      <div class="task-ticker-meta" id="taskTickerMeta">0/0</div>
     </div>
   </div>
 
@@ -93,53 +93,53 @@
       <div class="section-title">To Do List</div>
 
       <!-- TODAY card -->
-      <div class="card gm-card" id="todayCard">
-        <div class="gm-header">
-          <div class="gm-header-left">
-            <div class="gm-eyebrow" id="todayLabel">Today —</div>
-            <div class="gm-progress-row">
-              <span class="gm-progress-num" id="gmProgressNum">0</span>
-              <span class="gm-progress-total" id="gmProgressTotal">/ 0</span>
-              <span class="gm-progress-label" id="gmProgressLabel">no goals yet</span>
+      <div class="card" id="todayCard">
+        <div class="tm-header">
+          <div class="tm-header-left">
+            <div class="tm-eyebrow" id="todayLabel">Today —</div>
+            <div class="tm-progress-row">
+              <span class="tm-progress-num" id="tmProgressNum">0</span>
+              <span class="tm-progress-total" id="tmProgressTotal">/ 0</span>
+              <span class="tm-progress-label" id="tmProgressLabel">no tasks yet</span>
             </div>
           </div>
-          <div class="gm-header-right">
-            <button id="goalHistoryBtn" class="sunday-reset-btn">🕓 History</button>
+          <div class="tm-header-right">
+            <button id="taskHistoryBtn" class="sunday-reset-btn">🕓 History</button>
             <button id="sundayResetBtn" class="sunday-reset-btn">↻ Sunday Reset</button>
-            <div class="gm-streak" id="gmStreak">
-              <span class="gm-streak-icon">⚡</span>
-              <span class="gm-streak-num" id="gmStreakNum">0</span>
-              <span class="gm-streak-label">day streak</span>
+            <div class="tm-streak" id="tmStreak">
+              <span class="tm-streak-icon">⚡</span>
+              <span class="tm-streak-num" id="tmStreakNum">0</span>
+              <span class="tm-streak-label">day streak</span>
             </div>
           </div>
         </div>
-        <div class="gm-bar" id="gmBar"></div>
-        <div class="goal-sort-bar" id="todaySortBar"></div>
-        <ul id="goalList" class="goal-list"></ul>
-        <div id="emptyState" class="empty-state">No goals for today yet — add one below.</div>
-        <div class="goal-input-wrap gm-input-wrap">
-          <input type="text" class="goal-input" id="goalInput" placeholder="Add a goal for today…">
-          <button class="btn-add" id="goalAddBtn">+ Add</button>
-          <button class="btn-polish" id="goalPolishBtn">✨ Polish</button>
+        <div class="tm-bar" id="tmBar"></div>
+        <div class="task-sort-bar" id="todaySortBar"></div>
+        <ul id="taskList" class="task-list"></ul>
+        <div id="emptyState" class="empty-state">No tasks for today yet — add one below.</div>
+        <div class="task-input-wrap tm-input-wrap">
+          <input type="text" class="task-input" id="taskInput" placeholder="Add a task for today…">
+          <button class="btn-add" id="taskAddBtn">+ Add</button>
+          <button class="btn-polish" id="taskPolishBtn">✨ Polish</button>
         </div>
         <div class="polish-status" id="polishStatus"></div>
       </div>
 
       <!-- UPCOMING card -->
-      <div class="card gm-card gm-card-tomorrow" id="tomorrowCard">
-        <div class="gm-header">
-          <div class="gm-header-left">
-            <div class="gm-eyebrow" id="tomorrowLabel">Upcoming</div>
-            <div class="gm-tomorrow-sub">Tomorrow and beyond — each day unlocks at 6 AM.</div>
+      <div class="card tm-card-tomorrow" id="tomorrowCard">
+        <div class="tm-header">
+          <div class="tm-header-left">
+            <div class="tm-eyebrow" id="tomorrowLabel">Upcoming</div>
+            <div class="tm-tomorrow-sub">Tomorrow and beyond — each day unlocks at 6 AM.</div>
           </div>
-          <div class="gm-tomorrow-count" id="gmTomorrowCount">0 planned</div>
+          <div class="tm-tomorrow-count" id="tmTomorrowCount">0 planned</div>
         </div>
-        <div class="goal-sort-bar" id="upcomingSortBar"></div>
+        <div class="task-sort-bar" id="upcomingSortBar"></div>
         <div id="upcomingList" class="upcoming-list"></div>
         <div id="tomorrowEmptyState" class="empty-state">Nothing planned ahead yet.</div>
-        <div class="goal-input-wrap gm-input-wrap">
-          <input type="date" class="goal-date-input" id="plannerDateInput" aria-label="Goal date">
-          <input type="text" class="goal-input" id="tomorrowInput" placeholder="Add a goal for tomorrow…">
+        <div class="task-input-wrap tm-input-wrap">
+          <input type="date" class="task-date-input" id="plannerDateInput" aria-label="Task date">
+          <input type="text" class="task-input" id="tomorrowInput" placeholder="Add a task for tomorrow…">
           <button class="btn-add" id="tomorrowAddBtn">+ Add</button>
           <button class="btn-polish" id="tomorrowPolishBtn">✨ Polish</button>
         </div>
@@ -152,7 +152,7 @@
   <div class="tab-panel" id="tab-habits">
     <div class="section">
       <div class="section-title">Habit Calendar</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="hcal">
           <div class="hcal-nav">
             <button class="hcal-nav-btn" id="hcalPrev">←</button>
@@ -166,7 +166,7 @@
 
     <div class="section">
       <div class="section-title">Habit Tracker</div>
-      <div class="card gm-card" id="habitCard">
+      <div class="card" id="habitCard">
         <div class="habit-sort-bar">
           <span class="habit-sort-label">Sort by</span>
           <button class="habit-sort-btn active" data-sort="custom">Custom</button>
@@ -188,7 +188,7 @@
         <!-- Add form -->
         <div class="habit-add-form">
           <div class="habit-add-row">
-            <input type="text" class="goal-input" id="habitInput" placeholder="Add a habit…" style="flex:1;">
+            <input type="text" class="task-input" id="habitInput" placeholder="Add a habit…" style="flex:1;">
             <button class="btn-add" id="habitAddBtn">+ Add</button>
           </div>
           <div class="habit-date-wrap">
@@ -204,7 +204,7 @@
   <div class="tab-panel" id="tab-jobs">
     <div class="section">
       <div class="section-title">Job Applications</div>
-      <div class="card gm-card" style="padding:0;overflow:hidden;">
+      <div class="card" style="padding:0;overflow:hidden;">
         <div class="job-sort-bar">
           <span class="job-sort-label">Sort by</span>
           <button class="job-sort-btn active" data-sort="date">Date</button>
@@ -248,7 +248,7 @@
   <div class="tab-panel" id="tab-diet">
     <div class="section">
       <div class="section-title">Log a Meal</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="diet-form">
           <div class="diet-import-row">
             <button class="btn-polish" id="dietImportBtn" type="button">⬆ Import from screenshot</button>
@@ -261,7 +261,7 @@
             <input type="number" class="habit-date-input diet-cal-input" id="dietCalories"
               placeholder="Calories (optional)" min="0" step="1">
           </div>
-          <input type="text" class="goal-input" id="dietDesc" placeholder="What did you eat?">
+          <input type="text" class="task-input" id="dietDesc" placeholder="What did you eat?">
           <div class="diet-field">
             <span class="diet-field-label">Macros (optional, grams)</span>
             <div class="diet-form-row diet-macro-row">
@@ -278,7 +278,7 @@
             <span class="diet-field-label">Healthy ingredients in this meal</span>
             <div class="diet-chips" id="dietHealthyChips"></div>
             <div class="diet-ingredient-add">
-              <input type="text" class="goal-input" id="dietHealthyInput" placeholder="Add a healthy ingredient (e.g. Spinach)…">
+              <input type="text" class="task-input" id="dietHealthyInput" placeholder="Add a healthy ingredient (e.g. Spinach)…">
               <button class="btn-add" id="dietHealthyAdd" type="button">+ Add</button>
             </div>
           </div>
@@ -286,7 +286,7 @@
             <span class="diet-field-label">Unhealthy foods in this meal</span>
             <div class="diet-chips" id="dietUnhealthyChips"></div>
             <div class="diet-ingredient-add">
-              <input type="text" class="goal-input" id="dietUnhealthyInput" placeholder="Add an unhealthy food (e.g. Donut)…">
+              <input type="text" class="task-input" id="dietUnhealthyInput" placeholder="Add an unhealthy food (e.g. Donut)…">
               <button class="btn-add" id="dietUnhealthyAdd" type="button">+ Add</button>
             </div>
           </div>
@@ -300,7 +300,7 @@
 
     <div class="section">
       <div class="section-title">Meal History</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="diet-seg-bar" id="dietHistoryFilter"></div>
         <div id="dietHistoryList"></div>
       </div>
@@ -308,7 +308,7 @@
 
     <div class="section">
       <div class="section-title">Healthy Ingredients vs Unhealthy Foods</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="diet-seg-bar" id="dietFoodRange"></div>
         <div id="dietFoodFeedback"></div>
         <div class="diet-food-cols">
@@ -316,7 +316,7 @@
             <div class="diet-field-label">Healthy ingredients</div>
             <div id="dietHealthyManage"></div>
             <div class="diet-add-row">
-              <input type="text" class="goal-input" id="dietHealthyListInput" placeholder="Add an ingredient…">
+              <input type="text" class="task-input" id="dietHealthyListInput" placeholder="Add an ingredient…">
               <button class="btn-add" id="dietHealthyListAdd" type="button">+ Add</button>
             </div>
           </div>
@@ -324,7 +324,7 @@
             <div class="diet-field-label">Unhealthy foods</div>
             <div id="dietUnhealthyManage"></div>
             <div class="diet-add-row">
-              <input type="text" class="goal-input" id="dietUnhealthyListInput" placeholder="Add a food…">
+              <input type="text" class="task-input" id="dietUnhealthyListInput" placeholder="Add a food…">
               <button class="btn-add" id="dietUnhealthyListAdd" type="button">+ Add</button>
             </div>
           </div>
@@ -334,7 +334,7 @@
 
     <div class="section">
       <div class="section-title">Category Breakdown</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="diet-seg-bar" id="dietCatRange"></div>
         <div id="dietCatBreakdown"></div>
       </div>
@@ -345,7 +345,7 @@
   <div class="tab-panel" id="tab-mobility">
     <div class="section">
       <div class="section-title">Today's Routine</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="mob-today-head">
           <span class="mob-today-day" id="mobTodayDay">—</span>
           <span class="mob-today-sub" id="mobTodaySub"></span>
@@ -365,7 +365,7 @@
 
     <div class="section">
       <div class="section-title">This Week</div>
-      <div class="card gm-card">
+      <div class="card">
         <div class="mob-week-grid" id="mobWeekGrid"></div>
         <div class="mob-week-detail" id="mobWeekDetail" hidden></div>
       </div>
@@ -373,7 +373,7 @@
 
     <div class="section">
       <div class="section-title">Exercises</div>
-      <div class="card gm-card">
+      <div class="card">
         <button class="mob-add-cta" id="mobOpenAddBtn" type="button">+ Add exercise</button>
         <div class="mob-list" id="mobList"></div>
       </div>
@@ -419,7 +419,7 @@
       <h2 class="habit-detail-name" id="areaDetailName" contenteditable="true" spellcheck="false" style="margin:0;flex:1;"></h2>
       <div id="areaDetailColorRow" style="display:flex;gap:7px;flex-wrap:wrap;"></div>
     </div>
-    <div id="areaDetailGoals" class="area-detail-panel"></div>
+    <div id="areaDetailTasks" class="area-detail-panel"></div>
     <div id="areaDetailHabits" class="area-detail-panel" style="margin-top:28px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.06);"></div>
     <div id="areaDetailNotes" class="area-detail-panel" style="margin-top:28px;padding-top:24px;">
       <div class="habit-detail-section-title" style="margin-bottom:16px;">Notes</div>
@@ -489,11 +489,11 @@
   </div>
 </div>
 
-<div id="goalHistoryModal" class="sr-modal">
-  <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Goal history">
-    <button id="goalHistoryClose" class="sr-modal-close" aria-label="Close">×</button>
-    <h2 class="sr-modal-title">Goal history</h2>
-    <div id="goalHistoryBody"></div>
+<div id="taskHistoryModal" class="sr-modal">
+  <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Task history">
+    <button id="taskHistoryClose" class="sr-modal-close" aria-label="Close">×</button>
+    <h2 class="sr-modal-title">Task history</h2>
+    <div id="taskHistoryBody"></div>
   </div>
 </div>
 
@@ -502,7 +502,7 @@
     <button id="mobModalClose" class="sr-modal-close" aria-label="Close">×</button>
     <h2 class="sr-modal-title" id="mobModalTitle">Add exercise</h2>
     <div class="mob-form">
-      <input type="text" class="goal-input" id="mobName" placeholder="Exercise name (e.g. Couch stretch)">
+      <input type="text" class="task-input" id="mobName" placeholder="Exercise name (e.g. Couch stretch)">
       <div class="mob-field">
         <span class="mob-field-label">When</span>
         <div class="mob-seg" id="mobSessionBtns"></div>
@@ -544,12 +544,12 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=15"></script>
-<script src="js/habits.js?v=19"></script>
+<script src="js/todo.js?v=16"></script>
+<script src="js/habits.js?v=20"></script>
 <script src="js/jobs.js?v=2"></script>
-<script src="js/areas.js?v=3"></script>
+<script src="js/areas.js?v=4"></script>
 <script src="js/diet.js?v=9"></script>
 <script src="js/mobility.js?v=7"></script>
-<script src="js/main.js?v=20"></script>
+<script src="js/main.js?v=21"></script>
 </body>
 </html>

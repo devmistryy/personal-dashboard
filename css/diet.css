@@ -67,7 +67,7 @@
   .diet-chip-unhealthy.active { background: rgba(226,75,74,0.28);  border-color: rgba(226,75,74,0.6);  color: #fff; }
 
   .diet-ingredient-add { display: flex; gap: 8px; margin-top: 2px; }
-  .diet-ingredient-add .goal-input { font-size: 12.5px; padding: 9px 12px; }
+  .diet-ingredient-add .task-input { font-size: 12.5px; padding: 9px 12px; }
 
   .diet-form-actions {
     display: flex; align-items: center; gap: 12px;

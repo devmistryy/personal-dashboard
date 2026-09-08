@@ -2,7 +2,7 @@
 
 Build a single self-contained HTML file called `dashboard.html`. It must work when double-clicked from the desktop or opened via VS Code Live Server — no build step, no npm, no external CSS or JS. All styles inline in `<style>`, all JavaScript inline in one `<script>` tag at the bottom.
 
-The file has four components stacked vertically: a **Page title** at the very top, then a **Goal Ticker** strip, then a **Day Ring**, then a **To Do List** section.
+The file has four components stacked vertically: a **Page title** at the very top, then a **Task Ticker** strip, then a **Day Ring**, then a **To Do List** section.
 
 ---
 
@@ -29,29 +29,29 @@ A single `<h1 class="dash-title">My Dashboard</h1>` at the very top of the body.
 
 ---
 
-## Component 2 — Goal Ticker (NASDAQ-style strip)
+## Component 2 — Task Ticker (NASDAQ-style strip)
 
-A horizontal strip below the title that cycles through today's pending goals one at a time, every 5 seconds, with vertical slide-in / slide-out animations. Looks like a stock ticker / LED board.
+A horizontal strip below the title that cycles through today's pending tasks one at a time, every 5 seconds, with vertical slide-in / slide-out animations. Looks like a stock ticker / LED board.
 
 **Structure** (inside a wrapper `.ticker-row` with 18px bottom margin, 4px gap, single column):
 
 ```
-<div class="goal-ticker" id="goalTicker" aria-live="polite" aria-atomic="true">
-  <div class="goal-ticker-led"><span class="goal-ticker-led-dot"></span></div>
-  <div class="goal-ticker-label">GOALS</div>
-  <div class="goal-ticker-stage" id="goalTickerStage">
-    <div class="goal-ticker-row">
-      <span class="goal-ticker-status" data-status="">—</span>
-      <span class="goal-ticker-text">Loading…</span>
+<div class="task-ticker" id="taskTicker" aria-live="polite" aria-atomic="true">
+  <div class="task-ticker-led"><span class="task-ticker-led-dot"></span></div>
+  <div class="task-ticker-label">TASKS</div>
+  <div class="task-ticker-stage" id="taskTickerStage">
+    <div class="task-ticker-row">
+      <span class="task-ticker-status" data-status="">—</span>
+      <span class="task-ticker-text">Loading…</span>
     </div>
   </div>
-  <div class="goal-ticker-meta" id="goalTickerMeta">0/0</div>
+  <div class="task-ticker-meta" id="taskTickerMeta">0/0</div>
 </div>
 ```
 
 **Styling**
 
-- `.goal-ticker` — flex row, 10px gap, 7px×12px padding, 12px radius, dark glass background using a layered gradient + repeating scan-line texture for the LED-board feel:
+- `.task-ticker` — flex row, 10px gap, 7px×12px padding, 12px radius, dark glass background using a layered gradient + repeating scan-line texture for the LED-board feel:
   ```
   background:
     linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.30) 100%);
@@ -62,35 +62,35 @@ A horizontal strip below the title that cycles through today's pending goals one
   position: relative; overflow: hidden;
   ```
 - A `::after` pseudo-element drifts a soft white sweep across the strip every 8s (left -40% → 110%) — `linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)`, 30% wide, full height.
-- `.goal-ticker-led-dot` — a 7×7 green dot (`#6BE3A4`) with `box-shadow: 0 0 8px rgba(107,227,164,0.7)` and a 1.6s pulse animation that drops opacity to 0.45 and scales to 0.85 at the midpoint.
-- `.goal-ticker-label` — the word `GOALS`. 9.5px mono, weight 800, 0.18em tracking, tertiary text.
-- `.goal-ticker-stage` — flex 1, 22px tall, `position: relative; overflow: hidden;` so rows can slide in/out within it.
-- `.goal-ticker-row` — flex row inside the stage. 22px tall, 8px gap, 12.5px mono, weight 600, tabular nums, primary white text. `white-space: nowrap`.
-- `.goal-ticker-status` — 18px wide flex slot for the status glyph. `data-status="done"` → `#6BE3A4`, `pending` → tertiary, `empty` → tertiary. Glyphs: `done` = `✓`, `pending` = `○`, otherwise `·`.
-- `.goal-ticker-text` — flex 1, ellipsis on overflow.
-- `.goal-ticker-meta` — the small right-side counter pill (`0/3`, `2/5`, etc.). 11px mono weight 700, tabular, secondary text, 0.04em tracking, 3px×8px padding, fully rounded, `rgba(255,255,255,0.04)` background.
+- `.task-ticker-led-dot` — a 7×7 green dot (`#6BE3A4`) with `box-shadow: 0 0 8px rgba(107,227,164,0.7)` and a 1.6s pulse animation that drops opacity to 0.45 and scales to 0.85 at the midpoint.
+- `.task-ticker-label` — the word `TASKS`. 9.5px mono, weight 800, 0.18em tracking, tertiary text.
+- `.task-ticker-stage` — flex 1, 22px tall, `position: relative; overflow: hidden;` so rows can slide in/out within it.
+- `.task-ticker-row` — flex row inside the stage. 22px tall, 8px gap, 12.5px mono, weight 600, tabular nums, primary white text. `white-space: nowrap`.
+- `.task-ticker-status` — 18px wide flex slot for the status glyph. `data-status="done"` → `#6BE3A4`, `pending` → tertiary, `empty` → tertiary. Glyphs: `done` = `✓`, `pending` = `○`, otherwise `·`.
+- `.task-ticker-text` — flex 1, ellipsis on overflow.
+- `.task-ticker-meta` — the small right-side counter pill (`0/3`, `2/5`, etc.). 11px mono weight 700, tabular, secondary text, 0.04em tracking, 3px×8px padding, fully rounded, `rgba(255,255,255,0.04)` background.
 - Two animations for the row swap:
   ```
-  .goal-ticker-row.is-leaving  → ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards
-  .goal-ticker-row.is-entering → ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards
+  .task-ticker-row.is-leaving  → ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards
+  .task-ticker-row.is-entering → ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards
   ```
   `ticker-leave`: opacity 1 → 0, translateY 0 → -100%. `ticker-enter`: opacity 0 → 1, translateY 100% → 0.
 - On screens ≤ 480px: padding 9px×12px, label 9px / 0.14em, row text 12px, meta 10px / 2px×7px.
 
 **Behavior**
 
-- The ticker reads today's goal list (the same `goals:YYYY-MM-DD` localStorage key the To Do List uses) and builds an `items` array:
-  - If `total === 0`: a single placeholder item `{ status: 'empty', text: 'No goals set for today — add one to get rolling.' }`.
-  - Else if every goal is done: a single celebration item `{ status: 'done', text: '✓ All goals done — solid day.' }`.
-  - Else: one item per pending (unchecked) goal — `{ status: 'pending', text: g.text }`. Done goals are skipped — once you check it off, it drops out of the rotation.
-- The right-side `meta` pill always shows overall progress as `done/total` (e.g. `2/5`), even when only pending goals are rotating through, so completed work is still visible.
+- The ticker reads today's task list (the same `tasks:YYYY-MM-DD` localStorage key the To Do List uses) and builds an `items` array:
+  - If `total === 0`: a single placeholder item `{ status: 'empty', text: 'No tasks set for today — add one to get rolling.' }`.
+  - Else if every task is done: a single celebration item `{ status: 'done', text: '✓ All tasks done — solid day.' }`.
+  - Else: one item per pending (unchecked) task — `{ status: 'pending', text: g.text }`. Done tasks are skipped — once you check it off, it drops out of the rotation.
+- The right-side `meta` pill always shows overall progress as `done/total` (e.g. `2/5`), even when only pending tasks are rotating through, so completed work is still visible.
 - `tick()` shows the current item, advances `cycleIdx`, and updates `meta`. Each call swaps the row: stamp the existing row with `is-leaving` (and remove it from the DOM after 460ms), append a fresh row with `is-entering`. On the very first render there's no leaving row, so just drop the entering one in without the animation class.
 - `start()` runs `tick()` immediately, then `setInterval(tick, 5000)`.
-- **Stay in sync with edits.** When the To Do List `storeSet`s any `goals:`-prefixed key, fire a custom event:
+- **Stay in sync with edits.** When the To Do List `storeSet`s any `tasks:`-prefixed key, fire a custom event:
   ```
-  window.dispatchEvent(new CustomEvent('goals-changed'));
+  window.dispatchEvent(new CustomEvent('tasks-changed'));
   ```
-  The ticker listens for `goals-changed` and re-runs `tick()` immediately (resetting `cycleIdx` to 0) so adding/checking/deleting/reordering a goal updates the strip instantly instead of waiting up to 5 seconds.
+  The ticker listens for `tasks-changed` and re-runs `tick()` immediately (resetting `cycleIdx` to 0) so adding/checking/deleting/reordering a task updates the strip instantly instead of waiting up to 5 seconds.
 
 ---
 
@@ -153,7 +153,7 @@ A circular SVG progress ring that fills throughout the day, paired with a text c
 
 ## Component 4 — To Do List
 
-Wrap in `<div class="section">`. The section header is a small uppercase eyebrow that reads `To Do List` (NOT "Goalmaxxing" — the section title is literally the words "To Do List"). The eyebrow has a short dash before the text and a fading horizontal line after it:
+Wrap in `<div class="section">`. The section header is a small uppercase eyebrow that reads `To Do List`. The eyebrow has a short dash before the text and a fading horizontal line after it:
 
 ```
 .section-title {
@@ -177,7 +177,7 @@ Header row (flex, space-between, wrap, 14px bottom margin):
     - Big number `gmProgressNum` — 42px, weight 700, `letter-spacing: -0.045em`, tabular-nums.
     - `gmProgressTotal` — `/ 0`, 18px mono, tertiary.
     - `gmProgressLabel` — small uppercase, 11px, weight 600, 0.10em tracking, tertiary. Reads:
-      - `no goals yet` when total = 0
+      - `no tasks yet` when total = 0
       - `complete` when in progress
       - `all done — solid day` when total > 0 and all done.
 - RIGHT: streak pill `gmStreak`, an inline-flex pill with 6px gap, 8px×12px padding, fully rounded:
@@ -185,31 +185,31 @@ Header row (flex, space-between, wrap, 14px bottom margin):
   - Active (streak count > 0): `rgba(242,192,99,0.10)` background, `#F2C063` text, `0.32` border-color, the bolt icon gets a `drop-shadow(0 0 6px rgba(242,192,99,0.6))`.
   - Contents: `⚡` (13px), then `gmStreakNum` (mono tabular, weight 700), then label `day streak` (uppercase, 0.10em tracking).
 
-Segmented progress bar `gmBar` — flex row, 4px gap, 6px tall, 16px bottom margin. One `<div class="gm-bar-seg">` per goal. Done segments get `gm-bar-seg-done`: `background: #6BE3A4; box-shadow: 0 0 6px rgba(107,227,164,0.40)`. Empty bar (no segments) hides via `.gm-bar:empty { display: none; }`.
+Segmented progress bar `gmBar` — flex row, 4px gap, 6px tall, 16px bottom margin. One `<div class="gm-bar-seg">` per task. Done segments get `gm-bar-seg-done`: `background: #6BE3A4; box-shadow: 0 0 6px rgba(107,227,164,0.40)`. Empty bar (no segments) hides via `.gm-bar:empty { display: none; }`.
 
-Goal list `<ul id="goalList" class="goal-list gm-list">`. Empty state `<div id="emptyState" class="empty-state">No goals for today yet — add one below.</div>` — 12px tertiary italic, 14px vertical padding, centered.
+Task list `<ul id="taskList" class="task-list gm-list">`. Empty state `<div id="emptyState" class="empty-state">No tasks for today yet — add one below.</div>` — 12px tertiary italic, 14px vertical padding, centered.
 
-Each goal row is a flex item with 12px gap, 12px×14px padding, 6px bottom margin, `rgba(255,255,255,0.035)` background, 12px radius, hairline border `rgba(255,255,255,0.06)`. On hover: lighter background, drag handle and delete button fade in. Contents in this order:
+Each task row is a flex item with 12px gap, 12px×14px padding, 6px bottom margin, `rgba(255,255,255,0.035)` background, 12px radius, hairline border `rgba(255,255,255,0.06)`. On hover: lighter background, drag handle and delete button fade in. Contents in this order:
 1. **Drag handle** `⋮⋮` — 14px wide, hidden until hover (opacity 0 → 1), grab cursor, `letter-spacing: -2px` so the dots tighten.
 2. **Custom checkbox** — 22px square, 7px radius, 1.5px border `rgba(255,255,255,0.18)`, dark inner background. When checked: `#6BE3A4` background, glow `0 0 12px rgba(107,227,164,0.40)`, and a ::after rotated checkmark that pops in via 0.28s `cubic-bezier(0.34, 1.56, 0.64, 1)` scale animation.
-3. **Goal text** — flex 1, click to edit inline (sets `contentEditable="true"`, adds outline, Enter commits, Escape cancels).
+3. **Task text** — flex 1, click to edit inline (sets `contentEditable="true"`, adds outline, Enter commits, Escape cancels).
 4. **⚡ Queue button** `.gm-queue-btn` — toggles a "queued for productivity window" flag. Default: tertiary, 0.55 opacity. Active: `#F2C063` with a `drop-shadow(0 0 4px rgba(242,192,99,0.65))`. Tapping triggers a 0.48s flash animation `gm-queue-flash` (background pulses to `rgba(242,192,99,0.32)` and scales to 1.015).
-5. **× delete button** `.goal-delete` — tertiary, hover red, 0.5 opacity until row hover.
+5. **× delete button** `.task-delete` — tertiary, hover red, 0.5 opacity until row hover.
 
 Done rows: 0.45 opacity, green-tinted background `rgba(107,227,164,0.04)`, text gets `line-through` with `text-decoration-color: rgba(255,255,255,0.4)`.
 
 Queued rows: yellow-tinted background `rgba(242,192,99,0.10)` with a `inset 3px 0 0 0 #F2C063` left accent stripe, text color `#FFE2A8`.
 
-When all goals are checked: the card itself gets `.gm-all-done` — adds a soft green radial gradient at the top, `.gm-progress-num` and `.gm-progress-label` turn green.
+When all tasks are checked: the card itself gets `.gm-all-done` — adds a soft green radial gradient at the top, `.gm-progress-num` and `.gm-progress-label` turn green.
 
-If goals length > 5: render only the first 5, then a dashed-border "Show N more ▾" toggle row that expands to show the rest (and switches to "Show less ▴").
+If tasks length > 5: render only the first 5, then a dashed-border "Show N more ▾" toggle row that expands to show the rest (and switches to "Show less ▴").
 
 After the list:
-- **Push remaining button** `gmPushBtn` — shown only when there's at least one unchecked goal. Full-width, dashed border, tertiary text, hover solidifies to primary. On click: confirm prompt, then move every unchecked goal into the tomorrow list (skip duplicates by exact text match), then strip them from today (keeping only the checked ones).
-- **Quick-add row** `.goal-input-wrap.gm-input-wrap` with a 14px top border + 14px top padding so it feels separated from the list:
-  - Text input `goalInput` — flex 1, 11px×14px padding, 12px radius, glass background, white-on-focus border, placeholder `Add a goal for today…`.
-  - **+ Add button** `goalAddBtn` — primary white pill: `linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%)` background, `#0A0A0B` text, weight 700, 11px×20px padding, multi-layer shadow including inset top highlight. Hover: lifts 1px and brightens.
-  - **✨ Polish button** `goalPolishBtn` — secondary glass pill: `rgba(255,255,255,0.04)` background, primary text, 1px hairline border `rgba(255,255,255,0.10)`, otherwise same shape as Add.
+- **Push remaining button** `gmPushBtn` — shown only when there's at least one unchecked task. Full-width, dashed border, tertiary text, hover solidifies to primary. On click: confirm prompt, then move every unchecked task into the tomorrow list (skip duplicates by exact text match), then strip them from today (keeping only the checked ones).
+- **Quick-add row** `.task-input-wrap.gm-input-wrap` with a 14px top border + 14px top padding so it feels separated from the list:
+  - Text input `taskInput` — flex 1, 11px×14px padding, 12px radius, glass background, white-on-focus border, placeholder `Add a task for today…`.
+  - **+ Add button** `taskAddBtn` — primary white pill: `linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%)` background, `#0A0A0B` text, weight 700, 11px×20px padding, multi-layer shadow including inset top highlight. Hover: lifts 1px and brightens.
+  - **✨ Polish button** `taskPolishBtn` — secondary glass pill: `rgba(255,255,255,0.04)` background, primary text, 1px hairline border `rgba(255,255,255,0.10)`, otherwise same shape as Add.
 - A 11px tertiary status line `polishStatus` for transient messages.
 
 ### PLAN TOMORROW card
@@ -219,13 +219,13 @@ Same chassis with class `gm-card gm-card-tomorrow`. The progress row is hidden (
 - Below it, sub-text `Write tonight, locked until 6 AM.` — 12px tertiary.
 - Right: count badge `gmTomorrowCount` reads `0 planned` / `3 planned` etc. — 11px mono uppercase tabular tertiary.
 
-Goal list, empty state `Nothing planned for tomorrow yet`, and identical quick-add row (with `tomorrowInput`, `tomorrowAddBtn`, `tomorrowPolishBtn`, `tomorrowStatus`). The difference: tomorrow rows render in **read-only mode** — checkboxes are disabled with title `Activates at 6 AM tomorrow`, and the ⚡ button is disabled. Inline edit, drag-reorder, and × delete all still work.
+Task list, empty state `Nothing planned for tomorrow yet`, and identical quick-add row (with `tomorrowInput`, `tomorrowAddBtn`, `tomorrowPolishBtn`, `tomorrowStatus`). The difference: tomorrow rows render in **read-only mode** — checkboxes are disabled with title `Activates at 6 AM tomorrow`, and the ⚡ button is disabled. Inline edit, drag-reorder, and × delete all still work.
 
 ---
 
 ## Logic & state
 
-All persistence in `localStorage` only. Key shape: `goals:YYYY-MM-DD` → array of `{ text, done, doneAt?, queued? }`. Streak state under `goal_streak_v1` → `{ count, lastProcessedDate }`.
+All persistence in `localStorage` only. Key shape: `tasks:YYYY-MM-DD` → array of `{ text, done, doneAt?, queued? }`. Streak state under `task_streak_v1` → `{ count, lastProcessedDate }`.
 
 Helper functions:
 - `storeGet(key)` → `JSON.parse` or null.
@@ -237,19 +237,19 @@ Helper functions:
 - `getTomorrowDateString()`: if current hours < 6, return today's calendar date (because the active day is yesterday). Otherwise tomorrow's calendar date.
 - `formatDate("YYYY-MM-DD")` returns `Sat, May 9` style — used for both eyebrows.
 
-**Rollover** — runs once on load. Walks every `goals:` key strictly older than the active date, takes any undone goals and pushes them into today's list (deduped by exact text), then deletes the old day's record entirely.
+**Rollover** — runs once on load. Walks every `tasks:` key strictly older than the active date, takes any undone tasks and pushes them into today's list (deduped by exact text), then deletes the old day's record entirely.
 
-**Streak check** — runs once on load. Walks every `goals:` key older than today, in date order, starting from `lastProcessedDate`. For each: if 0 goals → skip (don't break the streak); if all done → +1; else → reset to 0. Persist the new count and date.
+**Streak check** — runs once on load. Walks every `tasks:` key older than today, in date order, starting from `lastProcessedDate`. For each: if 0 tasks → skip (don't break the streak); if all done → +1; else → reset to 0. Persist the new count and date.
 
 **Render functions:**
-- `renderTodayHeader()` — re-reads today's goals, updates the big number, total, label, fills the segmented bar, toggles `gm-all-done` on the card, shows/hides the push button.
+- `renderTodayHeader()` — re-reads today's tasks, updates the big number, total, label, fills the segmented bar, toggles `gm-all-done` on the card, shows/hides the push button.
 - `renderStreak()` — updates the streak number and toggles `gm-streak-active`.
 - `renderTomorrowCount()` — updates the `N planned` badge.
-- `renderListInto(goals, listEl, emptyEl, key, readOnly)` — clears the `<ul>`, builds rows via `buildGoalRow`, applies the show-more collapse if > 5, calls the appropriate header renderer at the end.
+- `renderListInto(tasks, listEl, emptyEl, key, readOnly)` — clears the `<ul>`, builds rows via `buildTaskRow`, applies the show-more collapse if > 5, calls the appropriate header renderer at the end.
 - `loadToday()` and `loadTomorrow()` — re-read storage and call `renderListInto`.
 
-**Row interactions** are wired in `buildGoalRow`:
-- Checkbox change → set `goals[idx].done = cb.checked`, stamp `doneAt = Date.now()` when checking, delete it when unchecking, save, re-render.
+**Row interactions** are wired in `buildTaskRow`:
+- Checkbox change → set `tasks[idx].done = cb.checked`, stamp `doneAt = Date.now()` when checking, delete it when unchecking, save, re-render.
 - Inline edit (`makeInlineEdit`) — click sets `contentEditable=true`, focuses, places caret at end. Blur or Enter commits (saves only if text changed and isn't empty); Escape cancels.
 - Drag (`wireDragReorder`) — HTML5 drag/drop. On drop, splice from-index out, splice into to-index, save, re-render. Add a top-border indicator on the drag-over row.
 - Queue button click → toggle `queued`, save, add `is-queue-flashing` class on the row, then re-render after 480ms so the user sees the pulse before the row rebuilds.
@@ -257,7 +257,7 @@ Helper functions:
 
 **Add + Polish** wired by a shared `makeAddHandlers(input, addBtn, polishBtn, key, statusEl, reload)`:
 - Add: trim input, push `{ text, done: false }`, save, clear input, reload.
-- Polish: at the very top of the JS, declare `const ANTHROPIC_API_KEY = '';`. If empty → fall back to plain Add and show a brief tertiary message in `statusEl` saying `Polish needs an Anthropic API key — added as-typed.` for 3.5 seconds. If a key is set → POST to `https://api.anthropic.com/v1/messages` with headers `Content-Type: application/json`, `x-api-key: <KEY>`, `anthropic-version: 2023-06-01`, `anthropic-dangerous-direct-browser-access: true`. Body: model `claude-sonnet-4-5`, `max_tokens: 1000`, single user message asking the model to clean up exactly ONE goal and return it as a one-element JSON array of strings (no preamble, no fences). Parse, push, save, clear input. On any error: add the raw text and show `Polish failed — added as-typed.` in red for 3.5s.
+- Polish: at the very top of the JS, declare `const ANTHROPIC_API_KEY = '';`. If empty → fall back to plain Add and show a brief tertiary message in `statusEl` saying `Polish needs an Anthropic API key — added as-typed.` for 3.5 seconds. If a key is set → POST to `https://api.anthropic.com/v1/messages` with headers `Content-Type: application/json`, `x-api-key: <KEY>`, `anthropic-version: 2023-06-01`, `anthropic-dangerous-direct-browser-access: true`. Body: model `claude-sonnet-4-5`, `max_tokens: 1000`, single user message asking the model to clean up exactly ONE task and return it as a one-element JSON array of strings (no preamble, no fences). Parse, push, save, clear input. On any error: add the raw text and show `Polish failed — added as-typed.` in red for 3.5s.
 - Enter in the input fires Add (not Polish).
 
 After both handlers wired: call `loadToday()` and `loadTomorrow()`. Run `renderStreak()` once. Run the day-ring update once and start the 60-second interval.
@@ -268,11 +268,11 @@ After both handlers wired: call `loadToday()` and `loadTomorrow()`. Run `renderS
 
 - File runs from a `file://` URL or VS Code Live Server with no errors in console.
 - The page opens with a gradient `My Dashboard` headline at the top.
-- The goal ticker shows a green pulsing LED, the word `GOALS`, the current pending goal in mono, and a `done/total` pill on the right. It cycles to the next pending goal every 5 seconds with a vertical slide animation. Adding, checking, deleting, or reordering a goal updates the ticker immediately (not on the next 5s cycle).
-- When all goals are checked, the ticker shows `✓ All goals done — solid day.` instead of an empty rotation. With zero goals, it shows `No goals set for today — add one to get rolling.`
+- The task ticker shows a green pulsing LED, the word `TASKS`, the current pending task in mono, and a `done/total` pill on the right. It cycles to the next pending task every 5 seconds with a vertical slide animation. Adding, checking, deleting, or reordering a task updates the ticker immediately (not on the next 5s cycle).
+- When all tasks are checked, the ticker shows `✓ All tasks done — solid day.` instead of an empty rotation. With zero tasks, it shows `No tasks set for today — add one to get rolling.`
 - Day ring shows the correct percentage at the current time, with the right phase label and color.
-- Adding a goal to Today shows it in the list; checking it greens out the row, fills its segment, and updates the counter.
-- Hitting all goals turns the whole card green-tinted and changes the label to `all done — solid day`.
+- Adding a task to Today shows it in the list; checking it greens out the row, fills its segment, and updates the counter.
+- Hitting all tasks turns the whole card green-tinted and changes the label to `all done — solid day`.
 - Inline-edit, drag-reorder, queue-flash, delete, push-remaining, and tomorrow-list (read-only checkboxes) all work as described.
 - Refreshing the page restores all state from localStorage.
-- The section title reads exactly `To Do List` — capital T, capital D, capital L — not "Goalmaxxing".
+- The section title reads exactly `To Do List` — capital T, capital D, capital L.

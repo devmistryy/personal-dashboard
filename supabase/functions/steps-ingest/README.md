@@ -6,14 +6,14 @@ samples into Apple Health, so this pipe reads them there:
 ```
 WHOOP band → WHOOP app → Apple Health (Source = "WHOOP")
    → iOS Shortcut (sum today's WHOOP steps) → POST here → step_counts table
-   → dashboard auto-checks any habit linked to a step goal
+   → dashboard auto-checks any habit linked to a step target
 ```
 
 ## 1. Database
 
 Run the updated `master.sql` in the Supabase SQL editor. It adds the
 `step_counts` table (+ its RLS policy) and the `habits.auto_source` /
-`habits.auto_goal` columns. It is idempotent — safe to re-run.
+`habits.step_target` columns. It is idempotent — safe to re-run.
 
 ## 2. Deploy the function
 
@@ -39,10 +39,10 @@ POST https://tlqjmlocxxsdlxseumxw.supabase.co/functions/v1/steps-ingest
 ## 3. Link a habit + get your token
 
 In the dashboard: **Habits → create a habit (e.g. "Steps") → open it →
-"Auto-check from step count"**. Set the daily goal. The panel shows the sync URL
+"Auto-check from step count"**. Set the daily target. The panel shows the sync URL
 and your personal token (generated on first use, stored in `settings`).
 
-The habit is auto-checked **once** on any day its step count reaches the goal;
+The habit is auto-checked **once** on any day its step count reaches the target;
 after that you can toggle it by hand like any other habit.
 
 ## 4. iOS Shortcut (~5 min)

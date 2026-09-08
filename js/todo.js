@@ -1,17 +1,17 @@
-// To Do tab: rollover, streak, goal rows, drag-reorder, inline edit,
+// To Do tab: rollover, streak, task rows, drag-reorder, inline edit,
 // quick-add + polish. Loaded before main.js.
 
-// Stable client-side goal id (mirrors the habits `h_…` convention).
-function _goalId() {
+// Stable client-side task id (mirrors the habits `h_…` convention).
+function _taskId() {
   return 'g_' + ((crypto && crypto.randomUUID)
     ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2));
 }
 
-// A goal object created right now, with a stable id + ISO creation stamp.
-function makeGoal(fields) {
+// A task object created right now, with a stable id + ISO creation stamp.
+function makeTask(fields) {
   return Object.assign({
-    id: _goalId(),
+    id: _taskId(),
     text: '',
     done: false,
     priority: 'Medium',
@@ -22,15 +22,15 @@ function makeGoal(fields) {
 
 // True when `list` already contains `g` — by stable id, falling back to an
 // exact text match against an unfinished entry (covers pre-id rows).
-function _goalInList(g, list) {
+function _taskInList(g, list) {
   return list.some(x =>
     (g.id && x.id && x.id === g.id) ||
     (!x.done && x.text === g.text));
 }
 
-// ── Upcoming (future-dated) goals ──
-// The planner card creates goals for tomorrow or later only. `plannerDate` is
-// the target date for new goals; it lazily defaults to tomorrow and is never
+// ── Upcoming (future-dated) tasks ──
+// The planner card creates tasks for tomorrow or later only. `plannerDate` is
+// the target date for new tasks; it lazily defaults to tomorrow and is never
 // allowed to point at today or the past.
 let plannerDate = null;
 function plannerTargetDate() {
@@ -39,44 +39,44 @@ function plannerTargetDate() {
   return plannerDate;
 }
 
-// Dates strictly after the active day that currently hold goals, ascending.
+// Dates strictly after the active day that currently hold tasks, ascending.
 function upcomingDateKeys() {
   const active = getActiveDateString();
-  return storeListKeys('goals:')
+  return storeListKeys('tasks:')
     .map(k => k.slice(6))
     .filter(d => d > active)
     .sort();
 }
 
-// Every goal list a user can currently edit: today + all future days.
-// Used by the Areas tab so area rename/delete/tagging reaches future goals.
-function goalScopeKeys() {
-  return [todayKey()].concat(upcomingDateKeys().map(d => 'goals:' + d));
+// Every task list a user can currently edit: today + all future days.
+// Used by the Areas tab so area rename/delete/tagging reaches future tasks.
+function taskScopeKeys() {
+  return [todayKey()].concat(upcomingDateKeys().map(d => 'tasks:' + d));
 }
 
-// ── Goal sort mode ── (shared by the Today and Upcoming lists)
+// ── Task sort mode ── (shared by the Today and Upcoming lists)
 // 'custom' = the stored array order, reorderable by drag. 'priority' and 'area'
 // are display-only views; the stored order is never mutated by them.
-const _GOAL_SORT_MODES = [['custom', 'Custom'], ['priority', 'Priority'], ['area', 'Area']];
-const _GOAL_PRI_RANK = { High: 0, Medium: 1, Low: 2 };
+const _TASK_SORT_MODES = [['custom', 'Custom'], ['priority', 'Priority'], ['area', 'Area']];
+const _TASK_PRI_RANK = { High: 0, Medium: 1, Low: 2 };
 
-function getGoalSort()     { return MEM['goal_sort_v1'] || 'custom'; }
-function setGoalSort(mode) {
-  MEM['goal_sort_v1'] = mode;
-  _syncSetting('goal_sort_v1', mode);
+function getTaskSort()     { return MEM['task_sort_v1'] || 'custom'; }
+function setTaskSort(mode) {
+  MEM['task_sort_v1'] = mode;
+  _syncSetting('task_sort_v1', mode);
   loadToday();
   loadUpcoming();
 }
 
 // Returns a new array ordered for display. Never mutates the input — the stored
 // order stays canonical (it's the 'custom' order and the tiebreak for the rest).
-function sortGoalsForDisplay(goals, mode) {
-  const pos = new Map(goals.map((g, i) => [g, i]));
+function sortTasksForDisplay(tasks, mode) {
+  const pos = new Map(tasks.map((g, i) => [g, i]));
   const byCustom = (a, b) => pos.get(a) - pos.get(b);
-  const arr = [...goals];
+  const arr = [...tasks];
   if (mode === 'priority') {
     arr.sort((a, b) =>
-      (_GOAL_PRI_RANK[a.priority || 'Medium'] - _GOAL_PRI_RANK[b.priority || 'Medium']) || byCustom(a, b));
+      (_TASK_PRI_RANK[a.priority || 'Medium'] - _TASK_PRI_RANK[b.priority || 'Medium']) || byCustom(a, b));
   } else if (mode === 'area') {
     arr.sort((a, b) => {
       const aa = a.area || '', ba = b.area || '';
@@ -87,29 +87,29 @@ function sortGoalsForDisplay(goals, mode) {
   return arr; // 'custom' / unknown → stored order
 }
 
-function paintGoalSortBar(el, count) {
+function paintTaskSortBar(el, count) {
   if (!el) return;
-  el.hidden = !(count > 1);           // nothing to sort with 0–1 goals
+  el.hidden = !(count > 1);           // nothing to sort with 0–1 tasks
   if (el.hidden) { el.innerHTML = ''; return; }
-  const mode = getGoalSort();
-  el.innerHTML = `<span class="goal-sort-label">Sort</span>` +
-    _GOAL_SORT_MODES.map(([v, l]) =>
-      `<button class="goal-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('');
+  const mode = getTaskSort();
+  el.innerHTML = `<span class="task-sort-label">Sort</span>` +
+    _TASK_SORT_MODES.map(([v, l]) =>
+      `<button class="task-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('');
 }
 
 // One delegated listener covers both cards' sort bars.
 document.addEventListener('click', e => {
-  const btn = e.target.closest('.goal-sort-btn');
-  if (btn && btn.dataset.sort !== getGoalSort()) setGoalSort(btn.dataset.sort);
+  const btn = e.target.closest('.task-sort-btn');
+  if (btn && btn.dataset.sort !== getTaskSort()) setTaskSort(btn.dataset.sort);
 });
 
-// Move a goal within its stored day array, matched by stable id (so it works
+// Move a task within its stored day array, matched by stable id (so it works
 // regardless of the current display sort). Bails unless sort is 'custom'.
-function reorderGoalByDrag(key, fromEl, toEl) {
-  if (getGoalSort() !== 'custom') return;
+function reorderTaskByDrag(key, fromEl, toEl) {
+  if (getTaskSort() !== 'custom') return;
   const arr = storeGet(key) || [];
-  const from = arr.findIndex(g => g.id === fromEl.dataset.goalId);
-  const to   = arr.findIndex(g => g.id === toEl.dataset.goalId);
+  const from = arr.findIndex(g => g.id === fromEl.dataset.taskId);
+  const to   = arr.findIndex(g => g.id === toEl.dataset.taskId);
   if (from < 0 || to < 0 || from === to) return;
   const [item] = arr.splice(from, 1);
   arr.splice(to, 0, item);
@@ -118,74 +118,75 @@ function reorderGoalByDrag(key, fromEl, toEl) {
 }
 
 // ── Rollover + overdue ──
-// Any unfinished goal from a past day that you haven't finished or dismissed
+// Any unfinished task from a past day that you haven't finished or dismissed
 // rides forward onto today's list — shown as overdue — until you do one or the
 // other, no matter how old it is. Past days keep their copies as history.
 //
 // There is deliberately NO "last processed" marker: a stale one used to strand
-// goals when a carry-forward write failed (the Sept 2026 data-loss bug). The
-// guards are per-goal instead. A past-day goal is carried onto today unless:
+// tasks when a carry-forward write failed (the Sept 2026 data-loss bug). The
+// guards are per-task instead. A past-day task is carried onto today unless:
 //   • it's done, or
 //   • its id is already placed on today or any later day (so future-dated
-//     planner goals aren't yanked back), or
-//   • its id is in goal_dismissed_v1 — set when you delete a carried goal off
+//     planner tasks aren't yanked back), or
+//   • its id is in task_dismissed_v1 — set when you delete a carried task off
 //     today's list, so rollover leaves it alone from then on.
-// (The old goal_rollover_v1 setting is no longer read; a leftover row is inert.)
+// (The old goal_rollover_v1 settings row from before this rework is dropped by
+//  master.sql and no longer read.)
 function rollover() {
   const activeDate = getActiveDateString();
-  const dismissed = new Set(storeGet('goal_dismissed_v1') || []);
+  const dismissed = new Set(storeGet('task_dismissed_v1') || []);
 
-  reclaimStrandedFutureGoals(activeDate);
+  reclaimStrandedFutureTasks(activeDate);
 
-  // Every goal id already scheduled for today or a future day.
+  // Every task id already scheduled for today or a future day.
   const placedAhead = new Set();
-  storeListKeys('goals:').forEach(k => {
+  storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) >= activeDate)
       (storeGet(k) || []).forEach(g => { if (g.id) placedAhead.add(g.id); });
   });
 
-  const todayGoals = storeGet(todayKey()) || [];
+  const todayTasks = storeGet(todayKey()) || [];
   let added = false;
 
-  storeListKeys('goals:')
+  storeListKeys('tasks:')
     .filter(k => k.slice(6) < activeDate)
     .sort()
     .forEach(k => {
       (storeGet(k) || []).forEach(g => {
         if (g.done || !g.id) return;
         if (placedAhead.has(g.id) || dismissed.has(g.id)) return;
-        if (_goalInList(g, todayGoals)) return;
+        if (_taskInList(g, todayTasks)) return;
         const carried = Object.assign({}, g, { done: false });
         delete carried.doneAt;
-        todayGoals.push(carried);
+        todayTasks.push(carried);
         placedAhead.add(g.id);
         added = true;
       });
     });
 
-  if (added) storeSet(todayKey(), todayGoals);
-  _pruneDismissedGoals();
+  if (added) storeSet(todayKey(), todayTasks);
+  _pruneDismissedTasks();
 }
 
 // Undo the damage a backward clock/timezone jump does: if the device clock is
 // briefly ahead, rollover() runs with a future day as "today" and copies that
-// day's unfinished goals onto it. When the clock corrects, those copies are
+// day's unfinished tasks onto it. When the clock corrects, those copies are
 // stranded on a future date — they surface in the Upcoming planner as if they
-// were deliberately scheduled, and (sharing an id with the real past-day goal)
+// were deliberately scheduled, and (sharing an id with the real past-day task)
 // they stop rollover from carrying the real one forward.
 //
-// A stranded copy is any future-dated goal whose id also sits on today or an
-// earlier day. Planner goals get a fresh id, so they never match. Drop the
+// A stranded copy is any future-dated task whose id also sits on today or an
+// earlier day. Planner tasks get a fresh id, so they never match. Drop the
 // future copy; the earlier one carries forward normally below.
-function reclaimStrandedFutureGoals(activeDate) {
+function reclaimStrandedFutureTasks(activeDate) {
   const behindOrToday = new Set();
-  storeListKeys('goals:').forEach(k => {
+  storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) <= activeDate)
       (storeGet(k) || []).forEach(g => { if (g.id) behindOrToday.add(g.id); });
   });
   if (!behindOrToday.size) return;
 
-  storeListKeys('goals:').forEach(k => {
+  storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) <= activeDate) return;
     const arr = storeGet(k) || [];
     const kept = arr.filter(g => !g.id || !behindOrToday.has(g.id));
@@ -193,44 +194,44 @@ function reclaimStrandedFutureGoals(activeDate) {
   });
 }
 
-// Keep goal_dismissed_v1 bounded: drop ids that no longer appear on any loaded
+// Keep task_dismissed_v1 bounded: drop ids that no longer appear on any loaded
 // day (their history aged out of loadFromSupabase's window), since rollover
 // can't reach them anyway.
-function _pruneDismissedGoals() {
-  const dismissed = storeGet('goal_dismissed_v1') || [];
+function _pruneDismissedTasks() {
+  const dismissed = storeGet('task_dismissed_v1') || [];
   if (!dismissed.length) return;
   const live = new Set();
-  storeListKeys('goals:').forEach(k =>
+  storeListKeys('tasks:').forEach(k =>
     (storeGet(k) || []).forEach(g => { if (g.id) live.add(g.id); }));
   const kept = dismissed.filter(id => live.has(id));
-  if (kept.length !== dismissed.length) storeSet('goal_dismissed_v1', kept);
+  if (kept.length !== dismissed.length) storeSet('task_dismissed_v1', kept);
 }
 
-// Record a goal id as dismissed so rollover stops carrying it forward.
-function dismissGoal(id) {
-  const list = storeGet('goal_dismissed_v1') || [];
+// Record a task id as dismissed so rollover stops carrying it forward.
+function dismissTask(id) {
+  const list = storeGet('task_dismissed_v1') || [];
   if (!id || list.includes(id)) return;
-  storeSet('goal_dismissed_v1', list.concat(id));
+  storeSet('task_dismissed_v1', list.concat(id));
 }
 
-// True when this goal also sits on an earlier day — i.e. it was carried
+// True when this task also sits on an earlier day — i.e. it was carried
 // forward, so deleting it from today should dismiss + purge it. Matches the
-// same way _goalInList does (id, or an unfinished text match) so it still
-// fires when a pre-gid row's id drifted between loads.
-function goalAppearsEarlier(g) {
+// same way _taskInList does (id, or an unfinished text match) so it still
+// fires when a pre-id row's id drifted between loads.
+function taskAppearsEarlier(g) {
   const active = getActiveDateString();
-  return storeListKeys('goals:').some(k =>
+  return storeListKeys('tasks:').some(k =>
     k.slice(6) < active && (storeGet(k) || []).some(x =>
       (g.id && x.id && x.id === g.id) || (!x.done && x.text === g.text)));
 }
 
-// Drop every earlier-day copy of a goal being deleted off today — the ones
+// Drop every earlier-day copy of a task being deleted off today — the ones
 // rollover would otherwise carry straight back. Matches by id, and by text for
-// unfinished copies whose id drifted (pre-gid rows are re-minted each load).
+// unfinished copies whose id drifted (pre-id rows are re-minted each load).
 // Completed copies stay put as real history.
-function purgeGoalHistory(g) {
+function purgeTaskHistory(g) {
   const active = getActiveDateString();
-  storeListKeys('goals:').forEach(k => {
+  storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) >= active) return;
     const arr = storeGet(k) || [];
     const next = arr.filter(x =>
@@ -239,13 +240,13 @@ function purgeGoalHistory(g) {
   });
 }
 
-// Whole days a still-unfinished goal has already spent on earlier lists — how
+// Whole days a still-unfinished task has already spent on earlier lists — how
 // overdue it is. 0 when it isn't overdue (first appears today or later, or done).
-function goalOverdueDays(g) {
+function taskOverdueDays(g) {
   if (!g.id || g.done) return 0;
   const active = getActiveDateString();
   let earliest = null;
-  storeListKeys('goals:').forEach(k => {
+  storeListKeys('tasks:').forEach(k => {
     const d = k.slice(6);
     if (d >= active) return;
     if ((storeGet(k) || []).some(x => x.id === g.id) && (!earliest || d < earliest)) earliest = d;
@@ -262,82 +263,82 @@ function _daysApart(a, b) {
 // ── Streak check ──
 function checkStreak() {
   const activeDate = getActiveDateString();
-  let streak = storeGet('goal_streak_v1') || { count: 0, lastProcessedDate: null };
-  const keys = storeListKeys('goals:')
+  let streak = storeGet('task_streak_v1') || { count: 0, lastProcessedDate: null };
+  const keys = storeListKeys('tasks:')
     .filter(k => k.slice(6) < activeDate)
     .sort();
   let startFrom = streak.lastProcessedDate;
   for (const k of keys) {
     const date = k.slice(6);
     if (startFrom && date <= startFrom) continue;
-    const goals = storeGet(k) || [];
-    if (goals.length === 0) continue;
-    if (goals.every(g => g.done)) {
+    const tasks = storeGet(k) || [];
+    if (tasks.length === 0) continue;
+    if (tasks.every(g => g.done)) {
       streak.count++;
     } else {
       streak.count = 0;
     }
     streak.lastProcessedDate = date;
   }
-  storeSet('goal_streak_v1', streak);
+  storeSet('task_streak_v1', streak);
   return streak;
 }
 
 
 // ── Render helpers ──
 function renderTodayHeader() {
-  const goals = storeGet(todayKey()) || [];
-  const total = goals.length;
-  const done  = goals.filter(g => g.done).length;
+  const tasks = storeGet(todayKey()) || [];
+  const total = tasks.length;
+  const done  = tasks.filter(g => g.done).length;
 
   document.getElementById('todayLabel').textContent = `Today — ${formatDate(getActiveDateString())}`;
-  document.getElementById('gmProgressNum').textContent = done;
-  document.getElementById('gmProgressTotal').textContent = `/ ${total}`;
+  document.getElementById('tmProgressNum').textContent = done;
+  document.getElementById('tmProgressTotal').textContent = `/ ${total}`;
 
-  const labelEl = document.getElementById('gmProgressLabel');
-  if (total === 0) labelEl.textContent = 'no goals yet';
+  const labelEl = document.getElementById('tmProgressLabel');
+  if (total === 0) labelEl.textContent = 'no tasks yet';
   else if (done === total) labelEl.textContent = 'all done — solid day';
   else labelEl.textContent = 'complete';
 
-  const bar = document.getElementById('gmBar');
+  const bar = document.getElementById('tmBar');
   bar.innerHTML = '';
-  goals.forEach(g => {
+  tasks.forEach(g => {
     const seg = document.createElement('div');
-    seg.className = 'gm-bar-seg' + (g.done ? ' gm-bar-seg-done' : '');
+    seg.className = 'tm-bar-seg' + (g.done ? ' tm-bar-seg-done' : '');
     bar.appendChild(seg);
   });
 
   const card = document.getElementById('todayCard');
-  if (total > 0 && done === total) card.classList.add('gm-all-done');
-  else card.classList.remove('gm-all-done');
+  if (total > 0 && done === total) card.classList.add('tm-all-done');
+  else card.classList.remove('tm-all-done');
 }
 
 function renderStreak() {
-  const streak = storeGet('goal_streak_v1') || { count: 0 };
-  document.getElementById('gmStreakNum').textContent = streak.count;
-  const el = document.getElementById('gmStreak');
-  if (streak.count > 0) el.classList.add('gm-streak-active');
-  else el.classList.remove('gm-streak-active');
+  const streak = storeGet('task_streak_v1') || { count: 0 };
+  document.getElementById('tmStreakNum').textContent = streak.count;
+  const el = document.getElementById('tmStreak');
+  if (streak.count > 0) el.classList.add('tm-streak-active');
+  else el.classList.remove('tm-streak-active');
 }
 
 function renderUpcomingCount() {
   const total = upcomingDateKeys()
-    .reduce((n, d) => n + (storeGet('goals:' + d) || []).length, 0);
-  document.getElementById('gmTomorrowCount').textContent = `${total} planned`;
+    .reduce((n, d) => n + (storeGet('tasks:' + d) || []).length, 0);
+  document.getElementById('tmTomorrowCount').textContent = `${total} planned`;
 }
 
 
-// ── Build goal row ──
-// Handlers resolve the goal by stable id against the live stored array, so they
+// ── Build task row ──
+// Handlers resolve the task by stable id against the live stored array, so they
 // stay correct no matter how the visible list is sorted. `readOnly` locks the
 // checkbox (future days); `draggable` enables drag-reorder (custom sort only).
-function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
+function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   const priority = g.priority || 'Medium';
-  const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[priority] || 'goal-priority-med';
+  const priClass = { High: 'task-priority-high', Medium: 'task-priority-med', Low: 'task-priority-low' }[priority] || 'task-priority-med';
   const li = document.createElement('li');
-  li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '');
+  li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
   li.dataset.idx = idx;
-  li.dataset.goalId = g.id || '';
+  li.dataset.taskId = g.id || '';
   li.draggable = !!draggable;
 
   const reload = () => { if (key === todayKey()) loadToday(); else loadUpcoming(); };
@@ -352,7 +353,7 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
 
   // Priority click strip (invisible, covers left border area)
   const priBtn = document.createElement('button');
-  priBtn.className = 'goal-priority-btn';
+  priBtn.className = 'task-priority-btn';
   priBtn.title = `Priority: ${priority} — click to change`;
   priBtn.addEventListener('click', () => {
     // Cycle by colour: High (red) → Low (green) → Medium (yellow) → High …
@@ -366,20 +367,20 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
 
   // Drag handle
   const drag = document.createElement('span');
-  drag.className = 'goal-drag-handle';
+  drag.className = 'task-drag-handle';
   drag.textContent = '⋮⋮';
   drag.setAttribute('aria-hidden', 'true');
   li.appendChild(drag);
 
   // Checkbox
   const cbWrap = document.createElement('label');
-  cbWrap.className = 'goal-cb-wrap';
+  cbWrap.className = 'task-cb-wrap';
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = !!g.done;
   if (readOnly) { cb.disabled = true; cb.title = 'Unlocks when this day starts (6 AM)'; }
   const cbBox = document.createElement('span');
-  cbBox.className = 'goal-cb-box';
+  cbBox.className = 'task-cb-box';
   cbWrap.appendChild(cb);
   cbWrap.appendChild(cbBox);
   li.appendChild(cbWrap);
@@ -393,29 +394,29 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
   });
 
   // Text + its optional tags (overdue, sunday reset) share one flex wrapper, so
-  // they sit right after the goal name instead of out by the area pill.
+  // they sit right after the task name instead of out by the area pill.
   const main = document.createElement('div');
-  main.className = 'goal-main';
+  main.className = 'task-main';
 
   const txt = document.createElement('span');
-  txt.className = 'goal-text';
+  txt.className = 'task-text';
   txt.textContent = g.text;
   makeInlineEdit(txt, g, key, reload);
   main.appendChild(txt);
 
-  const overdueDays = readOnly ? 0 : goalOverdueDays(g);
+  const overdueDays = readOnly ? 0 : taskOverdueDays(g);
   if (overdueDays > 0) {
     li.classList.add('is-overdue');
     const od = document.createElement('span');
-    od.className = 'goal-overdue-tag';
+    od.className = 'task-overdue-tag';
     od.textContent = `overdue · ${overdueDays}d`;
     od.title = `Carried over — first added ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago`;
     main.appendChild(od);
   }
 
-  if (isSundayResetGoal(g)) {
+  if (isSundayResetTask(g)) {
     const tag = document.createElement('span');
-    tag.className = 'goal-source-tag';
+    tag.className = 'task-source-tag';
     tag.textContent = 'sunday reset';
     main.appendChild(tag);
   }
@@ -428,16 +429,16 @@ function buildGoalRow(g, idx, goals, key, readOnly, draggable) {
 
   // Delete
   const del = document.createElement('button');
-  del.className = 'goal-delete';
+  del.className = 'task-delete';
   del.textContent = '×';
-  del.title = 'Delete goal';
+  del.title = 'Delete task';
   del.addEventListener('click', () => {
-    // A carried-over goal also lives on earlier days. Dismiss its id AND purge
+    // A carried-over task also lives on earlier days. Dismiss its id AND purge
     // those copies, so rollover can't resurrect it after a reload even if the
-    // dismissed id no longer matches (pre-gid rows drift on each load).
-    if (key === todayKey() && goalAppearsEarlier(g)) {
-      dismissGoal(g.id);
-      if (!isSundayResetGoal(g)) purgeGoalHistory(g);
+    // dismissed id no longer matches (pre-id rows drift on each load).
+    if (key === todayKey() && taskAppearsEarlier(g)) {
+      dismissTask(g.id);
+      if (!isSundayResetTask(g)) purgeTaskHistory(g);
     }
     mutate((arr, i) => { arr.splice(i, 1); });
   });
@@ -481,7 +482,7 @@ function makeInlineEdit(el, g, key, reload) {
 // Generic drag-to-reorder for a <ul>/<ol> of `.${rowClass}` rows. Wire once per
 // list element. `onReorder(fromEl, toEl)` receives the dragged row element and
 // the drop-target row element (guaranteed distinct) and owns the array move +
-// persist + re-render. Used by goals and habits.
+// persist + re-render. Used by tasks and habits.
 function wireDragReorder(listEl, rowClass, onReorder) {
   const sel = '.' + rowClass;
   const clearOver = () => listEl.querySelectorAll(sel).forEach(r => r.classList.remove('drag-over'));
@@ -511,40 +512,40 @@ function wireDragReorder(listEl, rowClass, onReorder) {
   });
 }
 
-function renderListInto(goals, listEl, emptyEl, key, readOnly) {
+function renderListInto(tasks, listEl, emptyEl, key, readOnly) {
   listEl.innerHTML = '';
   const LIMIT = 5;
   let showAll = listEl._showAll || false;
 
-  if (goals.length === 0) {
+  if (tasks.length === 0) {
     emptyEl.style.display = 'block';
     listEl.style.display = 'none';
   } else {
     emptyEl.style.display = 'none';
     listEl.style.display = '';
 
-    const canDrag = !readOnly && getGoalSort() === 'custom';
-    const visible = (goals.length > LIMIT && !showAll) ? goals.slice(0, LIMIT) : goals;
+    const canDrag = !readOnly && getTaskSort() === 'custom';
+    const visible = (tasks.length > LIMIT && !showAll) ? tasks.slice(0, LIMIT) : tasks;
     visible.forEach((g, i) => {
-      listEl.appendChild(buildGoalRow(g, i, goals, key, readOnly, canDrag));
+      listEl.appendChild(buildTaskRow(g, i, tasks, key, readOnly, canDrag));
     });
 
-    if (goals.length > LIMIT && !showAll) {
+    if (tasks.length > LIMIT && !showAll) {
       const more = document.createElement('div');
       more.className = 'show-more-row';
-      more.textContent = `Show ${goals.length - LIMIT} more ▾`;
+      more.textContent = `Show ${tasks.length - LIMIT} more ▾`;
       more.addEventListener('click', () => {
         listEl._showAll = true;
-        renderListInto(goals, listEl, emptyEl, key, readOnly);
+        renderListInto(tasks, listEl, emptyEl, key, readOnly);
       });
       listEl.appendChild(more);
-    } else if (goals.length > LIMIT && showAll) {
+    } else if (tasks.length > LIMIT && showAll) {
       const less = document.createElement('div');
       less.className = 'show-more-row';
       less.textContent = 'Show less ▴';
       less.addEventListener('click', () => {
         listEl._showAll = false;
-        renderListInto(goals, listEl, emptyEl, key, readOnly);
+        renderListInto(tasks, listEl, emptyEl, key, readOnly);
       });
       listEl.appendChild(less);
     }
@@ -552,8 +553,8 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
 
   if (!readOnly && !listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'goal-row', (fromEl, toEl) =>
-      reorderGoalByDrag(todayKey(), fromEl, toEl));
+    wireDragReorder(listEl, 'task-row', (fromEl, toEl) =>
+      reorderTaskByDrag(todayKey(), fromEl, toEl));
   }
 
   if (key === todayKey()) renderTodayHeader();
@@ -561,15 +562,15 @@ function renderListInto(goals, listEl, emptyEl, key, readOnly) {
 }
 
 function loadToday() {
-  const goals = storeGet(todayKey()) || [];
-  renderListInto(sortGoalsForDisplay(goals, getGoalSort()),
-    document.getElementById('goalList'),
+  const tasks = storeGet(todayKey()) || [];
+  renderListInto(sortTasksForDisplay(tasks, getTaskSort()),
+    document.getElementById('taskList'),
     document.getElementById('emptyState'),
     todayKey(), false);
-  paintGoalSortBar(document.getElementById('todaySortBar'), goals.length);
+  paintTaskSortBar(document.getElementById('todaySortBar'), tasks.length);
 }
 
-// The "Upcoming" card: every future day that has goals, grouped by date,
+// The "Upcoming" card: every future day that has tasks, grouped by date,
 // soonest first. Rows are read-only (checkbox locked until the day starts)
 // but priority / area / text / delete stay editable.
 function loadUpcoming() {
@@ -585,32 +586,32 @@ function loadUpcoming() {
     if (dateInput.value !== target) dateInput.value = target;
   }
   const inp = document.getElementById('tomorrowInput');
-  if (inp) inp.placeholder = `Add a goal for ${formatDate(target)}…`;
+  if (inp) inp.placeholder = `Add a task for ${formatDate(target)}…`;
 
   document.getElementById('tomorrowLabel').textContent = 'Upcoming';
 
-  const mode = getGoalSort();
+  const mode = getTaskSort();
   const canDrag = mode === 'custom';
-  const days = upcomingDateKeys().filter(d => (storeGet('goals:' + d) || []).length > 0);
-  const totalUpcoming = days.reduce((n, d) => n + storeGet('goals:' + d).length, 0);
-  paintGoalSortBar(document.getElementById('upcomingSortBar'), totalUpcoming);
+  const days = upcomingDateKeys().filter(d => (storeGet('tasks:' + d) || []).length > 0);
+  const totalUpcoming = days.reduce((n, d) => n + storeGet('tasks:' + d).length, 0);
+  paintTaskSortBar(document.getElementById('upcomingSortBar'), totalUpcoming);
   renderUpcomingCount();
   emptyEl.style.display = days.length ? 'none' : 'block';
 
   days.forEach(date => {
-    const key   = 'goals:' + date;
-    const goals = storeGet(key) || [];
+    const key   = 'tasks:' + date;
+    const tasks = storeGet(key) || [];
     const head = document.createElement('div');
     head.className = 'upcoming-day';
     head.innerHTML = `<span>${formatDate(date)}</span>` +
-      `<span class="upcoming-day-count">${goals.length}</span>`;
+      `<span class="upcoming-day-count">${tasks.length}</span>`;
     wrap.appendChild(head);
 
     const ul = document.createElement('ul');
-    ul.className = 'goal-list';
-    sortGoalsForDisplay(goals, mode).forEach((g, i) =>
-      ul.appendChild(buildGoalRow(g, i, goals, key, true, canDrag)));
-    if (canDrag) wireDragReorder(ul, 'goal-row', (fromEl, toEl) => reorderGoalByDrag(key, fromEl, toEl));
+    ul.className = 'task-list';
+    sortTasksForDisplay(tasks, mode).forEach((g, i) =>
+      ul.appendChild(buildTaskRow(g, i, tasks, key, true, canDrag)));
+    if (canDrag) wireDragReorder(ul, 'task-row', (fromEl, toEl) => reorderTaskByDrag(key, fromEl, toEl));
     wrap.appendChild(ul);
   });
 }
@@ -623,7 +624,7 @@ function showStatus(el, msg, color, ms) {
 }
 
 // ── Polish via Claude API ──
-async function polishGoal(text, statusEl) {
+async function polishTask(text, statusEl) {
   if (!ANTHROPIC_API_KEY) return null;
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -639,7 +640,7 @@ async function polishGoal(text, statusEl) {
         max_tokens: 1000,
         messages: [{
           role: 'user',
-          content: `Clean up and improve this single goal into a concise, actionable task. Return ONLY a one-element JSON array of strings with no extra text, no markdown fences. Goal: "${text}"`
+          content: `Clean up and improve this single task into a concise, actionable task. Return ONLY a one-element JSON array of strings with no extra text, no markdown fences. Task: "${text}"`
         }]
       })
     });
@@ -655,43 +656,43 @@ async function polishGoal(text, statusEl) {
 
 // ── Add + Polish handlers ──
 function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
-  function addGoal(text) {
+  function addTask(text) {
     if (!text) return;
-    const goals = storeGet(getKey()) || [];
-    goals.push(makeGoal({ text }));
-    storeSet(getKey(), goals);
+    const tasks = storeGet(getKey()) || [];
+    tasks.push(makeTask({ text }));
+    storeSet(getKey(), tasks);
     inputEl.value = '';
     reload();
   }
 
-  addBtn.addEventListener('click', () => addGoal(inputEl.value.trim()));
+  addBtn.addEventListener('click', () => addTask(inputEl.value.trim()));
   inputEl.addEventListener('keydown', e => {
-    if (e.key === 'Enter') addGoal(inputEl.value.trim());
+    if (e.key === 'Enter') addTask(inputEl.value.trim());
   });
 
   polishBtn.addEventListener('click', async () => {
     const raw = inputEl.value.trim();
     if (!raw) return;
     if (!ANTHROPIC_API_KEY) {
-      addGoal(raw);
+      addTask(raw);
       showStatus(statusEl, 'Polish needs an Anthropic API key — added as-typed.', 'var(--text-tertiary)', 3500);
       return;
     }
     polishBtn.disabled = true;
     polishBtn.textContent = '✨ Polishing…';
-    const polished = await polishGoal(raw, statusEl);
+    const polished = await polishTask(raw, statusEl);
     polishBtn.disabled = false;
     polishBtn.textContent = '✨ Polish';
     if (polished) {
-      addGoal(polished);
+      addTask(polished);
     } else {
-      addGoal(raw);
+      addTask(raw);
       showStatus(statusEl, 'Polish failed — added as-typed.', 'var(--danger)', 3500);
     }
   });
 }
 
-// ── Upcoming card: date picker for the target day of new goals ──
+// ── Upcoming card: date picker for the target day of new tasks ──
 // (min/value are seeded by loadUpcoming(), which runs after main.js loads the
 // date helpers; here we only wire the change handler.)
 document.getElementById('plannerDateInput').addEventListener('change', e => {
@@ -713,9 +714,9 @@ document.getElementById('plannerDateInput').addEventListener('change', e => {
 function getSundayReset()      { return MEM['sunday_reset_v1'] || []; }
 function saveSundayReset(list) { MEM['sunday_reset_v1'] = list; _syncSetting('sunday_reset_v1', list); }
 
-// True when a goal came from a Sunday Reset template — matched by text, the same
-// identity applySundayReset() and _removeInjectedGoal() use. Drives the row tag.
-function isSundayResetGoal(g) {
+// True when a task came from a Sunday Reset template — matched by text, the same
+// identity applySundayReset() and _removeInjectedTask() use. Drives the row tag.
+function isSundayResetTask(g) {
   return getSundayReset().some(it => it.text === g.text);
 }
 
@@ -728,9 +729,9 @@ function _isSunday(ds) {
   return new Date(y, m - 1, d).getDay() === 0;
 }
 
-// Inject not-yet-added Sunday Reset entries into the active day's goals, but only
+// Inject not-yet-added Sunday Reset entries into the active day's tasks, but only
 // when the active day is a Sunday. Idempotent per (Sunday date × entry id) via
-// the log map, so deleting an injected goal doesn't resurrect it on the next
+// the log map, so deleting an injected task doesn't resurrect it on the next
 // refresh, while an entry added mid-Sunday still lands in today's list.
 function applySundayReset() {
   const ds = getActiveDateString();
@@ -740,14 +741,14 @@ function applySundayReset() {
 
   const log   = MEM['sunday_reset_log_v1'] || {};
   const done  = log[ds] || [];
-  const goals = storeGet('goals:' + ds) || [];
-  const texts = new Set(goals.map(g => g.text));
+  const tasks = storeGet('tasks:' + ds) || [];
+  const texts = new Set(tasks.map(g => g.text));
 
   let added = false;
   items.forEach(it => {
     if (done.includes(it.id)) return;
     if (!texts.has(it.text)) {
-      goals.push(makeGoal({ text: it.text, area: it.area || null }));
+      tasks.push(makeTask({ text: it.text, area: it.area || null }));
       texts.add(it.text);
       added = true;
     }
@@ -759,7 +760,7 @@ function applySundayReset() {
   MEM['sunday_reset_log_v1'] = log;
   _syncSetting('sunday_reset_log_v1', log);
 
-  if (added) storeSet('goals:' + ds, goals); // persists + fires goals-changed
+  if (added) storeSet('tasks:' + ds, tasks); // persists + fires tasks-changed
 }
 
 // ── Sunday Reset slide-in view ──
@@ -785,16 +786,16 @@ function _afterSundayResetChange() {
   if (_isSunday(getActiveDateString())) { applySundayReset(); loadToday(); }
 }
 
-// When an entry is deleted on a Sunday, also pull the goal it injected out of
+// When an entry is deleted on a Sunday, also pull the task it injected out of
 // today's To Do list (matched by text, the same way injection dedups) and drop
 // its id from today's injection log so state stays consistent.
-function _removeInjectedGoal(entry) {
+function _removeInjectedTask(entry) {
   const ds = getActiveDateString();
   if (!_isSunday(ds)) return;
 
-  const goals = storeGet('goals:' + ds) || [];
-  const next  = goals.filter(g => g.text !== entry.text);
-  if (next.length !== goals.length) storeSet('goals:' + ds, next);
+  const tasks = storeGet('tasks:' + ds) || [];
+  const next  = tasks.filter(g => g.text !== entry.text);
+  if (next.length !== tasks.length) storeSet('tasks:' + ds, next);
 
   const log = MEM['sunday_reset_log_v1'] || {};
   if (log[ds] && log[ds].includes(entry.id)) {
@@ -846,18 +847,18 @@ function renderSundayResetPage() {
     </p>
     <ul class="sunday-reset-list" id="sundayResetList"></ul>
     <div id="sundayResetEmpty" class="empty-state"${items.length ? ' style="display:none;"' : ''}>No weekly tasks yet — add one below.</div>
-    <div class="goal-input-wrap gm-input-wrap">
-      <input type="text" class="goal-input" id="sundayResetInput" placeholder="Add a weekly task…">
+    <div class="task-input-wrap tm-input-wrap">
+      <input type="text" class="task-input" id="sundayResetInput" placeholder="Add a weekly task…">
       <button class="btn-add" id="sundayResetAdd">+ Add</button>
     </div>`;
 
   const list = document.getElementById('sundayResetList');
   items.forEach(it => {
     const li = document.createElement('li');
-    li.className = 'goal-row sunday-reset-row';
+    li.className = 'task-row sunday-reset-row';
 
     const txt = document.createElement('span');
-    txt.className = 'goal-text';
+    txt.className = 'task-text';
     txt.textContent = it.text;
     _srInlineEdit(txt, it);
     li.appendChild(txt);
@@ -869,11 +870,11 @@ function renderSundayResetPage() {
     }));
 
     const del = document.createElement('button');
-    del.className = 'goal-delete';
+    del.className = 'task-delete';
     del.textContent = '×';
     del.title = 'Remove from Sunday Reset';
     del.addEventListener('click', () => {
-      _removeInjectedGoal(it);
+      _removeInjectedTask(it);
       saveSundayReset(getSundayReset().filter(x => x.id !== it.id));
       _afterSundayResetChange();
     });
@@ -916,37 +917,37 @@ document.addEventListener('keydown', e => {
 });
 
 
-// ── Goal history — read-only view of past days ─────────────────────────────
-// Past days' `goals:` entries are retained (rollover no longer deletes them);
+// ── Task history — read-only view of past days ─────────────────────────────
+// Past days' `tasks:` entries are retained (rollover no longer deletes them);
 // this lists them newest-first so you can see what was set and what got done.
-const GOAL_HISTORY_DAYS = 90; // matches loadFromSupabase's 90-day window
+const TASK_HISTORY_DAYS = 90; // matches loadFromSupabase's 90-day window
 
 // Display-only area pill (buildAreaPill always wires a click-to-edit dropdown).
-// Returns null when the goal has no (known) area, so history rows stay clean.
+// Returns null when the task has no (known) area, so history rows stay clean.
 function _historyAreaPill(areaName) {
   if (!areaName) return null;
   const areaObj = getAreas().find(a => a.name === areaName);
   if (!areaObj) return null;
   const pill = document.createElement('span');
-  pill.className = 'goal-area-pill';
+  pill.className = 'task-area-pill';
   pill.textContent = areaName;
   pill.style.background = areaObj.color + 'BF';
   pill.style.color = '#fff';
   return pill;
 }
 
-function renderGoalHistory() {
-  const body = document.getElementById('goalHistoryBody');
+function renderTaskHistory() {
+  const body = document.getElementById('taskHistoryBody');
   if (!body) return;
   body.innerHTML = '';
 
   const activeDate = getActiveDateString();
-  const days = storeListKeys('goals:')
+  const days = storeListKeys('tasks:')
     .map(k => k.slice(6))
     .filter(d => d < activeDate)
     .sort()
     .reverse()
-    .slice(0, GOAL_HISTORY_DAYS);
+    .slice(0, TASK_HISTORY_DAYS);
 
   if (days.length === 0) {
     const empty = document.createElement('div');
@@ -957,31 +958,31 @@ function renderGoalHistory() {
   }
 
   days.forEach(date => {
-    const goals = storeGet('goals:' + date) || [];
-    const done  = goals.filter(g => g.done).length;
+    const tasks = storeGet('tasks:' + date) || [];
+    const done  = tasks.filter(g => g.done).length;
 
     const head = document.createElement('div');
-    head.className = 'goal-history-day';
+    head.className = 'task-history-day';
     head.innerHTML = `<span>${formatDate(date)}</span>` +
-      `<span class="goal-history-count">${done}/${goals.length}</span>`;
+      `<span class="task-history-count">${done}/${tasks.length}</span>`;
     body.appendChild(head);
 
-    if (goals.length === 0) return;
+    if (tasks.length === 0) return;
 
     const ul = document.createElement('ul');
-    ul.className = 'goal-list goal-history-list';
-    goals.forEach(g => {
-      const priClass = { High: 'goal-priority-high', Medium: 'goal-priority-med', Low: 'goal-priority-low' }[g.priority || 'Medium'] || 'goal-priority-med';
+    ul.className = 'task-list task-history-list';
+    tasks.forEach(g => {
+      const priClass = { High: 'task-priority-high', Medium: 'task-priority-med', Low: 'task-priority-low' }[g.priority || 'Medium'] || 'task-priority-med';
       const li = document.createElement('li');
-      li.className = 'goal-row ' + priClass + (g.done ? ' is-done' : '');
+      li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
 
       const mark = document.createElement('span');
-      mark.className = 'goal-history-mark';
+      mark.className = 'task-history-mark';
       mark.textContent = g.done ? '✓' : '○';
       li.appendChild(mark);
 
       const txt = document.createElement('span');
-      txt.className = 'goal-text';
+      txt.className = 'task-text';
       txt.textContent = g.text;
       li.appendChild(txt);
 
@@ -993,23 +994,23 @@ function renderGoalHistory() {
   });
 }
 
-function openGoalHistory() {
-  renderGoalHistory();
-  const modal = document.getElementById('goalHistoryModal');
+function openTaskHistory() {
+  renderTaskHistory();
+  const modal = document.getElementById('taskHistoryModal');
   modal.classList.add('open');
   modal.querySelector('.sr-modal-card').scrollTop = 0;
   document.body.style.overflow = 'hidden';
 }
-function closeGoalHistory() {
-  document.getElementById('goalHistoryModal').classList.remove('open');
+function closeTaskHistory() {
+  document.getElementById('taskHistoryModal').classList.remove('open');
   document.body.style.overflow = '';
 }
 
-document.getElementById('goalHistoryBtn').addEventListener('click', openGoalHistory);
-document.getElementById('goalHistoryClose').addEventListener('click', closeGoalHistory);
-document.getElementById('goalHistoryModal').addEventListener('click', e => {
-  if (e.target.id === 'goalHistoryModal') closeGoalHistory(); // backdrop click only
+document.getElementById('taskHistoryBtn').addEventListener('click', openTaskHistory);
+document.getElementById('taskHistoryClose').addEventListener('click', closeTaskHistory);
+document.getElementById('taskHistoryModal').addEventListener('click', e => {
+  if (e.target.id === 'taskHistoryModal') closeTaskHistory(); // backdrop click only
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('goalHistoryModal').classList.contains('open')) closeGoalHistory();
+  if (e.key === 'Escape' && document.getElementById('taskHistoryModal').classList.contains('open')) closeTaskHistory();
 });

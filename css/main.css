@@ -1,5 +1,5 @@
 /* Base + page shell: reset, :root tokens, background, cards, header,
-   section eyebrow, goal ticker, day ring, tabs.
+   section eyebrow, task ticker, day ring, tabs.
    Ends with the global mobile @media block — keep it last in this file
    and load main.css before the feature stylesheets. */
 
@@ -126,10 +126,10 @@
   .section-title::before { content: ''; width: 18px; height: 1px; background: var(--text-tertiary); opacity: 0.6; flex-shrink: 0; }
   .section-title::after  { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent); }
 
-  /* ── Goal Ticker ── */
+  /* ── Task Ticker ── */
   .ticker-row { margin-bottom: 18px; }
 
-  .goal-ticker {
+  .task-ticker {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -144,7 +144,7 @@
     overflow: hidden;
   }
 
-  .goal-ticker::after {
+  .task-ticker::after {
     content: '';
     position: absolute;
     top: 0;
@@ -161,13 +161,13 @@
     100% { left: 110%; }
   }
 
-  .goal-ticker-led {
+  .task-ticker-led {
     display: flex;
     align-items: center;
     flex-shrink: 0;
   }
 
-  .goal-ticker-led-dot {
+  .task-ticker-led-dot {
     display: block;
     width: 7px;
     height: 7px;
@@ -182,7 +182,7 @@
     50%       { opacity: 0.45; transform: scale(0.85); }
   }
 
-  .goal-ticker-label {
+  .task-ticker-label {
     font-family: var(--font-mono);
     font-size: 9.5px;
     font-weight: 800;
@@ -191,14 +191,14 @@
     flex-shrink: 0;
   }
 
-  .goal-ticker-stage {
+  .task-ticker-stage {
     flex: 1;
     height: 22px;
     position: relative;
     overflow: hidden;
   }
 
-  .goal-ticker-row {
+  .task-ticker-row {
     position: absolute;
     top: 0; left: 0; right: 0;
     display: flex;
@@ -213,22 +213,22 @@
     white-space: nowrap;
   }
 
-  .goal-ticker-status {
+  .task-ticker-status {
     width: 18px;
     flex-shrink: 0;
     text-align: center;
   }
-  .goal-ticker-status[data-status="done"]    { color: var(--success); }
-  .goal-ticker-status[data-status="pending"] { color: var(--text-tertiary); }
-  .goal-ticker-status[data-status="empty"]   { color: var(--text-tertiary); }
+  .task-ticker-status[data-status="done"]    { color: var(--success); }
+  .task-ticker-status[data-status="pending"] { color: var(--text-tertiary); }
+  .task-ticker-status[data-status="empty"]   { color: var(--text-tertiary); }
 
-  .goal-ticker-text {
+  .task-ticker-text {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .goal-ticker-meta {
+  .task-ticker-meta {
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;
@@ -250,8 +250,8 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  .goal-ticker-row.is-leaving  { animation: ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards; }
-  .goal-ticker-row.is-entering { animation: ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .task-ticker-row.is-leaving  { animation: ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards; }
+  .task-ticker-row.is-entering { animation: ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
   /* ── Day Ring ── */
   .day-ring-wrap {
@@ -372,10 +372,10 @@
        each label onto two lines. */
     .tab-bar { flex-wrap: wrap; }
     .tab-btn { padding: 8px 14px; white-space: nowrap; }
-    .goal-ticker { padding: 9px 12px; }
-    .goal-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
-    .goal-ticker-row { font-size: 12px; }
-    .goal-ticker-meta { font-size: 10px; padding: 2px 7px; }
+    .task-ticker { padding: 9px 12px; }
+    .task-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
+    .task-ticker-row { font-size: 12px; }
+    .task-ticker-meta { font-size: 10px; padding: 2px 7px; }
     .day-ring-svg-wrap { width: 144px; height: 144px; }
     .day-ring-pct { font-size: 32px; }
     .day-ring-status { font-size: 13px; }

@@ -8,7 +8,7 @@
 //  invocations to the feature files.
 // ══════════════════════════════════════════════════════════════════════════
 
-const ANTHROPIC_API_KEY = '';           // goal "Polish" (js/todo.js)
+const ANTHROPIC_API_KEY = '';           // task "Polish" (js/todo.js)
 // Diet-tab "Import from screenshot" (js/diet.js) — OCR.space. 'helloworld' is the
 // shared free test key (rate-limited); get your own free key (25k/month) at
 // https://ocr.space/ocrapi/freekey and paste it here.
@@ -40,16 +40,40 @@ function _loadLocal() {
   if (!data || Object.keys(data).length === 0) data = _seedLocalData();
   Object.keys(MEM).forEach(k => delete MEM[k]);
   Object.assign(MEM, data);
-  _normalizeGoals();
+  _migrateGoalKeys();
+  _normalizeTasks();
   _saveLocal();
 }
 
-// Guarantee every stored goal has a stable id + ISO createdAt. New goals get
-// these at creation; this backfills anything older (local blobs, pre-id rows).
-function _normalizeGoals() {
+// One-time in-place rename of the pre-2026-09 "goal" storage keys to "task", for
+// local (test@local) accounts whose whole MEM blob lives in localStorage. Real
+// accounts re-fetch from Supabase each load, so they need nothing here.
+function _migrateGoalKeys() {
   Object.keys(MEM).filter(k => k.startsWith('goals:')).forEach(k => {
+    const n = 'tasks:' + k.slice(6);
+    if (!MEM.hasOwnProperty(n)) MEM[n] = MEM[k];
+    delete MEM[k];
+  });
+  [['goal_streak_v1', 'task_streak_v1'],
+   ['goal_sort_v1', 'task_sort_v1'],
+   ['goal_dismissed_v1', 'task_dismissed_v1']].forEach(([o, n]) => {
+    if (MEM.hasOwnProperty(o) && !MEM.hasOwnProperty(n)) MEM[n] = MEM[o];
+    delete MEM[o];
+  });
+  delete MEM['goal_rollover_v1'];
+  // Habit step-goal field rename (see master.sql habits.auto_goal → step_target).
+  (MEM['habits:list'] || []).forEach(h => {
+    if (h && h.autoGoal != null && h.stepTarget == null) h.stepTarget = h.autoGoal;
+    if (h) delete h.autoGoal;
+  });
+}
+
+// Guarantee every stored task has a stable id + ISO createdAt. New tasks get
+// these at creation; this backfills anything older (local blobs, pre-id rows).
+function _normalizeTasks() {
+  Object.keys(MEM).filter(k => k.startsWith('tasks:')).forEach(k => {
     (MEM[k] || []).forEach(g => {
-      if (!g.id) g.id = _goalId();
+      if (!g.id) g.id = _taskId();
       if (!g.createdAt) g.createdAt = new Date().toISOString();
     });
   });
@@ -69,14 +93,14 @@ function _seedLocalData() {
     'habit_sort_v1': 'custom',
     'habits:list': [
       { id: h1, name: 'Read 20 minutes', startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date(Date.now() - 60000).toISOString() },
-      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date().toISOString(), autoSource: 'steps', autoGoal: 7000 },
+      { id: h2, name: 'Morning walk',    startDate: today, endDate: null, archived: false, archivedAt: null, area: 'Health', createdAt: new Date().toISOString(), autoSource: 'steps', stepTarget: 7000 },
     ],
     ['habits:log:' + today]: [h1],
-    ['goals:' + today]: [
+    ['tasks:' + today]: [
       { id: 'g_seed1', text: 'Try out the local test account', done: true,  doneAt: new Date().toISOString(), priority: 'Medium', area: null, createdAt: new Date(Date.now() - 3600000).toISOString() },
-      { id: 'g_seed2', text: 'Add my own goal',                done: false, priority: 'Medium', area: null, createdAt: new Date().toISOString() },
+      { id: 'g_seed2', text: 'Add my own task',                done: false, priority: 'Medium', area: null, createdAt: new Date().toISOString() },
     ],
-    'goal_streak_v1': { count: 0, lastProcessedDate: null },
+    'task_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
       { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
     ],
@@ -150,16 +174,16 @@ function getStepIngestToken() {
 const STEP_SYNC_URL = SUPABASE_URL + '/functions/v1/steps-ingest';
 function storeSet(key, value) {
   MEM[key] = value;
-  if (key.startsWith('goals:')) {
-    window.dispatchEvent(new CustomEvent('goals-changed'));
-    _syncGoals(key.slice(6), value);
-  } else if (key === 'goal_streak_v1' || key === 'goal_dismissed_v1') {
+  if (key.startsWith('tasks:')) {
+    window.dispatchEvent(new CustomEvent('tasks-changed'));
+    _syncTasks(key.slice(6), value);
+  } else if (key === 'task_streak_v1' || key === 'task_dismissed_v1') {
     _syncSetting(key, value);
   }
 }
 function storeDelete(key) {
   delete MEM[key];
-  if (key.startsWith('goals:')) _syncGoals(key.slice(6), []);
+  if (key.startsWith('tasks:')) _syncTasks(key.slice(6), []);
 }
 function storeListKeys(prefix) {
   return Object.keys(MEM).filter(k => k.startsWith(prefix));
@@ -198,8 +222,8 @@ function formatDate(str) {
   return `${wd}, ${mo} ${d}`;
 }
 
-const todayKey    = () => 'goals:' + getActiveDateString();
-const tomorrowKey = () => 'goals:' + getTomorrowDateString();
+const todayKey    = () => 'tasks:' + getActiveDateString();
+const tomorrowKey = () => 'tasks:' + getTomorrowDateString();
 
 
 // ── Ticker ──
@@ -209,18 +233,18 @@ let tickerInterval = null;
 let tickerLeaveTimer = null;
 
 function buildTickerItems() {
-  const goals = storeGet(todayKey()) || [];
-  const total = goals.length;
-  const done  = goals.filter(g => g.done).length;
+  const tasks = storeGet(todayKey()) || [];
+  const total = tasks.length;
+  const done  = tasks.filter(g => g.done).length;
   const meta  = `${done}/${total}`;
-  document.getElementById('goalTickerMeta').textContent = meta;
+  document.getElementById('taskTickerMeta').textContent = meta;
   if (total === 0) {
-    return [{ status: 'empty', text: 'No goals set for today — add one to get rolling.' }];
+    return [{ status: 'empty', text: 'No tasks set for today — add one to get rolling.' }];
   }
   if (done === total) {
-    return [{ status: 'done', text: '✓ All goals done — solid day.' }];
+    return [{ status: 'done', text: '✓ All tasks done — solid day.' }];
   }
-  return goals.filter(g => !g.done).map(g => ({ status: 'pending', text: g.text }));
+  return tasks.filter(g => !g.done).map(g => ({ status: 'pending', text: g.text }));
 }
 
 function glyphFor(status) {
@@ -235,8 +259,8 @@ function tick(first) {
   const item = tickerItems[cycleIdx % tickerItems.length];
   cycleIdx = (cycleIdx + 1) % tickerItems.length;
 
-  const stage = document.getElementById('goalTickerStage');
-  const existingRows = [...stage.querySelectorAll('.goal-ticker-row')];
+  const stage = document.getElementById('taskTickerStage');
+  const existingRows = [...stage.querySelectorAll('.task-ticker-row')];
 
   // Drop any leftover rows from an interrupted transition, keeping only the
   // most recent one to animate out.
@@ -245,8 +269,8 @@ function tick(first) {
   existingRows.forEach(r => r.remove());
 
   const newRow = document.createElement('div');
-  newRow.className = 'goal-ticker-row';
-  newRow.innerHTML = `<span class="goal-ticker-status" data-status="${item.status}">${glyphFor(item.status)}</span><span class="goal-ticker-text">${item.text}</span>`;
+  newRow.className = 'task-ticker-row';
+  newRow.innerHTML = `<span class="task-ticker-status" data-status="${item.status}">${glyphFor(item.status)}</span><span class="task-ticker-text">${item.text}</span>`;
 
   if (currentRow && !first) {
     currentRow.classList.remove('is-entering');
@@ -266,7 +290,7 @@ function startTicker() {
   tickerInterval = setInterval(() => tick(false), 5000);
 }
 
-window.addEventListener('goals-changed', () => {
+window.addEventListener('tasks-changed', () => {
   cycleIdx = 0;
   tick(false);
   // Re-space the auto-advance so it doesn't fire right on top of this update.
@@ -361,14 +385,14 @@ function updateDayBar() {
 // ── Shared area pill + dropdown ──
 function buildAreaPill(currentArea, onChange) {
   const wrap = document.createElement('div');
-  wrap.className = 'goal-area-wrap';
+  wrap.className = 'task-area-wrap';
 
   const areas = getAreas();
   const areaObj = areas.find(a => a.name === currentArea);
   const hasArea = !!currentArea && !!areaObj;
 
   const pill = document.createElement('span');
-  pill.className = 'goal-area-pill' + (hasArea ? '' : ' is-empty');
+  pill.className = 'task-area-pill' + (hasArea ? '' : ' is-empty');
   if (hasArea) {
     pill.textContent = currentArea;
     pill.style.background = areaObj.color + 'BF';
@@ -380,23 +404,23 @@ function buildAreaPill(currentArea, onChange) {
 
   pill.addEventListener('click', e => {
     e.stopPropagation();
-    document.querySelectorAll('.goal-area-dd').forEach(d => d.remove());
+    document.querySelectorAll('.task-area-dd').forEach(d => d.remove());
 
     const freshAreas = getAreas();
     const dd = document.createElement('div');
-    dd.className = 'goal-area-dd';
+    dd.className = 'task-area-dd';
 
     if (freshAreas.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'goal-area-dd-empty';
+      empty.className = 'task-area-dd-empty';
       empty.textContent = 'No Areas Created';
       dd.appendChild(empty);
     } else {
       freshAreas.forEach(a => {
         const item = document.createElement('div');
-        item.className = 'goal-area-dd-item';
+        item.className = 'task-area-dd-item';
         const dpill = document.createElement('span');
-        dpill.className = 'goal-area-pill';
+        dpill.className = 'task-area-pill';
         dpill.textContent = a.name;
         dpill.style.background = a.color + 'BF';
         dpill.style.color = '#fff';
@@ -445,8 +469,8 @@ async function _syncHabits(habits) {
         sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
       };
       if (withAuto) {
-        row.auto_source = h.autoSource || null;
-        row.auto_goal   = h.autoGoal ?? null;
+        row.auto_source  = h.autoSource || null;
+        row.step_target  = h.stepTarget ?? null;
       }
       return row;
     }), { onConflict: 'id' });
@@ -462,7 +486,7 @@ async function _syncHabits(habits) {
   }
 }
 
-// Both of the day-scoped syncs below (habit_logs, goals) write the current set
+// Both of the day-scoped syncs below (habit_logs, tasks) write the current set
 // FIRST and only then delete whatever else is left for that date. If the write
 // fails — schema drift, a constraint, a dropped connection — we bail before
 // deleting anything, so a failed sync can never leave the day emptier than it
@@ -486,33 +510,33 @@ async function _syncHabitLog(dateStr, ids) {
   if (delErr) console.error('[sync] habit_logs stale-delete failed:', delErr);
 }
 
-async function _syncGoals(dateStr, goals) {
+async function _syncTasks(dateStr, tasks) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
 
-  if (!goals.length) {
-    const { error } = await sb.from('goals').delete().eq('user_id', uid).eq('date', dateStr);
-    if (error) console.error('[sync] goals clear failed:', error);
+  if (!tasks.length) {
+    const { error } = await sb.from('tasks').delete().eq('user_id', uid).eq('date', dateStr);
+    if (error) console.error('[sync] tasks clear failed:', error);
     return;
   }
 
   // Insert the current set first, asking for the new rows' ids back.
-  const { data: inserted, error: insErr } = await sb.from('goals').insert(goals.map(g => ({
+  const { data: inserted, error: insErr } = await sb.from('tasks').insert(tasks.map(g => ({
     user_id: uid, date: dateStr, text: g.text,
     done: g.done || false, done_at: g.doneAt || null,
     area: g.area || null, priority: g.priority || 'Medium',
-    gid: g.id || null, created_at: g.createdAt || null,
+    tid: g.id || null, created_at: g.createdAt || null,
   }))).select('id');
-  if (insErr) { console.error('[sync] goals insert failed (kept existing rows):', insErr); return; }
+  if (insErr) { console.error('[sync] tasks insert failed (kept existing rows):', insErr); return; }
 
   const keepIds = (inserted || []).map(r => r.id);
-  if (!keepIds.length) { console.error('[sync] goals insert returned no ids — skipping stale-delete'); return; }
+  if (!keepIds.length) { console.error('[sync] tasks insert returned no ids — skipping stale-delete'); return; }
 
   // Drop the pre-insert copies (and any leftover duplicates) for this date.
-  const { error: delErr } = await sb.from('goals').delete()
+  const { error: delErr } = await sb.from('tasks').delete()
     .eq('user_id', uid).eq('date', dateStr)
     .not('id', 'in', `(${keepIds.join(',')})`);
-  if (delErr) console.error('[sync] goals stale-delete failed (duplicates clear on next save):', delErr);
+  if (delErr) console.error('[sync] tasks stale-delete failed (duplicates clear on next save):', delErr);
 }
 
 async function _syncSetting(key, value) {
@@ -650,7 +674,7 @@ async function loadFromSupabase() {
   const results = await Promise.all([
     sb.from('habits').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_logs').select('*').eq('user_id', uid),
-    sb.from('goals').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
+    sb.from('tasks').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
     sb.from('settings').select('key,value').eq('user_id', uid),
     sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
     sb.from('habit_notes').select('*').eq('user_id', uid).order('created_at'),
@@ -665,7 +689,7 @@ async function loadFromSupabase() {
 
   const habits  = results[0].data || [];
   const logs    = results[1].data || [];
-  const goals   = results[2].data || [];
+  const tasks   = results[2].data || [];
   const jobs    = results[4].data || [];
   const hNotes  = results[5].data || [];
   const mobEx   = results[6].data || [];
@@ -678,7 +702,7 @@ async function loadFromSupabase() {
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
     area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
-    autoSource: h.auto_source || null, autoGoal: h.auto_goal ?? null,
+    autoSource: h.auto_source || null, stepTarget: h.step_target ?? null,
   }));
 
   logs.forEach(l => {
@@ -687,30 +711,30 @@ async function loadFromSupabase() {
     MEM[k].push(l.habit_id);
   });
 
-  // Rows written before the gid migration have gid = null. Without a stable
-  // id, _normalizeGoals mints a fresh one every load, so rollover dedup and
-  // "dismiss on delete" (goal_dismissed_v1 is keyed by id) never stick — a
-  // deleted overdue goal reappears on the next reload. Mint the id once here
+  // Rows written before the tid migration have tid = null. Without a stable
+  // id, _normalizeTasks mints a fresh one every load, so rollover dedup and
+  // "dismiss on delete" (task_dismissed_v1 is keyed by id) never stick — a
+  // deleted overdue task reappears on the next reload. Mint the id once here
   // and write it back so it's permanent.
-  const gidBackfill = [];
-  goals.forEach(g => {
-    const k = 'goals:' + g.date;
+  const tidBackfill = [];
+  tasks.forEach(g => {
+    const k = 'tasks:' + g.date;
     if (!MEM[k]) MEM[k] = [];
     // Collapse duplicate rows a failed stale-delete may have left (see
-    // _syncGoals). Query is ordered by id, so the earliest row wins.
-    if (g.gid && MEM[k].some(x => x.id === g.gid)) return;
-    const gid = g.gid || _goalId();
-    const goal = { id: gid, text: g.text, done: g.done,
+    // _syncTasks). Query is ordered by id, so the earliest row wins.
+    if (g.tid && MEM[k].some(x => x.id === g.tid)) return;
+    const tid = g.tid || _taskId();
+    const task = { id: tid, text: g.text, done: g.done,
       area: g.area || null, priority: g.priority || 'Medium',
       createdAt: g.created_at || null };
-    if (g.done_at) goal.doneAt = g.done_at;
-    MEM[k].push(goal);
-    if (!g.gid) gidBackfill.push({ ...g, gid });
+    if (g.done_at) task.doneAt = g.done_at;
+    MEM[k].push(task);
+    if (!g.tid) tidBackfill.push({ ...g, tid });
   });
 
-  if (!LOCAL_MODE && gidBackfill.length) {
-    const { error } = await sb.from('goals').upsert(gidBackfill);
-    if (error) console.error('[sync] goal gid backfill failed (run master.sql?):', error);
+  if (!LOCAL_MODE && tidBackfill.length) {
+    const { error } = await sb.from('tasks').upsert(tidBackfill);
+    if (error) console.error('[sync] task tid backfill failed (run master.sql?):', error);
   }
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
@@ -751,7 +775,7 @@ async function loadFromSupabase() {
 
   MEM['step_counts_v1'] = stepRows.map(r => ({ date: r.date, steps: r.steps }));
 
-  _normalizeGoals();
+  _normalizeTasks();
 }
 
 
@@ -794,7 +818,7 @@ function _enterApp() {
   document.getElementById('signOutBtn').style.display = '';
   checkStreak(); rollover(); applySundayReset(); _reconcileStepHabits(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
-  tick(true); // refresh the goal ticker immediately with the loaded data
+  tick(true); // refresh the task ticker immediately with the loaded data
 }
 
 async function signOut() {
@@ -871,9 +895,9 @@ rollover();
 applySundayReset();
 
 makeAddHandlers(
-  document.getElementById('goalInput'),
-  document.getElementById('goalAddBtn'),
-  document.getElementById('goalPolishBtn'),
+  document.getElementById('taskInput'),
+  document.getElementById('taskAddBtn'),
+  document.getElementById('taskPolishBtn'),
   todayKey,
   document.getElementById('polishStatus'),
   loadToday
@@ -883,7 +907,7 @@ makeAddHandlers(
   document.getElementById('tomorrowInput'),
   document.getElementById('tomorrowAddBtn'),
   document.getElementById('tomorrowPolishBtn'),
-  () => 'goals:' + plannerTargetDate(),
+  () => 'tasks:' + plannerTargetDate(),
   document.getElementById('tomorrowStatus'),
   loadUpcoming
 );

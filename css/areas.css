@@ -55,16 +55,16 @@
   .area-detail-tab:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
   .area-detail-tab.active { background: rgba(255,255,255,0.10); color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
   .area-detail-panel { }
-  .area-detail-goal-row {
+  .area-detail-task-row {
     display: flex; align-items: center; gap: 10px;
     padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
   }
-  .area-detail-goal-row:last-child { border-bottom: none; }
-  .area-detail-goal-cb { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.22); flex-shrink: 0; }
-  .area-detail-goal-cb.done { background: rgba(255,255,255,0.12); border-color: transparent; }
-  .area-detail-goal-text { font-size: 14px; color: var(--text-primary); flex: 1; }
-  .area-detail-goal-text.done { text-decoration: line-through; color: var(--text-tertiary); }
-  .area-detail-goal-key { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+  .area-detail-task-row:last-child { border-bottom: none; }
+  .area-detail-task-cb { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid rgba(255,255,255,0.22); flex-shrink: 0; }
+  .area-detail-task-cb.done { background: rgba(255,255,255,0.12); border-color: transparent; }
+  .area-detail-task-text { font-size: 14px; color: var(--text-primary); flex: 1; }
+  .area-detail-task-text.done { text-decoration: line-through; color: var(--text-tertiary); }
+  .area-detail-task-key { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
   .area-detail-empty { color: var(--text-tertiary); font-size: 14px; padding: 24px 0; }
   .area-note-entry {
     padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
