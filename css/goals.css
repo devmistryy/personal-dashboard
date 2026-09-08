@@ -1,0 +1,140 @@
+  /* ── Areas & Goals tab — two-column split ── */
+  .ag-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+  .ag-col { min-width: 0; }               /* let each column shrink inside the grid */
+
+  /* In the split the area cards get a narrower column — stack them one per row */
+  .ag-split #areasListWrap { grid-template-columns: 1fr; }
+
+  @media (max-width: 760px) {
+    .ag-split { grid-template-columns: 1fr; gap: 8px; }
+  }
+
+  /* ── Goal list ── */
+  .goal-add-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+
+  .goal-list { list-style: none; margin: 0; padding: 0; }
+
+  .goal-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 11px 13px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.035);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    transition: background 0.2s, opacity 0.2s;
+    position: relative;
+  }
+  .goal-row:hover { background: rgba(255,255,255,0.055); }
+  .goal-row:hover .goal-drag-handle,
+  .goal-row:hover .goal-delete { opacity: 1; }
+  .goal-row.dragging { opacity: 0.4; }
+  .goal-row.drag-over { outline: 2px solid rgba(255,255,255,0.3); }
+
+  .goal-drag-handle {
+    font-size: 14px; width: 12px; flex-shrink: 0;
+    color: var(--text-tertiary); cursor: grab;
+    letter-spacing: -2px; user-select: none;
+    opacity: 0; transition: opacity 0.2s;
+  }
+
+  /* Custom checkbox (mirrors the To Do task checkbox) */
+  .goal-cb-wrap { width: 20px; height: 20px; flex-shrink: 0; position: relative; }
+  .goal-cb-wrap input[type="checkbox"] {
+    position: absolute; opacity: 0; width: 100%; height: 100%;
+    cursor: pointer; z-index: 2; margin: 0;
+  }
+  .goal-cb-box {
+    width: 20px; height: 20px; border-radius: 7px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.04);
+    position: absolute; top: 0; left: 0; pointer-events: none;
+    transition: background 0.25s, box-shadow 0.25s, border-color 0.25s;
+  }
+  .goal-cb-box::after {
+    content: ''; position: absolute; top: 3px; left: 6px;
+    width: 5px; height: 9px;
+    border-right: 2px solid #050506; border-bottom: 2px solid #050506;
+    transform: rotate(45deg) scale(0);
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .goal-cb-wrap input:checked + .goal-cb-box {
+    background: var(--success); border-color: var(--success);
+    box-shadow: 0 0 12px rgba(107,227,164,0.40);
+  }
+  .goal-cb-wrap input:checked + .goal-cb-box::after { transform: rotate(45deg) scale(1); }
+
+  .goal-expand {
+    flex-shrink: 0; background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); font-size: 11px; line-height: 1;
+    padding: 4px 2px; transition: color 0.15s;
+  }
+  .goal-expand:hover { color: var(--text-primary); }
+
+  .goal-main {
+    flex: 1; min-width: 0;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .goal-text {
+    flex: 0 1 auto; font-size: 13.5px; color: var(--text-primary);
+    outline: none; word-break: break-word; min-width: 0;
+  }
+  .goal-text[contenteditable="true"]:focus {
+    outline: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px; padding: 1px 4px; margin: -1px -4px;
+  }
+  .goal-has-notes {
+    font-size: 10.5px; color: rgba(255,255,255,0.3);
+    white-space: nowrap; flex-shrink: 0;
+  }
+
+  .goal-delete {
+    flex-shrink: 0; background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); font-size: 16px; line-height: 1;
+    padding: 2px 4px; border-radius: 6px;
+    opacity: 0; transition: opacity 0.2s, color 0.2s;
+  }
+  .goal-delete:hover { color: var(--danger); }
+
+  .goal-row.is-done { opacity: 0.5; background: rgba(107,227,164,0.04); }
+  .goal-row.is-done .goal-text {
+    text-decoration: line-through;
+    text-decoration-color: rgba(255,255,255,0.4);
+  }
+
+  /* Notes drawer — wraps onto its own line inside the flex row */
+  .goal-notes-wrap { flex-basis: 100%; width: 100%; margin-top: 4px; }
+  .goal-notes {
+    width: 100%; box-sizing: border-box;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 9px 11px;
+    color: var(--text-primary); font-family: var(--font-body); font-size: 12.5px;
+    line-height: 1.5; outline: none; resize: vertical;
+    transition: border-color 0.2s;
+  }
+  .goal-notes:focus { border-color: rgba(255,255,255,0.28); }
+  .goal-notes::placeholder { color: var(--text-tertiary); }
+
+  /* Completed section */
+  .goal-completed-wrap { margin-top: 18px; }
+  .goal-completed-toggle {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); font-family: inherit; font-size: 12px;
+    letter-spacing: 0.03em; padding: 6px 0; transition: color 0.15s;
+  }
+  .goal-completed-toggle:hover { color: var(--text-secondary); }
+  .goal-completed-list { margin-top: 8px; }

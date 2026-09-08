@@ -171,6 +171,26 @@ create table if not exists job_applications (
 );
 alter table job_applications enable row level security;
 
+-- ─────────────────────────── goals ────────────────────────────
+-- Long-term objectives shown in the "Areas & Goals" tab, each optionally
+-- tagged to an area (by name). Distinct from `tasks` (daily to-dos).
+-- id is text: client generates 'gl_' + uuid (js/goals.js _goalId).
+create table if not exists goals (
+  id         text primary key,
+  user_id    uuid references auth.users not null,
+  title      text not null,
+  area       text,                        -- area name, or null = unassigned
+  notes      text,
+  done       boolean default false,
+  done_at    timestamptz,
+  sort_order integer,
+  created_at timestamptz default now()
+);
+alter table goals add column if not exists notes      text;
+alter table goals add column if not exists done_at    timestamptz;
+alter table goals add column if not exists sort_order integer;
+alter table goals enable row level security;
+
 -- ─────────────────────────── areas ────────────────────────────
 -- Currently unused: areas + area notes persist via `settings`
 -- (keys 'areas:list', 'area_notes:<name>'). Kept for future use.
@@ -274,7 +294,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'habits','habit_logs','habit_notes','tasks','settings','job_applications','areas',
+    'habits','habit_logs','habit_notes','tasks','goals','settings','job_applications','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs','step_counts'
   ] loop
     if not exists (

@@ -49,7 +49,9 @@ function _loadLocal() {
 // local (test@local) accounts whose whole MEM blob lives in localStorage. Real
 // accounts re-fetch from Supabase each load, so they need nothing here.
 function _migrateGoalKeys() {
-  Object.keys(MEM).filter(k => k.startsWith('goals:')).forEach(k => {
+  // Only the old date-keyed goal lists (goals:YYYY-MM-DD) — NOT goals:list, the
+  // new Areas & Goals collection, which must survive this shim untouched.
+  Object.keys(MEM).filter(k => /^goals:\d{4}-\d{2}-\d{2}$/.test(k)).forEach(k => {
     const n = 'tasks:' + k.slice(6);
     if (!MEM.hasOwnProperty(n)) MEM[n] = MEM[k];
     delete MEM[k];
@@ -103,6 +105,11 @@ function _seedLocalData() {
     'task_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
       { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
+    ],
+    'goals:list': [
+      { id: 'gl_seed1', title: 'Ship the dashboard v2', area: 'Work',   notes: 'Areas & Goals tab, then a weekly review.', done: false, doneAt: null, createdAt: new Date(Date.now() - 6 * 86400000).toISOString() },
+      { id: 'gl_seed2', title: 'Run a 10k',             area: 'Health', notes: '', done: false, doneAt: null, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+      { id: 'gl_seed3', title: 'Read 12 books this year', area: null,   notes: '', done: true,  doneAt: new Date(Date.now() - 86400000).toISOString(), createdAt: new Date(Date.now() - 20 * 86400000).toISOString() },
     ],
     'diet_healthy_v1': ['Eggs', 'Kiwi', 'Chicken', 'Spinach', 'Lentils'],
     'diet_unhealthy_v1': ['Soda', 'Fries'],
@@ -661,6 +668,30 @@ async function _syncDietFoods(kind, names) {
   }
 }
 
+// Goals (Areas & Goals tab). Flat collection, client id — upsert the current
+// set, then delete rows that are no longer present. Write first, delete stale
+// second (see the memory note): a failed upsert bails before any delete.
+async function _syncGoals(goals) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (goals.length) {
+    const { error } = await sb.from('goals').upsert(goals.map((g, i) => ({
+      id: g.id, user_id: uid, title: g.title, area: g.area || null,
+      notes: g.notes || null, done: g.done || false, done_at: g.doneAt || null,
+      sort_order: i, created_at: g.createdAt || null,
+    })), { onConflict: 'id' });
+    if (error) console.error('[sync] goals upsert failed:', error);
+  }
+  const { data: existing = [], error: selErr } = await sb.from('goals').select('id').eq('user_id', uid);
+  if (selErr) { console.error('[sync] goals select failed:', selErr); return; }
+  const keep = new Set(goals.map(g => g.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) console.error('[sync] goals delete failed:', delErr);
+  }
+}
+
 // ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
   if (LOCAL_MODE) return _loadLocal();
@@ -683,6 +714,7 @@ async function loadFromSupabase() {
     sb.from('diet_entries').select('*').eq('user_id', uid).order('date'),
     sb.from('diet_foods').select('*').eq('user_id', uid),
     sb.from('step_counts').select('*').eq('user_id', uid).gte('date', fromStr),
+    sb.from('goals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -697,6 +729,7 @@ async function loadFromSupabase() {
   const dietEnt = results[8].data || [];
   const dietFds = results[9].data || [];
   const stepRows = results[10].data || [];
+  const goalRows = results[11].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -743,6 +776,11 @@ async function loadFromSupabase() {
     id: j.id, company: j.company, platform: j.platform || '',
     dateApplied: j.date_applied || '', status: j.status || 'Applied',
     locationType: j.location_type || '', locationCity: j.location_city || '',
+  }));
+
+  MEM['goals:list'] = goalRows.map(g => ({
+    id: g.id, title: g.title, area: g.area || null, notes: g.notes || '',
+    done: !!g.done, doneAt: g.done_at || null, createdAt: g.created_at,
   }));
 
   hNotes.forEach(n => {
@@ -816,7 +854,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); _reconcileStepHabits(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); _reconcileStepHabits(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
 }
@@ -921,6 +959,7 @@ setInterval(updateDayBar, 60 * 1000);
 
 startTicker();
 renderAreas();
+renderGoals();
 renderDiet();
 renderMobility();
 initApp();

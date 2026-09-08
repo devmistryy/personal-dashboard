@@ -55,6 +55,11 @@ function renderAreaDetail() {
       tasks.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
       if (changed) storeSet(k, tasks);
     });
+    // update goals
+    const goals = getGoals();
+    let goalsChanged = false;
+    goals.forEach(g => { if (g.area === name) { g.area = newName; goalsChanged = true; } });
+    if (goalsChanged) { saveGoals(goals); renderGoals(); }
     _currentAreaName = newName;
   };
   nameEl.onkeydown = (e) => {
@@ -221,7 +226,7 @@ document.getElementById('areaNoteInput').addEventListener('keydown', e => {
 
 document.getElementById('areaDetailDelete').addEventListener('click', () => {
   if (!_currentAreaName) return;
-  if (!confirm(`Delete area "${_currentAreaName}"? Tasks assigned to it will lose their area tag.`)) return;
+  if (!confirm(`Delete area "${_currentAreaName}"? Tasks and goals assigned to it will lose their area tag.`)) return;
   const name = _currentAreaName;
   const areas = getAreas();
   const idx = areas.findIndex(a => a.name === name);
@@ -233,6 +238,10 @@ document.getElementById('areaDetailDelete').addEventListener('click', () => {
     tasks.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });
     if (changed) storeSet(k, tasks);
   });
+  const goals = getGoals();
+  let goalsChanged = false;
+  goals.forEach(g => { if (g.area === name) { g.area = null; goalsChanged = true; } });
+  if (goalsChanged) saveGoals(goals);
   closeAreaDetail();
 });
 
