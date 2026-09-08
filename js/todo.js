@@ -126,14 +126,16 @@ function reorderGoalByDrag(key, fromEl, toEl) {
 // goals when a carry-forward write failed (the Sept 2026 data-loss bug). The
 // guards are per-goal instead. A past-day goal is carried onto today unless:
 //   • it's done, or
-//   • its id is already placed on today or any later day (so "Push to tomorrow"
-//     and future-dated planner goals aren't yanked back), or
+//   • its id is already placed on today or any later day (so future-dated
+//     planner goals aren't yanked back), or
 //   • its id is in goal_dismissed_v1 — set when you delete a carried goal off
 //     today's list, so rollover leaves it alone from then on.
 // (The old goal_rollover_v1 setting is no longer read; a leftover row is inert.)
 function rollover() {
   const activeDate = getActiveDateString();
   const dismissed = new Set(storeGet('goal_dismissed_v1') || []);
+
+  reclaimStrandedFutureGoals(activeDate);
 
   // Every goal id already scheduled for today or a future day.
   const placedAhead = new Set();
@@ -163,6 +165,32 @@ function rollover() {
 
   if (added) storeSet(todayKey(), todayGoals);
   _pruneDismissedGoals();
+}
+
+// Undo the damage a backward clock/timezone jump does: if the device clock is
+// briefly ahead, rollover() runs with a future day as "today" and copies that
+// day's unfinished goals onto it. When the clock corrects, those copies are
+// stranded on a future date — they surface in the Upcoming planner as if they
+// were deliberately scheduled, and (sharing an id with the real past-day goal)
+// they stop rollover from carrying the real one forward.
+//
+// A stranded copy is any future-dated goal whose id also sits on today or an
+// earlier day. Planner goals get a fresh id, so they never match. Drop the
+// future copy; the earlier one carries forward normally below.
+function reclaimStrandedFutureGoals(activeDate) {
+  const behindOrToday = new Set();
+  storeListKeys('goals:').forEach(k => {
+    if (k.slice(6) <= activeDate)
+      (storeGet(k) || []).forEach(g => { if (g.id) behindOrToday.add(g.id); });
+  });
+  if (!behindOrToday.size) return;
+
+  storeListKeys('goals:').forEach(k => {
+    if (k.slice(6) <= activeDate) return;
+    const arr = storeGet(k) || [];
+    const kept = arr.filter(g => !g.id || !behindOrToday.has(g.id));
+    if (kept.length !== arr.length) storeSet(k, kept);
+  });
 }
 
 // Keep goal_dismissed_v1 bounded: drop ids that no longer appear on any loaded
@@ -282,9 +310,6 @@ function renderTodayHeader() {
   const card = document.getElementById('todayCard');
   if (total > 0 && done === total) card.classList.add('gm-all-done');
   else card.classList.remove('gm-all-done');
-
-  const pushBtn = document.getElementById('gmPushBtn');
-  pushBtn.style.display = (goals.some(g => !g.done) && total > 0) ? 'block' : 'none';
 }
 
 function renderStreak() {
@@ -665,25 +690,6 @@ function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
     }
   });
 }
-
-// ── Push remaining ──
-document.getElementById('gmPushBtn').addEventListener('click', () => {
-  if (!confirm('Push all unchecked goals to tomorrow?')) return;
-  const todayGoals    = storeGet(todayKey()) || [];
-  const tomorrowGoals = storeGet(tomorrowKey()) || [];
-  const unchecked = todayGoals.filter(g => !g.done);
-  unchecked.forEach(g => {
-    if (_goalInList(g, tomorrowGoals)) return;
-    const carried = Object.assign({}, g, { done: false });
-    delete carried.doneAt;
-    tomorrowGoals.push(carried);
-  });
-  storeSet(tomorrowKey(), tomorrowGoals);
-  const remaining = todayGoals.filter(g => g.done);
-  storeSet(todayKey(), remaining);
-  loadToday();
-  loadUpcoming();
-});
 
 // ── Upcoming card: date picker for the target day of new goals ──
 // (min/value are seeded by loadUpcoming(), which runs after main.js loads the

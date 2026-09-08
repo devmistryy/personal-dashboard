@@ -377,21 +377,6 @@
   }
   .show-more-row:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.22); }
 
-  /* Push button */
-  .gm-push-btn {
-    width: 100%;
-    padding: 10px;
-    border: 1px dashed rgba(255,255,255,0.14);
-    border-radius: 10px;
-    background: transparent;
-    color: var(--text-tertiary);
-    font-size: 12px;
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
-    margin-bottom: 4px;
-  }
-  .gm-push-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.30); }
-
   /* Input row */
   .goal-input-wrap {
     display: flex;
