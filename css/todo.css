@@ -370,22 +370,6 @@
   .tm-all-done .tm-progress-num { color: var(--success); }
   .tm-all-done .tm-progress-label { color: var(--success); }
 
-  /* Show more toggle */
-  .show-more-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 14px;
-    margin-bottom: 6px;
-    border: 1px dashed rgba(255,255,255,0.12);
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--text-tertiary);
-    transition: color 0.2s, border-color 0.2s;
-  }
-  .show-more-row:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.22); }
-
   /* Input row */
   .task-input-wrap {
     display: flex;

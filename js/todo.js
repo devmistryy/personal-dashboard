@@ -514,8 +514,6 @@ function wireDragReorder(listEl, rowClass, onReorder) {
 
 function renderListInto(tasks, listEl, emptyEl, key, readOnly) {
   listEl.innerHTML = '';
-  const LIMIT = 5;
-  let showAll = listEl._showAll || false;
 
   if (tasks.length === 0) {
     emptyEl.style.display = 'block';
@@ -525,30 +523,9 @@ function renderListInto(tasks, listEl, emptyEl, key, readOnly) {
     listEl.style.display = '';
 
     const canDrag = !readOnly && getTaskSort() === 'custom';
-    const visible = (tasks.length > LIMIT && !showAll) ? tasks.slice(0, LIMIT) : tasks;
-    visible.forEach((g, i) => {
+    tasks.forEach((g, i) => {
       listEl.appendChild(buildTaskRow(g, i, tasks, key, readOnly, canDrag));
     });
-
-    if (tasks.length > LIMIT && !showAll) {
-      const more = document.createElement('div');
-      more.className = 'show-more-row';
-      more.textContent = `Show ${tasks.length - LIMIT} more ▾`;
-      more.addEventListener('click', () => {
-        listEl._showAll = true;
-        renderListInto(tasks, listEl, emptyEl, key, readOnly);
-      });
-      listEl.appendChild(more);
-    } else if (tasks.length > LIMIT && showAll) {
-      const less = document.createElement('div');
-      less.className = 'show-more-row';
-      less.textContent = 'Show less ▴';
-      less.addEventListener('click', () => {
-        listEl._showAll = false;
-        renderListInto(tasks, listEl, emptyEl, key, readOnly);
-      });
-      listEl.appendChild(less);
-    }
   }
 
   if (!readOnly && !listEl._dragWired) {
