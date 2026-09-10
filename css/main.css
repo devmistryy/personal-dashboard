@@ -377,21 +377,18 @@
     .dash-header { margin-bottom: 10px; }
     .ticker-row { margin-bottom: 8px; }
 
-    /* Six tabs don't fit on one narrow row — keep them on a single line and
-       let the strip scroll horizontally instead of wrapping to two rows. */
+    /* All six tabs on one row, no scroll — shrink type/padding to fit the
+       narrowest phones (~375px) rather than wrapping or scrolling. */
     .tab-bar {
       flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x proximity;
+      gap: 3px;
     }
-    .tab-bar::-webkit-scrollbar { display: none; }
     .tab-btn {
       flex-shrink: 0;
-      padding: 8px 14px;
+      padding: 8px 6px;
+      font-size: 10px;
+      letter-spacing: 0.01em;
       white-space: nowrap;
-      scroll-snap-align: start;
     }
 
     .task-ticker { padding: 9px 12px; }

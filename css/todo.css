@@ -626,19 +626,16 @@
 
   /* ── Mobile ── keep this block last in this file ── */
   @media (max-width: 480px) {
-    /* Stack the progress count and the action buttons; give the buttons the
-       full width so History / Sunday Reset / streak sit on one line. */
+    /* Stack the progress count above the action row; shrink the three
+       buttons so History / Sunday Reset / streak all fit on one line
+       (no scroll) even at ~375px with a "· N" reset badge. */
     .tm-header { flex-direction: column; align-items: stretch; gap: 12px; }
     .tm-header-right {
       flex-wrap: nowrap;
       justify-content: flex-start;
-      gap: 6px;
-      overflow-x: auto;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
+      gap: 4px;
     }
-    .tm-header-right::-webkit-scrollbar { display: none; }
-    .sunday-reset-btn { padding: 6px 9px; font-size: 11px; gap: 4px; }
-    .tm-streak { padding: 6px 9px; font-size: 11px; gap: 4px; }
-    .tm-streak-label { font-size: 9px; letter-spacing: 0.06em; }
+    .sunday-reset-btn { padding: 6px 6px; font-size: 10px; gap: 4px; }
+    .tm-streak { padding: 6px 6px; font-size: 10px; gap: 4px; }
+    .tm-streak-label { font-size: 8px; letter-spacing: 0.03em; }
   }
