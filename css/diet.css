@@ -115,6 +115,15 @@
   }
   .diet-entry-del:hover { color: var(--danger); }
 
+  .diet-history-more {
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 14px; margin-bottom: 6px;
+    border: 1px dashed rgba(255,255,255,0.12); border-radius: 10px;
+    cursor: pointer; font-size: 12px; color: var(--text-tertiary);
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .diet-history-more:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.22); }
+
   /* ── Stat rows (priority + healthy/unhealthy food lists) ── */
   .diet-stat-row {
     display: flex; align-items: center; gap: 12px;

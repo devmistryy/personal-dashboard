@@ -287,7 +287,7 @@ function renderDietHistory() {
   }).join('');
 
   if (list.length > DIET_HISTORY_LIMIT) {
-    wrap.innerHTML += `<div class="show-more-row" id="dietHistoryMore">${
+    wrap.innerHTML += `<div class="diet-history-more" id="dietHistoryMore">${
       _dietHistoryAll ? 'Show less ▴' : `Show ${list.length - DIET_HISTORY_LIMIT} more ▾`}</div>`;
   }
 }
