@@ -22,7 +22,11 @@
     color: var(--text-primary);
     font-family: var(--font-body);
     min-height: 100vh;
-    padding: max(24px, env(safe-area-inset-top)) 20px 40px;
+    padding:
+      max(24px, env(safe-area-inset-top))
+      max(20px, env(safe-area-inset-right))
+      max(40px, env(safe-area-inset-bottom))
+      max(20px, env(safe-area-inset-left));
     position: relative;
     overflow-x: hidden;
   }

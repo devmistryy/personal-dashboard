@@ -270,7 +270,11 @@
     transform: translateX(100%);
     transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
     overflow-y: auto;
-    padding: max(24px, env(safe-area-inset-top)) 20px 60px;
+    padding:
+      max(24px, env(safe-area-inset-top))
+      max(20px, env(safe-area-inset-right))
+      max(60px, env(safe-area-inset-bottom))
+      max(20px, env(safe-area-inset-left));
   }
   .habit-detail-page::before {
     content: '';
