@@ -964,4 +964,27 @@
     .day-detail-head .day-detail-date { font-size: 18px; }
     .hd-tab { padding: 7px 14px; }
     .habit-detail-row-split { flex-direction: column; align-items: stretch; }
+
+    /* Every sort option on one line (no wrap, no scroll). Sized so the row is
+       almost exactly full width — the buttons barely grow, so the label sits
+       snug inside each one with no dead space on the right. */
+    .habit-sort-bar { flex-wrap: nowrap; gap: 3px; }
+    .habit-sort-label { font-size: 12.5px; flex-shrink: 0; }
+    .habit-sort-btn {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 12.5px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+
+    /* Habit rows: reclaim width for the name column so the name and its
+       "Day N · ongoing" tag stop wrapping into a broken-looking box. */
+    .habit-row { gap: 8px; padding: 10px 12px; }
+    .habit-row .habit-drag-handle { display: none; }
+    .habit-row .habit-archive-btn { display: none; }
+    .habit-row .habit-delete { opacity: 0.4; }
+    .habit-meta { flex-wrap: wrap; row-gap: 3px; }
+    .habit-meta-tag { white-space: nowrap; }
+    .habit-name { overflow-wrap: break-word; word-break: normal; }
   }

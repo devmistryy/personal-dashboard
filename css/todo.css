@@ -295,15 +295,27 @@
   }
 
   /* Task name + its source tag share the row's flexible space so the tag sits
-     right after the name, not out by the area pill. */
+     right after the name, not out by the area pill. When the name + tags don't
+     fit (narrow rows, long names, an overdue tag AND a "sunday reset" tag), the
+     tags wrap onto the next line instead of squeezing the name to one character
+     per line. */
   .task-main {
     flex: 1;
     min-width: 0;
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 2px 8px;
   }
-  .task-main > .task-text { flex: 0 1 auto; }
+  .task-main > .task-text {
+    flex: 0 1 auto;
+    /* Don't let flex shrink the name below its longest word — that's what
+       produced one-character-per-line rows. Long names wrap at spaces; a
+       single over-long word hard-breaks rather than overflowing. */
+    min-width: auto;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
 
   /* "sunday reset" source tag, sits just right of the task name */
   .task-source-tag {
@@ -626,16 +638,54 @@
 
   /* ── Mobile ── keep this block last in this file ── */
   @media (max-width: 480px) {
-    /* Stack the progress count above the action row; shrink the three
-       buttons so History / Sunday Reset / streak all fit on one line
-       (no scroll) even at ~375px with a "· N" reset badge. */
+    /* Stack the progress count above the action row; let the three buttons
+       grow to fill the row evenly (no dead space on the right) while still
+       fitting on one line at ~375px with a "· N" reset badge. */
     .tm-header { flex-direction: column; align-items: stretch; gap: 12px; }
     .tm-header-right {
       flex-wrap: nowrap;
-      justify-content: flex-start;
-      gap: 4px;
+      gap: 3px;
     }
-    .sunday-reset-btn { padding: 6px 6px; font-size: 10px; gap: 4px; }
-    .tm-streak { padding: 6px 6px; font-size: 10px; gap: 4px; }
-    .tm-streak-label { font-size: 8px; letter-spacing: 0.03em; }
+    .sunday-reset-btn,
+    .tm-streak {
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: center;
+      padding: 6px 4px;
+      font-size: 11px;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .tm-streak-label { font-size: 9px; letter-spacing: 0.03em; }
+
+    /* Today card: drop the oversized count and sit it inline with the date,
+       pushed to the right edge ("TODAY — THU, SEP 10 … 1/2 COMPLETE"). */
+    #todayCard .tm-header-left {
+      flex-direction: row;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      justify-content: space-between;
+    }
+    #todayCard .tm-eyebrow { margin-bottom: 0; letter-spacing: 0.10em; }
+    #todayCard .tm-progress-row { margin-left: auto; gap: 0; }
+    #todayCard .tm-progress-num { font-size: 18px; }
+    #todayCard .tm-progress-label { margin-left: 6px; }
+
+    /* Task rows: give the name column room — the drag handle needs a pointer
+       to use, and the delete "×" needs to be visible without hover. */
+    .task-row { gap: 8px; padding: 11px 12px; }
+    .task-row .task-drag-handle { display: none; }
+    .task-row .task-delete { opacity: 0.4; }
+
+    /* The task name stays vertically centred on the checkbox. The "sunday
+       reset" tag drops out of the row's flex flow and hangs under the name,
+       and the row grows downward to make room — so the name never shifts. */
+    .task-row:has(.task-source-tag) { padding-bottom: 22px; }
+    .task-source-tag {
+      position: absolute;
+      left: 41px;
+      bottom: 9px;
+      line-height: 1;
+    }
   }

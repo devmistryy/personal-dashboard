@@ -85,12 +85,12 @@ function _sortHabitsForDisplay(list, mode) {
 }
 
 const _HABIT_SORT_MODES = [
-  ['custom', 'Custom'], ['az', 'A–Z'], ['area', 'By area'], ['newest', 'Newest'], ['oldest', 'Oldest'],
+  ['custom', 'Custom'], ['az', 'A–Z'], ['area', 'Area'], ['newest', 'Newest'], ['oldest', 'Oldest'],
 ];
 
 function _habitSortBarHTML() {
   const mode = getHabitSort();
-  return `<div class="habit-sort-bar"><span class="habit-sort-label">Sort by</span>${
+  return `<div class="habit-sort-bar"><span class="habit-sort-label">Sort By:</span>${
     _HABIT_SORT_MODES.map(([v, l]) =>
       `<button class="habit-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('')
   }</div>`;
@@ -246,7 +246,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
       : `Day ${dayNum} of ${totalDays}`;
   } else {
     tag.className = 'habit-meta-tag ongoing';
-    tag.textContent = `Day ${dayNum} · ongoing`;
+    tag.textContent = `Day ${dayNum}`;
   }
   meta.appendChild(tag);
   if (habit.endOfDay) {

@@ -293,7 +293,7 @@ function renderTodayHeader() {
 
   document.getElementById('todayLabel').textContent = `Today — ${formatDate(getActiveDateString())}`;
   document.getElementById('tmProgressNum').textContent = done;
-  document.getElementById('tmProgressTotal').textContent = `/ ${total}`;
+  document.getElementById('tmProgressTotal').textContent = `/${total}`;
 
   const labelEl = document.getElementById('tmProgressLabel');
   if (total === 0) labelEl.textContent = 'no tasks yet';
