@@ -372,14 +372,33 @@
   /* Responsive */
   @media (max-width: 480px) {
     .dash-title { font-size: 22px; }
-    /* Five tabs no longer fit on one narrow row — wrap instead of squeezing
-       each label onto two lines. */
-    .tab-bar { flex-wrap: wrap; }
-    .tab-btn { padding: 8px 14px; white-space: nowrap; }
+    /* Tighten the stack above the fold — trim dead vertical space between
+       the status bar, title, task ticker and day ring. */
+    .dash-header { margin-bottom: 10px; }
+    .ticker-row { margin-bottom: 8px; }
+
+    /* Six tabs don't fit on one narrow row — keep them on a single line and
+       let the strip scroll horizontally instead of wrapping to two rows. */
+    .tab-bar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x proximity;
+    }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      white-space: nowrap;
+      scroll-snap-align: start;
+    }
+
     .task-ticker { padding: 9px 12px; }
     .task-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
     .task-ticker-row { font-size: 12px; }
     .task-ticker-meta { font-size: 10px; padding: 2px 7px; }
+    .day-ring-wrap { padding: 12px 18px; gap: 14px; }
     .day-ring-svg-wrap { width: 144px; height: 144px; }
     .day-ring-pct { font-size: 32px; }
     .day-ring-status { font-size: 13px; }

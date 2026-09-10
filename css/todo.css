@@ -623,3 +623,22 @@
     font-size: 12px;
   }
   .task-history-list .task-row.is-done .task-history-mark { color: var(--success, #6BE3A4); }
+
+  /* ── Mobile ── keep this block last in this file ── */
+  @media (max-width: 480px) {
+    /* Stack the progress count and the action buttons; give the buttons the
+       full width so History / Sunday Reset / streak sit on one line. */
+    .tm-header { flex-direction: column; align-items: stretch; gap: 12px; }
+    .tm-header-right {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tm-header-right::-webkit-scrollbar { display: none; }
+    .sunday-reset-btn { padding: 6px 9px; font-size: 11px; gap: 4px; }
+    .tm-streak { padding: 6px 9px; font-size: 11px; gap: 4px; }
+    .tm-streak-label { font-size: 9px; letter-spacing: 0.06em; }
+  }
