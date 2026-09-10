@@ -84,7 +84,32 @@ function sortTasksForDisplay(tasks, mode) {
       return aa.localeCompare(ba, undefined, { sensitivity: 'base' }) || byCustom(a, b);
     });
   }
-  return arr; // 'custom' / unknown → stored order
+  // Completed tasks always sink to the bottom (stable sort keeps their relative
+  // order), so checking one off slides it down — see _flipTaskRows.
+  arr.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+  return arr; // 'custom' / unknown → stored order, done last
+}
+
+// FLIP-animate the `.task-row` children of `listEl` around a rebuild: measure
+// where each row is, run `doReload()` to re-render, then slide every row from
+// its old position to its new one. Rows are matched across the rebuild by
+// `data-task-id`. Mirrors habits.js's _flipRows.
+function _flipTaskRows(listEl, doReload) {
+  if (!listEl || matchMedia('(prefers-reduced-motion: reduce)').matches) { doReload(); return; }
+  const firstTop = new Map();
+  listEl.querySelectorAll('.task-row').forEach(r => firstTop.set(r.dataset.taskId, r.getBoundingClientRect().top));
+  doReload();
+  listEl.querySelectorAll('.task-row').forEach(r => {
+    const prev = firstTop.get(r.dataset.taskId);
+    if (prev == null) return;
+    const dy = prev - r.getBoundingClientRect().top;
+    if (Math.abs(dy) < 1) return;
+    r.style.transition = 'none';
+    r.style.transform  = `translateY(${dy}px)`;
+    void r.offsetHeight; // reflow so the next line animates from here
+    r.style.transition = 'transform 0.34s cubic-bezier(0.22,1,0.36,1)';
+    r.style.transform  = '';
+  });
 }
 
 function paintTaskSortBar(el, count) {
@@ -302,11 +327,13 @@ function renderTodayHeader() {
 
   const bar = document.getElementById('tmBar');
   bar.innerHTML = '';
-  tasks.forEach(g => {
+  // Done segments first, so the filled part is one contiguous run on the left
+  // (matches the list, where completed tasks sink to the bottom).
+  for (let i = 0; i < total; i++) {
     const seg = document.createElement('div');
-    seg.className = 'tm-bar-seg' + (g.done ? ' tm-bar-seg-done' : '');
+    seg.className = 'tm-bar-seg' + (i < done ? ' tm-bar-seg-done' : '');
     bar.appendChild(seg);
-  });
+  }
 
   const card = document.getElementById('todayCard');
   if (total > 0 && done === total) card.classList.add('tm-all-done');
@@ -339,7 +366,7 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
   li.dataset.idx = idx;
   li.dataset.taskId = g.id || '';
-  li.draggable = !!draggable;
+  li.draggable = !!draggable && !g.done;   // done rows sink to the bottom, no drag
 
   const reload = () => { if (key === todayKey()) loadToday(); else loadUpcoming(); };
   const mutate = fn => {
@@ -386,11 +413,16 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   li.appendChild(cbWrap);
 
   cb.addEventListener('change', () => {
-    mutate((arr, i) => {
-      arr[i].done = cb.checked;
-      if (cb.checked) arr[i].doneAt = new Date().toISOString();
-      else delete arr[i].doneAt;
-    });
+    const arr = storeGet(key) || [];
+    const i = arr.findIndex(x => x.id === g.id);
+    if (i < 0) return;
+    arr[i].done = cb.checked;
+    if (cb.checked) arr[i].doneAt = new Date().toISOString();
+    else delete arr[i].doneAt;
+    storeSet(key, arr);
+    // Slide the row down to its new (sorted) spot, like the Habits tab.
+    if (key === todayKey()) _flipTaskRows(document.getElementById('taskList'), loadToday);
+    else reload();
   });
 
   // Text + its optional tags (overdue, sunday reset) share one flex wrapper, so

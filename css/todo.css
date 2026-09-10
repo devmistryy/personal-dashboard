@@ -121,7 +121,7 @@
   /* Segmented bar */
   .tm-bar {
     display: flex;
-    gap: 4px;
+    gap: 7.5px;
     height: 6px;
     margin-bottom: 16px;
   }
