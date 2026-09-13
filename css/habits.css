@@ -28,6 +28,7 @@
   .habit-row:hover { background: rgba(255,255,255,0.055); }
   .habit-row:hover .habit-delete,
   .habit-row:hover .habit-archive-btn,
+  .habit-row:hover .habit-restart-btn,
   .habit-row:hover .habit-drag-handle { opacity: 1; }
   .habit-row.drag-over { border-top: 2px solid rgba(255,255,255,0.35); }
 
@@ -167,6 +168,16 @@
     flex-shrink: 0;
   }
   .habit-streak.hot { color: var(--warning); }
+
+  .habit-restart-btn {
+    background: none; border: none;
+    cursor: pointer; color: var(--text-tertiary);
+    font-size: 15px; padding: 2px 4px;
+    border-radius: 6px; opacity: 0;
+    transition: opacity 0.2s, color 0.2s;
+    flex-shrink: 0; line-height: 1;
+  }
+  .habit-restart-btn:hover { color: var(--success); }
 
   .habit-archive-btn {
     background: none; border: none;
@@ -727,6 +738,24 @@
   }
   .btn-danger:hover { background: rgba(255,107,107,0.20); }
 
+  /* Restart — the way back out of Completed habits. Green rather than red: it
+     brings a habit back rather than removing anything. */
+  .btn-restart {
+    background: rgba(52,199,89,0.10);
+    border: 1px solid rgba(52,199,89,0.28);
+    border-radius: 8px;
+    color: var(--success);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-family: var(--font-body);
+  }
+  .btn-restart:hover { background: rgba(52,199,89,0.20); }
+
   /* Make habit name column feel clickable */
   .habit-name-col { cursor: pointer; }
   .habit-name-col:hover .habit-name { color: #C8C5BD; }
@@ -969,6 +998,16 @@
     border-style: dashed;
   }
   .day-detail-habit-row.is-voided .day-detail-habit-name { color: var(--text-tertiary); }
+
+  /* Archived habits are a frozen record: the row reads inert, the way a future
+     day does, and its checkbox can't be reached. */
+  .day-detail-habit-row.is-locked {
+    opacity: 0.4;
+    background: rgba(255,255,255,0.02);
+  }
+  .day-detail-habit-row.is-locked .habit-cb-wrap { pointer-events: none; }
+  .day-detail-habit-row.is-locked .day-detail-habit-name { color: var(--text-tertiary); }
+  .habit-meta-tag.archived-tag { color: var(--text-tertiary); background: rgba(255,255,255,0.06); }
 
   .day-void-toggle {
     flex-shrink: 0;

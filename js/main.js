@@ -448,6 +448,7 @@ async function _syncHabits(habits) {
       start_date: h.startDate || null, end_date: h.endDate || null,
       archived: h.archived || false, archived_at: h.archivedAt || null,
       sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
+      runs: Array.isArray(h.runs) ? h.runs : [],
     })), { onConflict: 'id' });
     if (error) console.error('[sync] habits upsert failed:', error);
   }
@@ -536,6 +537,18 @@ async function _syncSetting(key, value) {
   const uid = await _uid(); if (!uid) return;
   const { error } = await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
   if (error) console.error('[sync] settings upsert failed:', error);
+}
+
+// Deleting a habit has to take its check-ins, voids and notes with it. Those
+// tables are keyed by habit_id, so one delete each clears them server-side —
+// far cheaper than replaying every affected date through the day-scoped syncs.
+async function _syncPurgeHabit(habitId) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  for (const table of ['habit_logs', 'habit_voids', 'habit_notes']) {
+    const { error } = await sb.from(table).delete().eq('user_id', uid).eq('habit_id', habitId);
+    if (error) console.error(`[sync] ${table} purge failed:`, error);
+  }
 }
 
 async function _syncHabitNotes(habitId, notes) {
@@ -720,6 +733,7 @@ async function loadFromSupabase() {
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
     area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
+    runs: Array.isArray(h.runs) ? h.runs : [],
   }));
 
   logs.forEach(l => {

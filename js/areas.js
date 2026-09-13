@@ -60,6 +60,13 @@ function renderAreaDetail() {
     let goalsChanged = false;
     goals.forEach(g => { if (g.area === name) { g.area = newName; goalsChanged = true; } });
     if (goalsChanged) { saveGoals(goals); renderGoals(); }
+    // update habits — without this they keep pointing at the old name, which no
+    // longer resolves, so the pill falls back to "+ area" and the habit looks
+    // unassigned. Archived ones are walked too, so they come back intact.
+    const habits = getHabits();
+    let habitsChanged = false;
+    habits.forEach(h => { if (h.area === name) { h.area = newName; habitsChanged = true; } });
+    if (habitsChanged) { saveHabits(habits); renderHabits(); }
     _currentAreaName = newName;
   };
   nameEl.onkeydown = (e) => {
@@ -226,7 +233,7 @@ document.getElementById('areaNoteInput').addEventListener('keydown', e => {
 
 document.getElementById('areaDetailDelete').addEventListener('click', () => {
   if (!_currentAreaName) return;
-  if (!confirm(`Delete area "${_currentAreaName}"? Tasks and goals assigned to it will lose their area tag.`)) return;
+  if (!confirm(`Delete area "${_currentAreaName}"? Tasks, goals and habits assigned to it will lose their area tag.`)) return;
   const name = _currentAreaName;
   const areas = getAreas();
   const idx = areas.findIndex(a => a.name === name);
@@ -242,6 +249,10 @@ document.getElementById('areaDetailDelete').addEventListener('click', () => {
   let goalsChanged = false;
   goals.forEach(g => { if (g.area === name) { g.area = null; goalsChanged = true; } });
   if (goalsChanged) saveGoals(goals);
+  const habits = getHabits();
+  let habitsChanged = false;
+  habits.forEach(h => { if (h.area === name) { h.area = null; habitsChanged = true; } });
+  if (habitsChanged) { saveHabits(habits); renderHabits(); }
   closeAreaDetail();
 });
 

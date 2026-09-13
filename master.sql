@@ -84,6 +84,14 @@ create table if not exists habits (
 alter table habits add column if not exists area        text;
 alter table habits add column if not exists sort_order  integer;
 alter table habits add column if not exists end_of_day  boolean default false;
+-- Finished active spans, appended when an archived habit is started again, so
+-- its "Day N" resumes where it stopped instead of going back to day 1 — and so
+-- the earlier run keeps its check-ins and its place in each day's completion
+-- count. Shape: [{"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}, …]
+alter table habits add column if not exists runs jsonb default '[]'::jsonb;
+-- Superseded by `runs` before either shipped; drop if an early version created them.
+alter table habits drop column if exists prior_days;
+alter table habits drop column if exists prior_done;
 alter table habits enable row level security;
 
 -- ───────────────────────── habit_logs ─────────────────────────

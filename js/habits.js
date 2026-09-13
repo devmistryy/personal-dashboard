@@ -27,6 +27,14 @@ function _habitVoidedOn(habitId, ds) {
   return getHabitVoids(ds).includes(habitId) && !getHabitLog(ds).includes(habitId);
 }
 
+// Did this habit count as done on `ds`? A retired day never does. Archiving can
+// happen after you have already ticked the habit that morning, and that leaves a
+// check-in behind in the log; since the archive day is out of play, the leftover
+// must not credit a streak, tick a checkbox or count towards anything.
+function _habitDoneOn(habit, ds) {
+  return getHabitLog(ds).includes(habit.id) && !_habitRetiredOn(habit, ds);
+}
+
 // How many days in [from, to] were voided for this habit. Walks the void keys
 // (usually a handful) rather than every date in the range.
 function _habitVoidedCount(habitId, from, to) {
@@ -38,11 +46,48 @@ function _habitVoidedCount(habitId, from, to) {
   return n;
 }
 
-// The habit's "Day N" — days elapsed since it started, not counting voided ones.
+// ── Earlier runs ──
+// Archiving and starting again splits a habit into several active spans.
+// `runs` records the ones that have finished; the current one is startDate
+// onward. Keeping the real dates (rather than only a day tally) is what lets
+// history stay intact across a restart: those days are still the habit's, so
+// they keep their check-ins, their calendar colour and their place in each
+// day's completion count.
+function _habitRuns(h)            { return Array.isArray(h.runs) ? h.runs : []; }
+function _habitInPriorRun(h, ds)  { return _habitRuns(h).some(r => ds >= r.from && ds <= r.to); }
+
+// Days served in those earlier runs, voided days excluded.
+function _habitPriorDays(h) {
+  return _habitRuns(h).reduce((n, r) =>
+    n + daysBetween(r.from, r.to) + 1 - _habitVoidedCount(h.id, r.from, r.to), 0);
+}
+
+// The habit's "Day N" — days elapsed in the current run, not counting voided
+// ones, on top of the days it was already active before any archive/restart, so
+// the count resumes where it left off: archive on day 15, start again, and the
+// day you restart is day 15 again. The dormant stretch between runs is never
+// counted — it wasn't active.
 function _habitDayNum(habit, today) {
   const start = habit.startDate;
-  if (!start) return 1;
-  return daysBetween(start, today) + 1 - _habitVoidedCount(habit.id, start, today);
+  const prior = _habitPriorDays(habit);
+  if (!start) return prior + 1;
+  return prior + daysBetween(start, today) + 1 - _habitVoidedCount(habit.id, start, today);
+}
+
+// A timed habit's full run length, likewise spanning its earlier runs, so a
+// 30-day habit resumed on day 15 still reads "of 30" rather than "of 16".
+function _habitTotalDays(habit) {
+  if (!habit.endDate) return null;
+  return daysBetween(habit.startDate, habit.endDate) + 1 + _habitPriorDays(habit);
+}
+
+// Total days this habit has been active, across every run — what the Completed
+// tag reports once it is archived.
+function _habitServedDays(habit) {
+  const upTo = habit.archivedAt ? String(habit.archivedAt).slice(0, 10) : null;
+  if (!upTo || !habit.startDate) return _habitPriorDays(habit);
+  return _habitPriorDays(habit) + Math.max(0,
+    daysBetween(habit.startDate, upTo) - _habitVoidedCount(habit.id, habit.startDate, upTo));
 }
 
 function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
@@ -131,6 +176,24 @@ function _flipRows(containerEl, rowSel, mutate) {
     r.style.transform  = '';
   });
 }
+// Habit ids key the check-in log, the void log and the notes, and they are the
+// upsert key in Supabase — so two habits must never share one. The old
+// `Date.now().toString(36)` collided whenever two were added in the same
+// millisecond, which silently fused their histories.
+function _habitId() {
+  return 'h_' + ((crypto && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+    : Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+}
+
+// Escape text that is interpolated into an HTML template. The tracker rows build
+// their nodes with textContent and are safe by construction; the day-detail view
+// renders from a string, so anything user-typed has to come through here.
+function _esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function _noteId() {
   return (crypto && crypto.randomUUID) ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -141,17 +204,75 @@ function daysBetween(a, b) {
 }
 
 function habitStreak(habitId) {
+  const habit = getHabits().find(h => h.id === habitId) || { id: habitId };
   let streak = 0;
   let d = new Date();
   d.setDate(d.getDate() - 1);
   for (let i = 0; i < 365; i++) {
     const ds = _localDateStr(d);
-    if (getHabitLog(ds).includes(habitId)) { streak++; d.setDate(d.getDate() - 1); }
+    // Retired day — the habit was already archived, so the day is out of play
+    // entirely: it can't extend the streak and it can't end one either.
+    if (_habitRetiredOn(habit, ds)) { d.setDate(d.getDate() - 1); }
+    else if (_habitDoneOn(habit, ds)) { streak++; d.setDate(d.getDate() - 1); }
     // Voided day — excused, so carry the streak across it without crediting it.
     else if (_habitVoidedOn(habitId, ds)) { d.setDate(d.getDate() - 1); }
     else break;
   }
   return streak;
+}
+
+// Move an archived habit back into the active list, picking its day count up
+// where it stopped rather than starting over. The days already served are banked
+// as a finished run; the dormant stretch since archiving is simply skipped.
+function _restartHabit(habit, allHabits) {
+  const today = habitDateStr(0);
+  const upTo  = habit.archivedAt ? String(habit.archivedAt).slice(0, 10) : null;
+  // The archive day is already out of play, so the run that just ended closes
+  // the day before it.
+  const runEnd = upTo ? _shiftDay(upTo, -1) : null;
+  const hasRun = !!(habit.startDate && runEnd && runEnd >= habit.startDate);
+  const resumeDay = _habitServedDays(habit) + 1;
+  const total = _habitTotalDays(habit);
+
+  if (!confirm(`Start "${habit.name}" again?\n\n` +
+    `It picks up at day ${resumeDay}${total ? ' of ' + total : ''} from ${formatDate(today)}. ` +
+    `The time it spent archived isn't counted.`)) return false;
+
+  // Keep the finished span so its check-ins, calendar colours and share of each
+  // day's completion count survive the restart.
+  if (hasRun) habit.runs = _habitRuns(habit).concat({ from: habit.startDate, to: runEnd });
+
+  // A timed habit keeps its original total: it resumes with only the days it
+  // has left, so the end date lands that many days from today.
+  if (habit.endDate && total) {
+    habit.endDate = _shiftDay(today, Math.max(0, total - _habitPriorDays(habit) - 1));
+  }
+  habit.archived   = false;
+  habit.archivedAt = null;
+  habit.startDate  = today;
+  saveHabits(allHabits);
+  renderHabits();
+  return true;
+}
+
+// Remove a habit and everything keyed to it. Both delete buttons route through
+// here — the row one used to leave notes behind, and neither cleared the habit's
+// check-ins or voids, which then sat unreachable in the store forever.
+function _deleteHabit(habit, allHabits) {
+  const idx = allHabits.indexOf(habit);
+  if (idx !== -1) allHabits.splice(idx, 1);
+  saveHabits(allHabits);
+
+  ['habits:log:', 'habits:void:'].forEach(prefix => {
+    storeListKeys(prefix).forEach(k => {
+      const ids = MEM[k] || [];
+      const i = ids.indexOf(habit.id);
+      if (i !== -1) { ids.splice(i, 1); MEM[k] = ids; }
+    });
+  });
+  delete MEM['habit_notes:' + habit.id];
+  _syncPurgeHabit(habit.id);
+  renderHabits();
 }
 
 function getCurrentWeekDates() {
@@ -168,14 +289,14 @@ function getCurrentWeekDates() {
 function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const today    = habitDateStr(0);
   const todayLog = getHabitLog(today);
-  const done     = todayLog.includes(habit.id);
+  const done     = _habitDoneOn(habit, today);
   const streak   = habitStreak(habit.id);
 
   const isTimed   = !!habit.endDate;
   const dayNum    = _habitDayNum(habit, today);
   const isVoided  = _habitVoidedOn(habit.id, today);
-  const totalDays = isTimed ? daysBetween(habit.startDate, habit.endDate) + 1 : null;
-  const pct       = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / (totalDays - 1) * 100)) : null;
+  const totalDays = isTimed ? _habitTotalDays(habit) : null;
+  const pct       = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / Math.max(totalDays - 1, 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
 
   const li = document.createElement('li');
@@ -233,7 +354,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const tag = document.createElement('span');
   if (isArchived) {
     tag.className = 'habit-meta-tag';
-    const archivedDays = habit.archivedAt ? daysBetween(habit.startDate || habit.archivedAt, habit.archivedAt) + 1 : '?';
+    const archivedDays = habit.archivedAt ? _habitServedDays(habit) : '?';
     tag.textContent = `Completed · ${archivedDays}d`;
   } else if (isTimed) {
     tag.className = isExpired ? 'habit-meta-tag expired' : 'habit-meta-tag timed';
@@ -288,15 +409,16 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   week.className = 'habit-week';
   last7.forEach(ds => {
     const dot = document.createElement('div');
-    const dotDone = getHabitLog(ds).includes(habit.id);
+    const dotDone = _habitDoneOn(habit, ds);
     const dotVoided = _habitVoidedOn(habit.id, ds);
     const dotFuture = ds > today;
+    const dotRetired = _habitRetiredOn(habit, ds);
     const dotBeforeStart = ds < (habit.startDate || today);
     const dotIsToday = ds === today;
     dot.className = 'habit-day-dot' +
-      (dotDone ? ' done' : dotVoided ? ' voided'
+      (dotRetired ? '' : dotDone ? ' done' : dotVoided ? ' voided'
         : (!dotFuture && !dotBeforeStart && !dotIsToday ? ' missed' : '')) +
-      (dotIsToday ? ' today-dot' : '');
+      (dotIsToday && !dotRetired ? ' today-dot' : '');
     if (dotVoided && !dotDone) dot.title = 'Voided';
     week.appendChild(dot);
   });
@@ -304,8 +426,9 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
 
   // Streak (also acts as today's check-in toggle)
   const streakEl = document.createElement('span');
-  streakEl.className = 'habit-streak' + (streak >= 3 ? ' hot' : '');
-  streakEl.textContent = done ? (streak > 0 ? streak + '🔥' : '1') : (streak > 0 ? streak + '🔥' : '–');
+  streakEl.className = 'habit-streak' + ((done ? streak + 1 : streak) >= 3 ? ' hot' : '');
+  const displayStreak = done ? streak + 1 : streak;   // habitStreak() stops at yesterday
+  streakEl.textContent = displayStreak > 0 ? displayStreak + '🔥' : '–';
   streakEl.title = done ? 'Click to uncheck today' : 'Click to check in today';
   if (!isArchived) {
     streakEl.style.cursor = 'pointer';
@@ -339,6 +462,16 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     li.appendChild(archBtn);
   }
 
+  if (isArchived) {
+    // Restart button — the counterpart to the archive check on active rows
+    const restartBtn = document.createElement('button');
+    restartBtn.className = 'habit-restart-btn';
+    restartBtn.textContent = '↺';
+    restartBtn.title = 'Start this habit again from today';
+    restartBtn.addEventListener('click', () => _restartHabit(habit, allHabits));
+    li.appendChild(restartBtn);
+  }
+
   // Delete
   const del = document.createElement('button');
   del.className = 'habit-delete';
@@ -346,10 +479,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   del.title = 'Delete permanently';
   del.addEventListener('click', () => {
     if (!confirm(`Permanently delete "${habit.name}"?`)) return;
-    const idx = allHabits.indexOf(habit);
-    if (idx !== -1) allHabits.splice(idx, 1);
-    saveHabits(allHabits);
-    renderHabits();
+    _deleteHabit(habit, allHabits);
   });
   li.appendChild(del);
 
@@ -418,11 +548,19 @@ let _hcalMonth = null; // { year, month }
 
 // Was this habit scheduled on date `ds`? (started, not yet ended, not yet archived)
 function _habitScheduledOn(h, ds) {
+  if (_habitInPriorRun(h, ds)) return true;   // a finished run — its history stands
   const start = h.startDate || '0000-00-00';
   if (ds < start) return false;
   if (h.endDate && ds > h.endDate) return false;
-  if (h.archivedAt && ds > String(h.archivedAt).slice(0, 10)) return false;
+  if (_habitRetiredOn(h, ds)) return false;
   return true;
+}
+
+// True from the archive day onward. Archiving retires a habit then and there —
+// the day you archive it is already out of play, so it is neither scheduled nor
+// markable from that point. Retired days render inert, the way future days do.
+function _habitRetiredOn(h, ds) {
+  return !!h.archivedAt && ds >= String(h.archivedAt).slice(0, 10);
 }
 
 // The habits that actually count on `ds`: scheduled that day, not an End-of-Day
@@ -634,13 +772,13 @@ function closeHabitDetail() {
 
 function renderHabitDetailPage(habit, allHabits) {
   const today = habitDateStr(0);
-  const doneToday = getHabitLog(today).includes(habit.id);
+  const doneToday = _habitDoneOn(habit, today);
   const streak = habitStreak(habit.id);
   const displayStreak = doneToday ? streak + 1 : streak;
   const isTimed = !!habit.endDate;
   const startDate = habit.startDate || today;
   const dayNum = _habitDayNum(habit, today);
-  const totalDays = isTimed ? daysBetween(startDate, habit.endDate) + 1 : null;
+  const totalDays = isTimed ? _habitTotalDays(habit) : null;
   const pct = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / Math.max(totalDays - 1, 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
   const isArchived = !!habit.archived;
@@ -648,15 +786,20 @@ function renderHabitDetailPage(habit, allHabits) {
   // Count total completions across the habit's tracked window. Check-ins live in
   // MEM ('habits:log:<date>'), not localStorage — the old localStorage scan never
   // matched, so this always read 0.
+  // Completions in the current run, plus those banked from earlier runs — the
+  // same span the cumulative day count covers, so the rate can't exceed 100%.
   let totalDone = 0;
   storeListKeys('habits:log:').forEach(k => {
     const ds = k.slice('habits:log:'.length);
-    if (ds >= startDate && ds <= today && getHabitLog(ds).includes(habit.id)) totalDone++;
+    if (ds > today || !_habitDoneOn(habit, ds)) return;
+    if (ds >= startDate || _habitInPriorRun(habit, ds)) totalDone++;
   });
   // Voided days drop out of the denominator, so an excused stretch can't drag the
   // completion rate down. Check-ins made on a voided day still count in totalDone.
+  // The denominator is the same "Day N" shown above, so the rate is measured over
+  // the days the habit was actually active across all of its runs.
   const voidedDays  = _habitVoidedCount(habit.id, startDate, today);
-  const daysTracked = Math.max(1, daysBetween(startDate, today) + 1 - voidedDays);
+  const daysTracked = Math.max(1, dayNum);
   const rate = Math.round(totalDone / daysTracked * 100);
 
   // Name
@@ -743,12 +886,27 @@ function renderHabitDetailPage(habit, allHabits) {
         </label>
       </div>
     </div>
-    ` : ''}
+    ` : `
+    <div class="habit-detail-checkin">
+      <div style="flex:1;">
+        <div class="habit-detail-checkin-label">Completed habit</div>
+        <div class="habit-detail-checkin-sub">${habit.archivedAt ? 'Archived ' + formatDate(habit.archivedAt) : 'Archived'}</div>
+      </div>
+      <button class="btn-restart" id="habitDetailRestart">Start again</button>
+    </div>
+    `}
     <div class="habit-detail-danger-row">
       ${!isArchived ? `<button class="btn-danger" id="habitDetailArchive">Archive</button>` : ''}
       <button class="btn-danger" id="habitDetailDelete">Delete</button>
     </div>
   `;
+
+  if (isArchived) {
+    // renderHabits() re-renders this page via its sync block, so the view flips
+    // to the active layout in place rather than closing.
+    document.getElementById('habitDetailRestart')
+      .addEventListener('click', () => _restartHabit(habit, allHabits));
+  }
 
   if (!isArchived) {
     document.getElementById('habitDetailCb').addEventListener('change', (e) => {
@@ -792,11 +950,7 @@ function renderHabitDetailPage(habit, allHabits) {
 
   document.getElementById('habitDetailDelete').addEventListener('click', () => {
     if (!confirm(`Permanently delete "${habit.name}"?`)) return;
-    const idx = allHabits.indexOf(habit);
-    if (idx !== -1) allHabits.splice(idx, 1);
-    saveHabits(allHabits);
-    if (getHabitNotes(habit.id).length) saveHabitNotes(habit.id, []);
-    renderHabits();
+    _deleteHabit(habit, allHabits);
     closeHabitDetail();
   });
 }
@@ -851,6 +1005,7 @@ function renderHabitNotesPanel(habit) {
 function renderHabitHistoryGrid(habit) {
   const today = habitDateStr(0);
   const startDate = habit.startDate || today;
+  const isArchived = !!habit.archived;
   const now = new Date();
 
   const MONTH_NAMES = ['January','February','March','April','May','June',
@@ -885,22 +1040,27 @@ function renderHabitHistoryGrid(habit) {
 
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const done = getHabitLog(ds).includes(habit.id);
+    const done = _habitDoneOn(habit, ds);
     const voided = _habitVoidedOn(habit.id, ds);
     const isToday = ds === today;
     const isFuture = ds > today;
-    const isBeforeStart = ds < startDate;
+    const isRetired = _habitRetiredOn(habit, ds);
+    const isBeforeStart = ds < startDate && !_habitInPriorRun(habit, ds);
 
     let cls = 'habit-cal-day';
-    if (isFuture) cls += ' future';
+    // A retired day gets the same inert treatment as a future one — the habit
+    // was no longer running, so it is neither a win nor a miss.
+    if (isFuture || isRetired) cls += ' future';
     else if (isBeforeStart) cls += ' before-start';
     else if (done) cls += ' done';
     else if (voided) cls += ' voided';
     else if (!isToday) cls += ' missed';
-    if (isToday) cls += ' today';
+    if (isToday && !isRetired) cls += ' today';
 
-    const clickable = !isFuture && !isBeforeStart;
-    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${voided ? ds + ' — voided' : ds}"><span class="habit-cal-day-num">${d}</span></div>`;
+    // An archived habit is a frozen record: nothing about it can be re-marked.
+    const clickable = !isFuture && !isBeforeStart && !isArchived;
+    const cellTitle = isRetired ? `${ds} — archived` : voided ? `${ds} — voided` : ds;
+    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${cellTitle}"><span class="habit-cal-day-num">${d}</span></div>`;
   }
 
   // Fill trailing cells to complete the last row
@@ -1061,23 +1221,27 @@ function renderDayDetail(ds) {
     // A voided habit you managed to do anyway just reads as done — the void is
     // dormant. The ∅ toggle still shows it, so it stays visible and undoable.
     const voidActive = isVoided && !isDone;
-    const rowDrag  = canDrag && !isDone && !_dayVoidMode;
+    // An archived habit is a frozen record — its check-ins can't be changed from
+    // any day, so the row renders inert rather than offering a live checkbox.
+    const isLocked = !!h.archived;
+    const rowDrag  = canDrag && !isDone && !_dayVoidMode && !isLocked;
     const areaObj = h.area && areas.find(a => a.name === h.area);
     const areaTag = areaObj
-      ? `<span class="day-detail-habit-area" style="background:${areaObj.color}BF">${areaObj.name}</span>`
+      ? `<span class="day-detail-habit-area" style="background:${_esc(areaObj.color)}BF">${_esc(areaObj.name)}</span>`
       : '';
     return `
-    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}${voidActive ? ' is-voided' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}">
+    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}${voidActive ? ' is-voided' : ''}${isLocked ? ' is-locked' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}"${isLocked ? ' title="Archived — its check-ins are locked"' : ''}>
       ${rowDrag ? '<span class="habit-drag-handle" aria-hidden="true">⋮⋮</span>' : ''}
       <label class="habit-cb-wrap">
-        <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}>
+        <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}${isLocked ? ' disabled' : ''}>
         <span class="habit-cb-box"></span>
       </label>
-      <span class="day-detail-habit-name">${h.name}</span>
+      <span class="day-detail-habit-name">${_esc(h.name)}</span>
+      ${isLocked ? '<span class="habit-meta-tag archived-tag">Archived</span>' : ''}
       ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${areaTag}
-      ${_dayVoidMode ? `<button class="day-void-toggle${isVoided ? ' active' : ''}" data-void-id="${h.id}"
+      ${_dayVoidMode && !isLocked ? `<button class="day-void-toggle${isVoided ? ' active' : ''}" data-void-id="${h.id}"
         title="${isVoided ? 'Un-void this habit' : "Void this habit — it won't count on this day"}"
         aria-pressed="${isVoided}">∅</button>` : ''}
     </div>`;
@@ -1148,6 +1312,7 @@ function renderDayDetail(ds) {
 
   body.querySelectorAll('input[data-habit-id]').forEach(cb => {
     cb.addEventListener('change', () => {
+      if (cb.disabled) return;
       const id  = cb.dataset.habitId;
       const log = getHabitLog(ds);
       const i   = log.indexOf(id);
@@ -1195,8 +1360,12 @@ function addHabit() {
   const name    = input.value.trim();
   if (!name) return;
   const today   = habitDateStr(0);
-  const entry   = { id: Date.now().toString(36), name, startDate: today, archived: false, endOfDay: false, createdAt: new Date().toISOString() };
-  if (endDate.value && endDate.value > today) entry.endDate = endDate.value;
+  const entry   = { id: _habitId(), name, startDate: today, archived: false, endOfDay: false, createdAt: new Date().toISOString() };
+  if (endDate.value && endDate.value <= today) {
+    alert('The end date has to be after today. Clear it for an ongoing habit.');
+    return;                       // keep what was typed so it can be corrected
+  }
+  if (endDate.value) entry.endDate = endDate.value;
   const habits = getHabits();
   habits.push(entry);
   saveHabits(habits);
