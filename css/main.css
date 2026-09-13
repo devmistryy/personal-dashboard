@@ -17,6 +17,27 @@
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
 
+  /* Sync failure banner. Sticky rather than fixed: in the flow so it pushes the
+     page down instead of covering the header, but still pinned while scrolling —
+     the whole point is that this can't be missed. Click anywhere to dismiss. */
+  .sync-error-banner {
+    position: sticky;
+    top: 10px;
+    z-index: 200;
+    margin-bottom: 16px;
+    padding: 11px 14px;
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    background: #3A1114;
+    color: #FFD9D9;
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+    cursor: pointer;
+  }
+  .sync-error-banner[hidden] { display: none; }
+
   body {
     background: #050506;
     color: var(--text-primary);

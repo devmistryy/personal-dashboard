@@ -30,15 +30,15 @@ async function _syncJobs(jobs) {
       date_applied: j.dateApplied || null, status: j.status || 'Applied',
       location_type: j.locationType || null, location_city: j.locationCity || null,
     })), { onConflict: 'id' });
-    if (error) console.error('[sync] job_applications upsert failed:', error);
+    if (error) _syncFailed('job_applications upsert failed', error);
   }
   const { data: existing, error: selErr } = await sb.from('job_applications').select('id').eq('user_id', uid);
-  if (selErr) { console.error('[sync] job_applications select failed:', selErr); return; }
+  if (selErr) { _syncFailed('job_applications select failed', selErr); return; }
   const currentIds = new Set(jobs.map(j => j.id));
   const toDelete = (existing || []).filter(r => !currentIds.has(r.id)).map(r => r.id);
   if (toDelete.length) {
     const { error: delErr } = await sb.from('job_applications').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) console.error('[sync] job_applications delete failed:', delErr);
+    if (delErr) _syncFailed('job_applications delete failed', delErr);
   }
 }
 

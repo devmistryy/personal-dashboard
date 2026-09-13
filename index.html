@@ -17,7 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=10">
+<link rel="stylesheet" href="css/main.css?v=12">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=27">
 <link rel="stylesheet" href="css/jobs.css?v=1">
@@ -28,6 +28,10 @@
 </head>
 <body>
 <div class="page-wrap">
+
+  <!-- Shown by _syncFailed() when a write to Supabase is rejected: the change is
+       in memory only and a reload will silently revert it. Click to dismiss. -->
+  <div id="syncErrorBanner" class="sync-error-banner" role="status" hidden></div>
 
   <div class="dash-header">
     <h1 class="dash-title">My Dashboard</h1>
@@ -568,13 +572,13 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=20"></script>
+<script src="js/todo.js?v=24"></script>
 <script src="js/habits.js?v=31"></script>
 <script src="js/jobs.js?v=2"></script>
-<script src="js/areas.js?v=6"></script>
+<script src="js/areas.js?v=8"></script>
 <script src="js/goals.js?v=1"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
-<script src="js/main.js?v=26"></script>
+<script src="js/main.js?v=29"></script>
 </body>
 </html>

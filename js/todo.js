@@ -21,11 +21,26 @@ function makeTask(fields) {
 }
 
 // True when `list` already contains `g` — by stable id, falling back to an
-// exact text match against an unfinished entry (covers pre-id rows).
+// exact text match against an unfinished entry. The text arm is a display
+// guard here (don't show the same wording twice on one day), and declining to
+// carry costs nothing: the task stays in history and comes forward as soon as
+// the row blocking it is done or gone.
 function _taskInList(g, list) {
   return list.some(x =>
     (g.id && x.id && x.id === g.id) ||
     (!x.done && x.text === g.text));
+}
+
+// Same-task test for the DESTRUCTIVE paths (dismiss + purge). Identity is the
+// stable id; the text fallback applies only when one side's id isn't stable —
+// i.e. loadFromSupabase minted it this load and failed to persist it, so it will
+// be different next load. Everywhere else, matching on text alone meant deleting
+// today's "Laundry" also erased an unrelated "Laundry" from three weeks back.
+function _taskIdUnstable(x) { return !!(x && x.idUnstable); }
+
+function _sameTask(g, x) {
+  if (g.id && x.id && x.id === g.id) return true;
+  return !x.done && (_taskIdUnstable(g) || _taskIdUnstable(x)) && x.text === g.text;
 }
 
 // ── Upcoming (future-dated) tasks ──
@@ -136,8 +151,20 @@ function reorderTaskByDrag(key, fromEl, toEl) {
   const from = arr.findIndex(g => g.id === fromEl.dataset.taskId);
   const to   = arr.findIndex(g => g.id === toEl.dataset.taskId);
   if (from < 0 || to < 0 || from === to) return;
+  // Completed rows render at the bottom of the list whatever their stored
+  // position (sortTasksForDisplay sinks them), so dropping on one means "make
+  // this the last open task". Moving to the done row's *stored* index instead
+  // lands the row somewhere the list never shows — usually looking like the
+  // drag did nothing at all.
+  const dropLast = arr[to].done;
   const [item] = arr.splice(from, 1);
-  arr.splice(to, 0, item);
+  if (dropLast) {
+    let lastOpen = -1;
+    arr.forEach((g, i) => { if (!g.done) lastOpen = i; });
+    arr.splice(lastOpen + 1, 0, item);
+  } else {
+    arr.splice(to, 0, item);
+  }
   storeSet(key, arr);
   if (key === todayKey()) loadToday(); else loadUpcoming();
 }
@@ -151,6 +178,10 @@ function reorderTaskByDrag(key, fromEl, toEl) {
 // tasks when a carry-forward write failed (the Sept 2026 data-loss bug). The
 // guards are per-task instead. A past-day task is carried onto today unless:
 //   • it's done, or
+//   • the same task (same id) is done on some later day — checking a carried
+//     task off only marks the copy on the day you checked it, so its unfinished
+//     originals stay unfinished in history and would otherwise carry forward
+//     again the next morning, forever, or
 //   • its id is already placed on today or any later day (so future-dated
 //     planner tasks aren't yanked back), or
 //   • its id is in task_dismissed_v1 — set when you delete a carried task off
@@ -170,6 +201,12 @@ function rollover() {
       (storeGet(k) || []).forEach(g => { if (g.id) placedAhead.add(g.id); });
   });
 
+  // Every task id that has been checked off on some day — the task is finished
+  // even if older copies of it are still sitting unfinished in history.
+  const completed = new Set();
+  storeListKeys('tasks:').forEach(k =>
+    (storeGet(k) || []).forEach(g => { if (g.done && g.id) completed.add(g.id); }));
+
   const todayTasks = storeGet(todayKey()) || [];
   let added = false;
 
@@ -179,6 +216,7 @@ function rollover() {
     .forEach(k => {
       (storeGet(k) || []).forEach(g => {
         if (g.done || !g.id) return;
+        if (completed.has(g.id)) return;
         if (placedAhead.has(g.id) || dismissed.has(g.id)) return;
         if (_taskInList(g, todayTasks)) return;
         const carried = Object.assign({}, g, { done: false });
@@ -240,27 +278,28 @@ function dismissTask(id) {
 }
 
 // True when this task also sits on an earlier day — i.e. it was carried
-// forward, so deleting it from today should dismiss + purge it. Matches the
-// same way _taskInList does (id, or an unfinished text match) so it still
-// fires when a pre-id row's id drifted between loads.
+// forward, so deleting it from today should dismiss + purge it.
 function taskAppearsEarlier(g) {
   const active = getActiveDateString();
   return storeListKeys('tasks:').some(k =>
-    k.slice(6) < active && (storeGet(k) || []).some(x =>
-      (g.id && x.id && x.id === g.id) || (!x.done && x.text === g.text)));
+    k.slice(6) < active && (storeGet(k) || []).some(x => _sameTask(g, x)));
 }
 
 // Drop every earlier-day copy of a task being deleted off today — the ones
-// rollover would otherwise carry straight back. Matches by id, and by text for
-// unfinished copies whose id drifted (pre-id rows are re-minted each load).
-// Completed copies stay put as real history.
+// rollover would otherwise carry straight back. Identity per _sameTask.
+//
+// Completed copies stay put as real history: rollover never carries a done task
+// anyway, so removing them achieves nothing and rewrites days you already
+// lived. The `x.done ||` guard is what enforces that — before it, the id arm
+// deleted done rows too, so deleting a task off today (say, after finally
+// finishing it) quietly erased every day you'd ticked it off, changing those
+// days' counts in the History view.
 function purgeTaskHistory(g) {
   const active = getActiveDateString();
   storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) >= active) return;
     const arr = storeGet(k) || [];
-    const next = arr.filter(x =>
-      !((g.id && x.id && x.id === g.id) || (!x.done && x.text === g.text)));
+    const next = arr.filter(x => x.done || !_sameTask(g, x));
     if (next.length !== arr.length) storeSet(k, next);
   });
 }
@@ -288,7 +327,8 @@ function _daysApart(a, b) {
 // ── Streak check ──
 function checkStreak() {
   const activeDate = getActiveDateString();
-  let streak = storeGet('task_streak_v1') || { count: 0, lastProcessedDate: null };
+  const stored = storeGet('task_streak_v1') || { count: 0, lastProcessedDate: null };
+  const streak = { count: stored.count, lastProcessedDate: stored.lastProcessedDate };
   const keys = storeListKeys('tasks:')
     .filter(k => k.slice(6) < activeDate)
     .sort();
@@ -305,7 +345,12 @@ function checkStreak() {
     }
     streak.lastProcessedDate = date;
   }
-  storeSet('task_streak_v1', streak);
+  // Only persist when a day was actually scored. main.js's bootstrap calls this
+  // once before any data has loaded, and an unconditional write there pushed
+  // {count: 0, lastProcessedDate: null} into `settings` — racing
+  // loadFromSupabase and wiping the real streak whenever it landed last.
+  if (streak.count !== stored.count || streak.lastProcessedDate !== stored.lastProcessedDate)
+    storeSet('task_streak_v1', streak);
   return streak;
 }
 
@@ -472,6 +517,9 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
       dismissTask(g.id);
       if (!isSundayResetTask(g)) purgeTaskHistory(g);
     }
+    // A Sunday Reset task deleted on a Sunday must stay deleted — otherwise the
+    // next refresh re-injects it.
+    if (key === todayKey() && isSundayResetTask(g)) noteSundayResetTaskRemoved(g);
     mutate((arr, i) => { arr.splice(i, 1); });
   });
   li.appendChild(del);
@@ -717,8 +765,15 @@ document.getElementById('plannerDateInput').addEventListener('change', e => {
 // A fixed Sunday-only checklist. Entries are managed in a slide-in view and
 // auto-injected into Sunday's To Do list, rolling over normally if unfinished.
 // Persisted as two `settings` keys (rehydrated generically in loadFromSupabase):
-//   sunday_reset_v1     – [{ id, text, area }] templates
-//   sunday_reset_log_v1 – { "<Sunday YYYY-MM-DD>": [injected template ids] }
+//   sunday_reset_v1         – [{ id, text, area }] templates
+//   sunday_reset_removed_v1 – { "<Sunday YYYY-MM-DD>": [entry ids you deleted
+//                              off that Sunday's list] }
+//
+// The removal map is the ONLY thing that suppresses an injection; whether an
+// entry is already on the list is read from the list itself. The old
+// sunday_reset_log_v1 recorded "injected" ids up front instead, which made a
+// lost write permanent: if the tasks write failed or was clobbered, the log
+// still said "done" and the entry never came back. (master.sql drops that key.)
 
 function getSundayReset()      { return MEM['sunday_reset_v1'] || []; }
 function saveSundayReset(list) { MEM['sunday_reset_v1'] = list; _syncSetting('sunday_reset_v1', list); }
@@ -738,36 +793,55 @@ function _isSunday(ds) {
   return new Date(y, m - 1, d).getDay() === 0;
 }
 
-// Inject not-yet-added Sunday Reset entries into the active day's tasks, but only
-// when the active day is a Sunday. Idempotent per (Sunday date × entry id) via
-// the log map, so deleting an injected task doesn't resurrect it on the next
-// refresh, while an entry added mid-Sunday still lands in today's list.
+function _srRemovedMap()      { return MEM['sunday_reset_removed_v1'] || {}; }
+function _srRemovedToday(ds)  { return _srRemovedMap()[ds] || []; }
+
+// Remember that an entry was taken off this Sunday's list, so the next refresh
+// doesn't put it straight back.
+function _srMarkRemoved(ds, id) {
+  if (!id || !_isSunday(ds)) return;
+  const map = _srRemovedMap();
+  const day = map[ds] || [];
+  if (day.includes(id)) return;
+  map[ds] = day.concat(id);
+  Object.keys(map).sort().slice(0, -8).forEach(k => delete map[k]); // keep ~8 Sundays
+  MEM['sunday_reset_removed_v1'] = map;
+  _syncSetting('sunday_reset_removed_v1', map);
+}
+
+// Called when a task is deleted off the active day: if it came from a Sunday
+// Reset entry and today is a Sunday, that's a removal, not a plain delete.
+function noteSundayResetTaskRemoved(g) {
+  const ds = getActiveDateString();
+  if (!_isSunday(ds)) return;
+  const entry = getSundayReset().find(it => it.text === g.text);
+  if (entry) _srMarkRemoved(ds, entry.id);
+}
+
+// Inject Sunday Reset entries that aren't on the active day's list yet, but only
+// when the active day is a Sunday. Idempotent because it re-derives what's
+// missing from the list every time: an entry is injected unless a task with its
+// text is already there (open, done, or carried over from a previous Sunday) or
+// you removed it from this Sunday's list. So an entry added mid-Sunday still
+// lands in today's list, a removed one stays gone, and a load that failed to
+// save fixes itself on the next one.
 function applySundayReset() {
   const ds = getActiveDateString();
   if (!_isSunday(ds)) return;
   const items = getSundayReset();
   if (!items.length) return;
 
-  const log   = MEM['sunday_reset_log_v1'] || {};
-  const done  = log[ds] || [];
-  const tasks = storeGet('tasks:' + ds) || [];
-  const texts = new Set(tasks.map(g => g.text));
+  const removed = _srRemovedToday(ds);
+  const tasks   = storeGet('tasks:' + ds) || [];
+  const texts   = new Set(tasks.map(g => g.text));
 
   let added = false;
   items.forEach(it => {
-    if (done.includes(it.id)) return;
-    if (!texts.has(it.text)) {
-      tasks.push(makeTask({ text: it.text, area: it.area || null }));
-      texts.add(it.text);
-      added = true;
-    }
-    done.push(it.id);
+    if (removed.includes(it.id) || texts.has(it.text)) return;
+    tasks.push(makeTask({ text: it.text, area: it.area || null }));
+    texts.add(it.text);
+    added = true;
   });
-
-  log[ds] = done;
-  Object.keys(log).sort().slice(0, -8).forEach(k => delete log[k]); // keep ~8 Sundays
-  MEM['sunday_reset_log_v1'] = log;
-  _syncSetting('sunday_reset_log_v1', log);
 
   if (added) storeSet('tasks:' + ds, tasks); // persists + fires tasks-changed
 }
@@ -796,8 +870,8 @@ function _afterSundayResetChange() {
 }
 
 // When an entry is deleted on a Sunday, also pull the task it injected out of
-// today's To Do list (matched by text, the same way injection dedups) and drop
-// its id from today's injection log so state stays consistent.
+// today's To Do list (matched by text, the same way injection dedups). Nothing
+// to record in the removal map — the entry itself is about to be gone.
 function _removeInjectedTask(entry) {
   const ds = getActiveDateString();
   if (!_isSunday(ds)) return;
@@ -805,13 +879,21 @@ function _removeInjectedTask(entry) {
   const tasks = storeGet('tasks:' + ds) || [];
   const next  = tasks.filter(g => g.text !== entry.text);
   if (next.length !== tasks.length) storeSet('tasks:' + ds, next);
+}
 
-  const log = MEM['sunday_reset_log_v1'] || {};
-  if (log[ds] && log[ds].includes(entry.id)) {
-    log[ds] = log[ds].filter(id => id !== entry.id);
-    MEM['sunday_reset_log_v1'] = log;
-    _syncSetting('sunday_reset_log_v1', log);
-  }
+// Carry an edit to an entry through to the task it already injected into today's
+// list (matched by its pre-edit text). Without this, renaming an entry on a
+// Sunday leaves the old task sitting there and applySundayReset() adds the new
+// text alongside it as a second task; re-tagging an entry's area leaves the
+// already-injected task on the old one.
+function _updateInjectedTask(oldText, fields) {
+  const ds = getActiveDateString();
+  if (!_isSunday(ds)) return;
+  const tasks = storeGet('tasks:' + ds) || [];
+  const i = tasks.findIndex(g => g.text === oldText);
+  if (i < 0) return;
+  Object.assign(tasks[i], fields);
+  storeSet('tasks:' + ds, tasks);
 }
 
 // Small inline text editor for a Sunday Reset row (the shared makeInlineEdit is
@@ -835,8 +917,10 @@ function _srInlineEdit(el, item) {
     const val = el.textContent.trim();
     el.contentEditable = 'false';
     if (val && val !== item.text) {
+      const oldText = item.text;
       item.text = val;
       saveSundayReset(getSundayReset());
+      _updateInjectedTask(oldText, { text: val });
       _afterSundayResetChange();
     } else if (!val) {
       el.textContent = item.text;
@@ -875,6 +959,7 @@ function renderSundayResetPage() {
     li.appendChild(buildAreaPill(it.area || null, newArea => {
       it.area = newArea;
       saveSundayReset(getSundayReset());
+      _updateInjectedTask(it.text, { area: newArea });
       _afterSundayResetChange();
     }));
 

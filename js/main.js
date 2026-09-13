@@ -70,6 +70,8 @@ function _migrateGoalKeys() {
   delete MEM['step_autocheck_v1'];
   delete MEM['step_ingest_token_v1'];
   delete MEM['step_counts_v1'];
+  // Replaced by sunday_reset_removed_v1 (see applySundayReset).
+  delete MEM['sunday_reset_log_v1'];
 }
 
 // Guarantee every stored task has a stable id + ISO createdAt. New tasks get
@@ -439,6 +441,52 @@ function buildAreaPill(currentArea, onChange) {
 // ── Supabase sync (fire-and-forget) ──
 async function _uid() { return (await sb.auth.getSession()).data.session?.user?.id; }
 
+// Every _sync* function reports its failures here instead of to console.error
+// alone. The writes are fire-and-forget, so a rejected one used to leave MEM and
+// the database quietly diverged: the change looks saved, and the next reload
+// reverts it with no explanation. The banner says so while the tab is still
+// open, in time to redo the change or copy it out. Repeat failures (a whole day
+// re-syncing, say) coalesce into one banner rather than stacking.
+let _syncErrCount = 0, _syncErrTimer = null;
+
+function _syncFailed(what, error) {
+  if (error === undefined) console.error('[sync] ' + what);
+  else console.error('[sync] ' + what + ':', error);
+  if (LOCAL_MODE) return;                       // local mode never hits the network
+
+  const el = document.getElementById('syncErrorBanner');
+  if (!el) return;
+  _syncErrCount++;
+  el.textContent = _syncErrCount === 1
+    ? "Couldn't save to the server — this change is only on this device. Reload to see what's actually stored."
+    : `Couldn't save ${_syncErrCount} changes to the server — they're only on this device. Reload to see what's actually stored.`;
+  el.hidden = false;
+  clearTimeout(_syncErrTimer);
+  _syncErrTimer = setTimeout(_dismissSyncError, 12000);
+}
+
+function _dismissSyncError() {
+  const el = document.getElementById('syncErrorBanner');
+  if (el) el.hidden = true;
+  _syncErrCount = 0;
+  clearTimeout(_syncErrTimer);
+  _syncErrTimer = null;
+}
+document.getElementById('syncErrorBanner').addEventListener('click', _dismissSyncError);
+
+// Re-tag every task carrying `oldName` in ONE server-side update. The day-scoped
+// _syncTasks would need a full rewrite per date — up to 90 round trips for one
+// rename — and could only reach days inside the load window, which is why area
+// renames used to leave history rows pointing at a name that no longer resolves
+// (their pill silently went blank). Pass null for `newArea` to clear the tag.
+async function _syncTaskAreaRename(oldName, newArea) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  const { error } = await sb.from('tasks').update({ area: newArea })
+    .eq('user_id', uid).eq('area', oldName);
+  if (error) _syncFailed('task area re-tag failed', error);
+}
+
 async function _syncHabits(habits) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
@@ -450,15 +498,15 @@ async function _syncHabits(habits) {
       sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
       runs: Array.isArray(h.runs) ? h.runs : [],
     })), { onConflict: 'id' });
-    if (error) console.error('[sync] habits upsert failed:', error);
+    if (error) _syncFailed('habits upsert failed', error);
   }
   const { data: existing = [], error: selErr } = await sb.from('habits').select('id').eq('user_id', uid);
-  if (selErr) { console.error('[sync] habits select failed:', selErr); return; }
+  if (selErr) { _syncFailed('habits select failed', selErr); return; }
   const currentIds = new Set(habits.map(h => h.id));
   const toDelete = (existing || []).filter(r => !currentIds.has(r.id)).map(r => r.id);
   if (toDelete.length) {
     const { error: delErr } = await sb.from('habits').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) console.error('[sync] habits delete failed:', delErr);
+    if (delErr) _syncFailed('habits delete failed', delErr);
   }
 }
 
@@ -477,13 +525,13 @@ async function _syncHabitLog(dateStr, ids) {
     const { error: insErr } = await sb.from('habit_logs').upsert(
       ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })),
       { onConflict: 'user_id,habit_id,date', ignoreDuplicates: true });
-    if (insErr) { console.error('[sync] habit_logs upsert failed (kept existing rows):', insErr); return; }
+    if (insErr) { _syncFailed('habit_logs upsert failed (kept existing rows)', insErr); return; }
   }
 
   let del = sb.from('habit_logs').delete().eq('user_id', uid).eq('date', dateStr);
   if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
   const { error: delErr } = await del;
-  if (delErr) console.error('[sync] habit_logs stale-delete failed:', delErr);
+  if (delErr) _syncFailed('habit_logs stale-delete failed', delErr);
 }
 
 async function _syncHabitVoids(dateStr, ids) {
@@ -494,22 +542,56 @@ async function _syncHabitVoids(dateStr, ids) {
     const { error: insErr } = await sb.from('habit_voids').upsert(
       ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })),
       { onConflict: 'user_id,habit_id,date', ignoreDuplicates: true });
-    if (insErr) { console.error('[sync] habit_voids upsert failed (run master.sql?):', insErr); return; }
+    if (insErr) { _syncFailed('habit_voids upsert failed (run master.sql?)', insErr); return; }
   }
 
   let del = sb.from('habit_voids').delete().eq('user_id', uid).eq('date', dateStr);
   if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
   const { error: delErr } = await del;
-  if (delErr) console.error('[sync] habit_voids stale-delete failed:', delErr);
+  if (delErr) _syncFailed('habit_voids stale-delete failed', delErr);
 }
 
-async function _syncTasks(dateStr, tasks) {
+// Day-scoped task sync. `_syncTasksNow` writes insert-then-stale-delete, so two
+// of them running concurrently for the SAME date destroy each other's rows: the
+// first call's delete ("everything on this date that isn't a row I just
+// inserted") wipes the rows the second call inserted. That happened on every
+// load — rollover() and applySundayReset() both write today's list back to back
+// — and silently dropped whichever set lost the race, which is why the injected
+// Sunday Reset tasks never survived a reload.
+//
+// So writes are queued per date, and a queued write that's been superseded
+// before it starts is dropped: only the newest snapshot for a date is sent.
+const _taskSyncChain   = new Map();   // date → tail of that date's write chain
+const _taskSyncPending = new Map();   // date → newest snapshot not yet written
+
+function _syncTasks(dateStr, tasks) {
   if (LOCAL_MODE) return _saveLocal();
+  // Snapshot: the caller's array keeps being mutated while this write waits.
+  _taskSyncPending.set(dateStr, tasks.map(g => Object.assign({}, g)));
+
+  const run = (_taskSyncChain.get(dateStr) || Promise.resolve())
+    .catch(() => {})
+    .then(() => {
+      const payload = _taskSyncPending.get(dateStr);
+      if (payload === undefined) return;      // a later call already wrote it
+      _taskSyncPending.delete(dateStr);
+      return _syncTasksNow(dateStr, payload);
+    });
+
+  _taskSyncChain.set(dateStr, run);
+  // .catch here too: callers don't await, so a rejected write would otherwise
+  // surface as an unhandled rejection and leave a dead tail in the chain map.
+  run.catch(e => _syncFailed('tasks write failed', e))
+     .then(() => { if (_taskSyncChain.get(dateStr) === run) _taskSyncChain.delete(dateStr); });
+  return run;
+}
+
+async function _syncTasksNow(dateStr, tasks) {
   const uid = await _uid(); if (!uid) return;
 
   if (!tasks.length) {
     const { error } = await sb.from('tasks').delete().eq('user_id', uid).eq('date', dateStr);
-    if (error) console.error('[sync] tasks clear failed:', error);
+    if (error) _syncFailed('tasks clear failed', error);
     return;
   }
 
@@ -520,23 +602,23 @@ async function _syncTasks(dateStr, tasks) {
     area: g.area || null, priority: g.priority || 'Medium',
     tid: g.id || null, created_at: g.createdAt || null,
   }))).select('id');
-  if (insErr) { console.error('[sync] tasks insert failed (kept existing rows):', insErr); return; }
+  if (insErr) { _syncFailed('tasks insert failed (kept existing rows)', insErr); return; }
 
   const keepIds = (inserted || []).map(r => r.id);
-  if (!keepIds.length) { console.error('[sync] tasks insert returned no ids — skipping stale-delete'); return; }
+  if (!keepIds.length) { _syncFailed('tasks insert returned no ids — skipping stale-delete'); return; }
 
   // Drop the pre-insert copies (and any leftover duplicates) for this date.
   const { error: delErr } = await sb.from('tasks').delete()
     .eq('user_id', uid).eq('date', dateStr)
     .not('id', 'in', `(${keepIds.join(',')})`);
-  if (delErr) console.error('[sync] tasks stale-delete failed (duplicates clear on next save):', delErr);
+  if (delErr) _syncFailed('tasks stale-delete failed (duplicates clear on next save)', delErr);
 }
 
 async function _syncSetting(key, value) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   const { error } = await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
-  if (error) console.error('[sync] settings upsert failed:', error);
+  if (error) _syncFailed('settings upsert failed', error);
 }
 
 // Deleting a habit has to take its check-ins, voids and notes with it. Those
@@ -555,13 +637,13 @@ async function _syncHabitNotes(habitId, notes) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
   const { error: delErr } = await sb.from('habit_notes').delete().eq('user_id', uid).eq('habit_id', habitId);
-  if (delErr) { console.error('[sync] habit_notes delete failed:', delErr); return; }
+  if (delErr) { _syncFailed('habit_notes delete failed', delErr); return; }
   if (notes.length) {
     const { error } = await sb.from('habit_notes').insert(notes.map(n => ({
       user_id: uid, habit_id: habitId, text: n.text,
       created_at: new Date(n.createdAt).toISOString(),
     })));
-    if (error) console.error('[sync] habit_notes insert failed:', error);
+    if (error) _syncFailed('habit_notes insert failed', error);
   }
 }
 
@@ -577,17 +659,17 @@ async function _syncMobExercises(list) {
       frequency: ex.frequency || 3,
       created_at: new Date(ex.createdAt || Date.now()).toISOString(),
     })), { onConflict: 'id' });
-    if (error) console.error('[sync] mobility_exercises upsert failed:', error);
+    if (error) _syncFailed('mobility_exercises upsert failed', error);
   }
   const { data: existing = [], error: selErr } =
     await sb.from('mobility_exercises').select('id').eq('user_id', uid);
-  if (selErr) { console.error('[sync] mobility_exercises select failed:', selErr); return; }
+  if (selErr) { _syncFailed('mobility_exercises select failed', selErr); return; }
   const keep = new Set(list.map(ex => ex.id));
   const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
   if (toDelete.length) {
     // FK on delete cascade also clears mobility_logs for these exercises.
     const { error: delErr } = await sb.from('mobility_exercises').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) console.error('[sync] mobility_exercises delete failed:', delErr);
+    if (delErr) _syncFailed('mobility_exercises delete failed', delErr);
   }
 }
 
@@ -605,17 +687,17 @@ async function _syncMobLog(exerciseId, entries) {
       await _syncMobExercises(getMobExercises());
       ({ error } = await sb.from('mobility_logs').upsert(rows, { onConflict: 'user_id,exercise_id,date' }));
     }
-    if (error) console.error('[sync] mobility_logs upsert failed:', error);
+    if (error) _syncFailed('mobility_logs upsert failed', error);
   }
   const keepDates = new Set(entries.map(e => e.date));
   const { data: existing = [], error: selErr } =
     await sb.from('mobility_logs').select('date').eq('user_id', uid).eq('exercise_id', exerciseId);
-  if (selErr) { console.error('[sync] mobility_logs select failed:', selErr); return; }
+  if (selErr) { _syncFailed('mobility_logs select failed', selErr); return; }
   const staleDates = (existing || []).map(r => r.date).filter(d => !keepDates.has(d));
   if (staleDates.length) {
     const { error: delErr } = await sb.from('mobility_logs')
       .delete().eq('user_id', uid).eq('exercise_id', exerciseId).in('date', staleDates);
-    if (delErr) console.error('[sync] mobility_logs delete failed:', delErr);
+    if (delErr) _syncFailed('mobility_logs delete failed', delErr);
   }
 }
 
@@ -632,16 +714,16 @@ async function _syncDietEntries(list) {
       healthy_ingredients: e.healthyIngredients || [],
       unhealthy_foods: e.unhealthyFoods || [],
     })), { onConflict: 'id' });
-    if (error) console.error('[sync] diet_entries upsert failed:', error);
+    if (error) _syncFailed('diet_entries upsert failed', error);
   }
   const { data: existing = [], error: selErr } =
     await sb.from('diet_entries').select('id').eq('user_id', uid);
-  if (selErr) { console.error('[sync] diet_entries select failed:', selErr); return; }
+  if (selErr) { _syncFailed('diet_entries select failed', selErr); return; }
   const keep = new Set(list.map(e => e.id));
   const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
   if (toDelete.length) {
     const { error: delErr } = await sb.from('diet_entries').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) console.error('[sync] diet_entries delete failed:', delErr);
+    if (delErr) _syncFailed('diet_entries delete failed', delErr);
   }
 }
 
@@ -652,17 +734,17 @@ async function _syncDietFoods(kind, names) {
     const { error } = await sb.from('diet_foods').upsert(
       names.map(n => ({ user_id: uid, name: n, kind })),
       { onConflict: 'user_id,name,kind', ignoreDuplicates: true });
-    if (error) console.error('[sync] diet_foods upsert failed:', error);
+    if (error) _syncFailed('diet_foods upsert failed', error);
   }
   const { data: existing = [], error: selErr } =
     await sb.from('diet_foods').select('name').eq('user_id', uid).eq('kind', kind);
-  if (selErr) { console.error('[sync] diet_foods select failed:', selErr); return; }
+  if (selErr) { _syncFailed('diet_foods select failed', selErr); return; }
   const keep = new Set(names);
   const staleNames = (existing || []).map(r => r.name).filter(n => !keep.has(n));
   if (staleNames.length) {
     const { error: delErr } = await sb.from('diet_foods')
       .delete().eq('user_id', uid).eq('kind', kind).in('name', staleNames);
-    if (delErr) console.error('[sync] diet_foods delete failed:', delErr);
+    if (delErr) _syncFailed('diet_foods delete failed', delErr);
   }
 }
 
@@ -678,15 +760,15 @@ async function _syncGoals(goals) {
       notes: g.notes || null, done: g.done || false, done_at: g.doneAt || null,
       sort_order: i, created_at: g.createdAt || null,
     })), { onConflict: 'id' });
-    if (error) console.error('[sync] goals upsert failed:', error);
+    if (error) _syncFailed('goals upsert failed', error);
   }
   const { data: existing = [], error: selErr } = await sb.from('goals').select('id').eq('user_id', uid);
-  if (selErr) { console.error('[sync] goals select failed:', selErr); return; }
+  if (selErr) { _syncFailed('goals select failed', selErr); return; }
   const keep = new Set(goals.map(g => g.id));
   const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
   if (toDelete.length) {
     const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) console.error('[sync] goals delete failed:', delErr);
+    if (delErr) _syncFailed('goals delete failed', delErr);
   }
 }
 
@@ -695,15 +777,20 @@ async function loadFromSupabase() {
   if (LOCAL_MODE) return _loadLocal();
   const uid = await _uid(); if (!uid) return;
 
+  // Tasks load from 90 days back (matches TASK_HISTORY_DAYS) with NO upper
+  // bound. There used to be one at today+1, which silently broke the Upcoming
+  // planner: it lets you pick any future date, but anything past tomorrow never
+  // came back on the next load. Worse, writing to a day MEM had never loaded
+  // made `_syncTasks` insert that one task and stale-delete every other row for
+  // the date — so re-adding a task to a day you'd planned wiped the rest of it.
+  // `_localDateStr`, not toISOString, so the cutoff is the user's local day.
   const from = new Date(); from.setDate(from.getDate() - 90);
-  const to   = new Date(); to.setDate(to.getDate() + 1);
-  const fromStr = from.toISOString().slice(0,10);
-  const toStr   = to.toISOString().slice(0,10);
+  const fromStr = _localDateStr(from);
 
   const results = await Promise.all([
     sb.from('habits').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_logs').select('*').eq('user_id', uid),
-    sb.from('tasks').select('*').eq('user_id', uid).gte('date', fromStr).lte('date', toStr).order('id'),
+    sb.from('tasks').select('*').eq('user_id', uid).gte('date', fromStr).order('id'),
     sb.from('settings').select('key,value').eq('user_id', uid),
     sb.from('job_applications').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
     sb.from('habit_notes').select('*').eq('user_id', uid).order('created_at'),
@@ -757,21 +844,33 @@ async function loadFromSupabase() {
   tasks.forEach(g => {
     const k = 'tasks:' + g.date;
     if (!MEM[k]) MEM[k] = [];
-    // Collapse duplicate rows a failed stale-delete may have left (see
-    // _syncTasks). Query is ordered by id, so the earliest row wins.
-    if (g.tid && MEM[k].some(x => x.id === g.tid)) return;
     const tid = g.tid || _taskId();
     const task = { id: tid, text: g.text, done: g.done,
       area: g.area || null, priority: g.priority || 'Medium',
       createdAt: g.created_at || null };
     if (g.done_at) task.doneAt = g.done_at;
-    MEM[k].push(task);
-    if (!g.tid) tidBackfill.push({ ...g, tid });
+    // Collapse duplicate rows a failed stale-delete may have left (see
+    // _syncTasks). `_syncTasks` re-inserts the whole day on every change, so the
+    // HIGHEST id is the newest state — and the query is ordered by id ascending,
+    // so a later row must replace an earlier one, keeping its slot in the day's
+    // order. Keeping the first instead (as this did) rolled the day back to its
+    // pre-edit state on reload: ticks came back unticked until the next save.
+    const dupe = g.tid ? MEM[k].findIndex(x => x.id === g.tid) : -1;
+    if (dupe >= 0) MEM[k][dupe] = task;
+    else MEM[k].push(task);
+    if (!g.tid) tidBackfill.push({ row: { ...g, tid }, task });
   });
 
   if (!LOCAL_MODE && tidBackfill.length) {
-    const { error } = await sb.from('tasks').upsert(tidBackfill);
-    if (error) console.error('[sync] task tid backfill failed (run master.sql?):', error);
+    const { error } = await sb.from('tasks').upsert(tidBackfill.map(b => b.row));
+    if (error) {
+      _syncFailed('task tid backfill failed (run master.sql?)', error);
+      // The ids minted just above never reached the database, so they'll be
+      // different again next load. Flag those rows: _sameTask (js/todo.js) falls
+      // back to matching on text for them, which is the only way "dismiss on
+      // delete" can stick when the id itself won't hold still.
+      tidBackfill.forEach(b => { b.task.idUnstable = true; });
+    }
   }
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });

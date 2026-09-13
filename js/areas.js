@@ -10,6 +10,28 @@ function getAllTaskAreas() {
   return all;
 }
 
+// Re-tag every task carrying `oldName`, on EVERY day — history included, not
+// just the editable today+future of taskScopeKeys(). Past days used to be left
+// behind, so a renamed area stopped resolving on them and their rows lost the
+// pill entirely. Sunday Reset entries carry an area too and live outside the
+// day lists, so they're swept here as well.
+//
+// MEM is updated in place rather than through storeSet: one server-side UPDATE
+// covers every date at once (and reaches days outside the load window), where
+// the day-scoped sync would fire a full rewrite per date. Pass null to clear.
+function retagTasksArea(oldName, newArea) {
+  let touched = false;
+  storeListKeys('tasks:').forEach(k => {
+    (storeGet(k) || []).forEach(g => { if (g.area === oldName) { g.area = newArea; touched = true; } });
+  });
+  const srList = getSundayReset();
+  let srChanged = false;
+  srList.forEach(it => { if (it.area === oldName) { it.area = newArea; srChanged = true; } });
+  if (srChanged) saveSundayReset(srList);
+  if (touched) window.dispatchEvent(new CustomEvent('tasks-changed'));
+  _syncTaskAreaRename(oldName, newArea);
+}
+
 // ── Area detail ──
 let _currentAreaName = null;
 
@@ -48,13 +70,8 @@ function renderAreaDetail() {
     saveAreaNotes(newName, notes);
     delete MEM['area_notes:' + name];
     _syncSetting('area_notes:' + name, []);   // clear the old row server-side
-    // update tasks
-    taskScopeKeys().forEach(k => {
-      const tasks = storeGet(k) || [];
-      let changed = false;
-      tasks.forEach(g => { if (g.area === name) { g.area = newName; changed = true; } });
-      if (changed) storeSet(k, tasks);
-    });
+    // update tasks (every day, plus the Sunday Reset entries)
+    retagTasksArea(name, newName);
     // update goals
     const goals = getGoals();
     let goalsChanged = false;
@@ -239,12 +256,7 @@ document.getElementById('areaDetailDelete').addEventListener('click', () => {
   const idx = areas.findIndex(a => a.name === name);
   if (idx !== -1) { areas.splice(idx, 1); saveAreas(areas); }
   if (getAreaNotes(name).length) saveAreaNotes(name, []);   // drop this area's notes
-  taskScopeKeys().forEach(k => {
-    const tasks = storeGet(k) || [];
-    let changed = false;
-    tasks.forEach(g => { if (g.area === name) { g.area = null; changed = true; } });
-    if (changed) storeSet(k, tasks);
-  });
+  retagTasksArea(name, null);
   const goals = getGoals();
   let goalsChanged = false;
   goals.forEach(g => { if (g.area === name) { g.area = null; goalsChanged = true; } });

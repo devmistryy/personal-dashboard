@@ -63,6 +63,14 @@ alter table habits drop column if exists auto_goal;
 alter table habits drop column if exists step_target;
 delete from settings where key in ('step_autocheck_v1', 'step_ingest_token_v1');
 
+-- Sunday Reset: the old sunday_reset_log_v1 marked entries "injected" before the
+-- tasks write landed, so a write that failed or lost a race left the entry
+-- suppressed for that Sunday forever. Replaced by sunday_reset_removed_v1, which
+-- records only the entries you deleted off a Sunday's list; everything else is
+-- re-derived from the list itself on each load. Dropping the old rows also
+-- un-suppresses the current Sunday, so the missing tasks appear on next load.
+delete from settings where key = 'sunday_reset_log_v1';
+
 -- ─────────────────────────────────────────────────────────────
 -- 1. SCHEMA
 -- ─────────────────────────────────────────────────────────────
@@ -159,12 +167,15 @@ begin
                  else to_timestamp(done_at / 1000.0) end;
   end if;
 end $$;
+-- Every read and every stale-delete filters on (user_id, date); the load query
+-- has no upper date bound any more, so this is what keeps it off a full scan.
+create index if not exists tasks_user_date_idx on tasks (user_id, date);
 alter table tasks enable row level security;
 
 -- ────────────────────────── settings ──────────────────────────
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
 -- Backs: habit_sort_v1, task_sort_v1, task_streak_v1, task_dismissed_v1,
---        sunday_reset_v1, sunday_reset_log_v1, areas:list, area_notes:<name>
+--        sunday_reset_v1, sunday_reset_removed_v1, areas:list, area_notes:<name>
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
   user_id uuid references auth.users not null,
