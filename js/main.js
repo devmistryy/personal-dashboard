@@ -485,6 +485,23 @@ async function _syncHabitLog(dateStr, ids) {
   if (delErr) console.error('[sync] habit_logs stale-delete failed:', delErr);
 }
 
+async function _syncHabitVoids(dateStr, ids) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+
+  if (ids.length) {
+    const { error: insErr } = await sb.from('habit_voids').upsert(
+      ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr })),
+      { onConflict: 'user_id,habit_id,date', ignoreDuplicates: true });
+    if (insErr) { console.error('[sync] habit_voids upsert failed (run master.sql?):', insErr); return; }
+  }
+
+  let del = sb.from('habit_voids').delete().eq('user_id', uid).eq('date', dateStr);
+  if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
+  const { error: delErr } = await del;
+  if (delErr) console.error('[sync] habit_voids stale-delete failed:', delErr);
+}
+
 async function _syncTasks(dateStr, tasks) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
@@ -682,6 +699,7 @@ async function loadFromSupabase() {
     sb.from('diet_entries').select('*').eq('user_id', uid).order('date'),
     sb.from('diet_foods').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
+    sb.from('habit_voids').select('*').eq('user_id', uid),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -696,6 +714,7 @@ async function loadFromSupabase() {
   const dietEnt = results[8].data || [];
   const dietFds = results[9].data || [];
   const goalRows = results[10].data || [];
+  const voids   = results[11].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -707,6 +726,12 @@ async function loadFromSupabase() {
     const k = 'habits:log:' + l.date;
     if (!MEM[k]) MEM[k] = [];
     MEM[k].push(l.habit_id);
+  });
+
+  voids.forEach(v => {
+    const k = 'habits:void:' + v.date;
+    if (!MEM[k]) MEM[k] = [];
+    MEM[k].push(v.habit_id);
   });
 
   // Rows written before the tid migration have tid = null. Without a stable

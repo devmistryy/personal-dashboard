@@ -95,6 +95,18 @@ create table if not exists habit_logs (
 );
 alter table habit_logs enable row level security;
 
+-- ───────────────────────── habit_voids ────────────────────────
+-- A voided (habit, day) pair didn't count: the day is excused, not failed. It
+-- never breaks a streak, never counts toward the day's completion %, and never
+-- increments the habit's "Day N". Same shape as habit_logs — one row per pair.
+create table if not exists habit_voids (
+  user_id  uuid references auth.users not null,
+  habit_id text not null,
+  date     date not null,
+  primary key (user_id, habit_id, date)
+);
+alter table habit_voids enable row level security;
+
 -- ──────────────────────── habit_notes ─────────────────────────
 create table if not exists habit_notes (
   id         uuid primary key default gen_random_uuid(),
@@ -278,7 +290,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'habits','habit_logs','habit_notes','tasks','goals','settings','job_applications','areas',
+    'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs'
   ] loop
     if not exists (

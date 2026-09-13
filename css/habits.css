@@ -865,6 +865,134 @@
   .hd-note-del:hover { color: var(--danger); }
   .area-note-entry:hover .hd-note-del { opacity: 1; }
 
+  /* ── Voided (excused) habit-days ──
+     Grey everywhere, never red: a voided day is excused, not failed. Distinct
+     from .is-done (green / struck through) and from .missed (red). */
+  .habit-meta-tag.voided { color: var(--text-tertiary); background: rgba(255,255,255,0.07); }
+
+  .habit-row.is-voided { background: rgba(255,255,255,0.02); border-style: dashed; }
+  .habit-row.is-voided:hover { background: rgba(255,255,255,0.04); }
+  .habit-row.is-voided .habit-name { color: var(--text-tertiary); }
+
+  /* Slate blue marks a voided day wherever it is plotted — deliberately outside
+     the red→orange→yellow→green completion ramp, so it reads as "excused"
+     rather than as a score. Text surfaces (tags, rows) stay grey: slate on dark
+     reads as a link. */
+  .habit-day-dot.voided { background: rgba(124,147,184,0.75); }
+
+  .habit-cal-day.voided { background: rgba(124,147,184,0.22); }
+  .habit-cal-day.voided .habit-cal-day-num { color: rgba(124,147,184,0.95); }
+
+  /* The ring symbol: a slate arc crossed by a prohibition-sign bar. The track is
+     tinted too, so a voided day with nothing completed still reads as slate and
+     not as an empty "nothing scheduled" cell. */
+  .hcal-ring.has-void .hcal-ring-track { stroke: rgba(124,147,184,0.22); }
+  .hcal-ring-slash {
+    stroke: rgb(124,147,184);
+    stroke-width: 2.6;
+    stroke-linecap: round;
+  }
+  .day-detail-ring .hcal-ring-slash { stroke-width: 1.9; }
+  .hcal-ring-void-label {
+    fill: rgb(124,147,184);
+    font-family: var(--font-mono);
+    font-size: 5px;
+    letter-spacing: 0.4px;
+  }
+
+  .habit-void-note {
+    font-size: 11.5px;
+    color: var(--text-tertiary);
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  /* Day-detail void mode */
+  .day-detail-list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .day-detail-list-head .habit-detail-section-title { margin-bottom: 0; }
+  .day-void-btn {
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 8px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 5px 14px;
+    text-transform: uppercase;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .day-void-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,0.08); }
+  .day-void-btn.active {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.22);
+    color: var(--text-primary);
+  }
+
+  .day-void-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0 12px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px dashed rgba(255,255,255,0.12);
+    border-radius: 10px;
+  }
+  .day-void-hint { flex: 1; min-width: 160px; font-size: 12px; color: var(--text-tertiary); }
+  .day-void-bulk {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 11px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .day-void-bulk:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+
+  .day-detail-habit-row.is-voided {
+    background: rgba(255,255,255,0.02);
+    border-style: dashed;
+  }
+  .day-detail-habit-row.is-voided .day-detail-habit-name { color: var(--text-tertiary); }
+
+  .day-void-toggle {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .day-void-toggle:hover { background: rgba(255,255,255,0.09); color: var(--text-secondary); }
+  .day-void-toggle.active {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.28);
+    color: var(--text-primary);
+  }
+
   /* Responsive */
   @media (max-width: 680px) {
     /* Narrower than the two-column layout needs — stack, and keep the

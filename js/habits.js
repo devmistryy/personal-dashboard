@@ -13,6 +13,38 @@ function saveHabits(h)            { MEM['habits:list'] = h; _syncHabits(h); }
 function getHabitLog(dateStr)     { return MEM['habits:log:' + dateStr] || []; }
 function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncHabitLog(dateStr, ids); }
 
+// ── Voided (excused) habit-days ──
+// A voided (habit, day) pair didn't count — illness, travel, a hospital stay.
+// It never breaks a streak, never counts toward the day's completion %, and
+// never increments the habit's "Day N". A habit you voided but still managed to
+// do counts as a normal win: voiding only ever removes a penalty, never a
+// completion — hence the `!getHabitLog(...)` guard in `_habitVoidedOn`, which is
+// the single predicate every other site below asks.
+function getHabitVoids(dateStr)      { return MEM['habits:void:' + dateStr] || []; }
+function saveHabitVoids(dateStr, ids) { MEM['habits:void:' + dateStr] = ids; _syncHabitVoids(dateStr, ids); }
+
+function _habitVoidedOn(habitId, ds) {
+  return getHabitVoids(ds).includes(habitId) && !getHabitLog(ds).includes(habitId);
+}
+
+// How many days in [from, to] were voided for this habit. Walks the void keys
+// (usually a handful) rather than every date in the range.
+function _habitVoidedCount(habitId, from, to) {
+  let n = 0;
+  storeListKeys('habits:void:').forEach(k => {
+    const ds = k.slice('habits:void:'.length);
+    if (ds >= from && ds <= to && _habitVoidedOn(habitId, ds)) n++;
+  });
+  return n;
+}
+
+// The habit's "Day N" — days elapsed since it started, not counting voided ones.
+function _habitDayNum(habit, today) {
+  const start = habit.startDate;
+  if (!start) return 1;
+  return daysBetween(start, today) + 1 - _habitVoidedCount(habit.id, start, today);
+}
+
 function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
 function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
 
@@ -115,6 +147,8 @@ function habitStreak(habitId) {
   for (let i = 0; i < 365; i++) {
     const ds = _localDateStr(d);
     if (getHabitLog(ds).includes(habitId)) { streak++; d.setDate(d.getDate() - 1); }
+    // Voided day — excused, so carry the streak across it without crediting it.
+    else if (_habitVoidedOn(habitId, ds)) { d.setDate(d.getDate() - 1); }
     else break;
   }
   return streak;
@@ -138,13 +172,15 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const streak   = habitStreak(habit.id);
 
   const isTimed   = !!habit.endDate;
-  const dayNum    = habit.startDate ? daysBetween(habit.startDate, today) + 1 : 1;
+  const dayNum    = _habitDayNum(habit, today);
+  const isVoided  = _habitVoidedOn(habit.id, today);
   const totalDays = isTimed ? daysBetween(habit.startDate, habit.endDate) + 1 : null;
   const pct       = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / (totalDays - 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
 
   const li = document.createElement('li');
-  li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '');
+  li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '')
+    + (isVoided ? ' is-voided' : '');
   li.dataset.habitId = habit.id;
 
   // Drag-to-reorder — only in Custom / By-area modes, not-done active habits
@@ -209,6 +245,13 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     tag.textContent = `Day ${dayNum}`;
   }
   meta.appendChild(tag);
+  if (isVoided) {
+    const voidTag = document.createElement('span');
+    voidTag.className = 'habit-meta-tag voided';
+    voidTag.textContent = 'Voided today';
+    voidTag.title = "This day is excused — it won't break the streak or count against you";
+    meta.appendChild(voidTag);
+  }
   if (habit.endOfDay) {
     const eodTag = document.createElement('span');
     eodTag.className = 'habit-meta-tag eod';
@@ -246,12 +289,15 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   last7.forEach(ds => {
     const dot = document.createElement('div');
     const dotDone = getHabitLog(ds).includes(habit.id);
+    const dotVoided = _habitVoidedOn(habit.id, ds);
     const dotFuture = ds > today;
     const dotBeforeStart = ds < (habit.startDate || today);
     const dotIsToday = ds === today;
     dot.className = 'habit-day-dot' +
-      (dotDone ? ' done' : (!dotFuture && !dotBeforeStart && !dotIsToday ? ' missed' : '')) +
+      (dotDone ? ' done' : dotVoided ? ' voided'
+        : (!dotFuture && !dotBeforeStart && !dotIsToday ? ' missed' : '')) +
       (dotIsToday ? ' today-dot' : '');
+    if (dotVoided && !dotDone) dot.title = 'Voided';
     week.appendChild(dot);
   });
   li.appendChild(week);
@@ -314,9 +360,12 @@ function renderHabits() {
   const all      = getHabits();
   const mode     = getHabitSort();
   const canDrag  = mode === 'custom' || mode === 'area';
-  const doneToday = new Set(getHabitLog(habitDateStr(0)));
+  const today     = habitDateStr(0);
+  const doneToday = new Set(getHabitLog(today));
   let active     = _sortHabitsForDisplay(all.filter(h => !h.archived), mode);
-  active = [...active.filter(h => !doneToday.has(h.id)), ...active.filter(h => doneToday.has(h.id))];
+  // Done rows slide to the bottom; voided-today rows sit just above them.
+  const _rank = h => doneToday.has(h.id) ? 2 : _habitVoidedOn(h.id, today) ? 1 : 0;
+  active = [...active].sort((a, b) => _rank(a) - _rank(b));
   const archived = _sortHabitsForDisplay(all.filter(h => h.archived), mode);
   const listEl   = document.getElementById('habitList');
   const emptyEl  = document.getElementById('habitEmpty');
@@ -376,6 +425,15 @@ function _habitScheduledOn(h, ds) {
   return true;
 }
 
+// The habits that actually count on `ds`: scheduled that day, not an End-of-Day
+// habit on a day still in progress, and not voided. Shared by the overview
+// calendar ring and the day-detail view so the two can never disagree.
+function _habitsCountedOn(habits, ds, today) {
+  return habits.filter(h => _habitScheduledOn(h, ds)
+    && !(h.endOfDay && ds === today)
+    && !_habitVoidedOn(h.id, ds));
+}
+
 // Completion-ring colour: a continuous ramp through four regions — red, orange,
 // yellow (each dark → light as the day fills), then green (light → dark) — with
 // the region seams blended over ~12% around each of 25 / 50 / 75.
@@ -400,6 +458,14 @@ function _hcalRingColor(pct) {
 
 // Dark red for a past day that had habits but zero completed (ring + day number).
 const _HCAL_MISSED = 'rgb(120,26,26)';
+
+// A day with any voided habit: slate blue, deliberately outside the completion
+// ramp so a voided day reads as its own state rather than as a score.
+const _HCAL_VOID = 'rgb(124,147,184)';
+
+// The prohibition-sign bar across a ring. Endpoints sit on the r=15.5 circle
+// (18 ± 15.5/√2 ≈ 7.04 / 28.96), so it spans the ring edge to edge at both sizes.
+const _HCAL_SLASH_SVG = '<line class="hcal-ring-slash" x1="7" y1="7" x2="29" y2="29"></line>';
 
 function renderHabitOverviewCalendar() {
   const grid = document.getElementById('hcalGrid');
@@ -440,28 +506,47 @@ function renderHabitOverviewCalendar() {
     const isFuture = ds > today;
 
     const scheduled = habits.filter(h => _habitScheduledOn(h, ds) && !(h.endOfDay && isToday));
+    const counted   = _habitsCountedOn(habits, ds, today);
+    const voidCount = scheduled.length - counted.length;
     const doneIds = getHabitLog(ds);
-    const doneCount = scheduled.filter(h => doneIds.includes(h.id)).length;
-    const pct = scheduled.length ? Math.round(doneCount / scheduled.length * 100) : 0;
-    // A past day (not today) that had habits but none done is a "miss" — full red ring.
-    const isMissed = ds < today && scheduled.length > 0 && doneCount === 0;
+    const doneCount = counted.filter(h => doneIds.includes(h.id)).length;
+    const pct = counted.length ? Math.round(doneCount / counted.length * 100) : 0;
+    // A past day (not today) that had habits but none done is a "miss" — full red
+    // ring. Voided habits are out of `counted`, so a fully voided day is never a miss.
+    const isMissed = ds < today && counted.length > 0 && doneCount === 0;
+    const allVoided = !counted.length && voidCount > 0;
 
-    const isFull = pct >= 100 && scheduled.length > 0;
-    const numColor = isFull ? _hcalRingColor(100) : isMissed ? _HCAL_MISSED : null;
+    const hasVoid  = voidCount > 0 && !isFuture;
+    const isFull   = pct >= 100 && counted.length > 0;
+    // Void outranks every other state: a day carrying one is neither scored nor
+    // failed, so it takes the slate treatment ahead of full-green or missed-red.
+    const numColor = hasVoid ? _HCAL_VOID
+      : isFull ? _hcalRingColor(100) : isMissed ? _HCAL_MISSED : null;
 
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
     if (isFuture) cls += ' future';
-    else if (!scheduled.length) cls += ' none-sched';
-    if (isFull) cls += ' full';
-    if (isMissed) cls += ' missed';
+    else if (!hasVoid && !counted.length) cls += ' none-sched';
+    if (isFull && !hasVoid) cls += ' full';
+    if (isMissed && !hasVoid) cls += ' missed';
+    if (hasVoid) cls += ' has-void';
 
-    const dash = `${(pct / 100) * C} ${C}`;
+    // A day voided in full has no counted habits and so no arc of its own — draw
+    // the ring whole, so the slash lands on a complete circle rather than a gap.
+    const arcPct = allVoided ? 100 : pct;
+    const dash = `${(arcPct / 100) * C} ${C}`;
+    const voidNote = voidCount > 0 ? ` · ${voidCount} voided` : '';
     const titleTxt = isFuture ? ds
-      : `${ds} — ${doneCount}/${scheduled.length} habits (${pct}%)`;
+      : allVoided ? `${ds} — all ${voidCount} habits voided`
+      : `${ds} — ${doneCount}/${counted.length} habits (${pct}%)${voidNote}`;
     // transform: rotate start point to 12 o'clock, then mirror horizontally so
     // the arc grows counter-clockwise.
-    const fill = doneCount > 0
+    const fill = hasVoid
+      ? (arcPct > 0
+        ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_HCAL_VOID}"
+             stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
+        : '')
+      : doneCount > 0
       ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
            stroke-dasharray="${dash}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
       : isMissed
@@ -471,9 +556,10 @@ function renderHabitOverviewCalendar() {
 
     const dayAttrs = isFuture ? '' : ` data-date="${ds}" role="button" tabindex="0"`;
     html += `<div class="${cls}${isFuture ? '' : ' is-clickable'}"${dayAttrs} title="${titleTxt}">
-      <svg class="hcal-ring" viewBox="0 0 36 36">
+      <svg class="hcal-ring${hasVoid ? ' has-void' : ''}" viewBox="0 0 36 36">
         <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
         ${fill}
+        ${hasVoid ? _HCAL_SLASH_SVG : ''}
       </svg>
       <span class="hcal-day-num"${numColor ? ` style="color:${numColor}"` : ''}>${d}</span>
     </div>`;
@@ -553,7 +639,7 @@ function renderHabitDetailPage(habit, allHabits) {
   const displayStreak = doneToday ? streak + 1 : streak;
   const isTimed = !!habit.endDate;
   const startDate = habit.startDate || today;
-  const dayNum = daysBetween(startDate, today) + 1;
+  const dayNum = _habitDayNum(habit, today);
   const totalDays = isTimed ? daysBetween(startDate, habit.endDate) + 1 : null;
   const pct = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / Math.max(totalDays - 1, 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
@@ -567,7 +653,10 @@ function renderHabitDetailPage(habit, allHabits) {
     const ds = k.slice('habits:log:'.length);
     if (ds >= startDate && ds <= today && getHabitLog(ds).includes(habit.id)) totalDone++;
   });
-  const daysTracked = Math.max(1, daysBetween(startDate, today) + 1);
+  // Voided days drop out of the denominator, so an excused stretch can't drag the
+  // completion rate down. Check-ins made on a voided day still count in totalDone.
+  const voidedDays  = _habitVoidedCount(habit.id, startDate, today);
+  const daysTracked = Math.max(1, daysBetween(startDate, today) + 1 - voidedDays);
   const rate = Math.round(totalDone / daysTracked * 100);
 
   // Name
@@ -608,6 +697,7 @@ function renderHabitDetailPage(habit, allHabits) {
         <div class="habit-stat-label">Completion Rate</div>
       </div>
     </div>
+    ${voidedDays ? `<div class="habit-void-note">${voidedDays} voided day${voidedDays === 1 ? '' : 's'} excluded from the rate and the day count.</div>` : ''}
     ${isTimed ? `
     <div class="habit-detail-progress-section">
       <div class="habit-detail-section-title">Progress</div>
@@ -796,6 +886,7 @@ function renderHabitHistoryGrid(habit) {
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const done = getHabitLog(ds).includes(habit.id);
+    const voided = _habitVoidedOn(habit.id, ds);
     const isToday = ds === today;
     const isFuture = ds > today;
     const isBeforeStart = ds < startDate;
@@ -804,11 +895,12 @@ function renderHabitHistoryGrid(habit) {
     if (isFuture) cls += ' future';
     else if (isBeforeStart) cls += ' before-start';
     else if (done) cls += ' done';
+    else if (voided) cls += ' voided';
     else if (!isToday) cls += ' missed';
     if (isToday) cls += ' today';
 
     const clickable = !isFuture && !isBeforeStart;
-    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${ds}"><span class="habit-cal-day-num">${d}</span></div>`;
+    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${voided ? ds + ' — voided' : ds}"><span class="habit-cal-day-num">${d}</span></div>`;
   }
 
   // Fill trailing cells to complete the last row
@@ -861,6 +953,10 @@ function renderHabitHistoryGrid(habit) {
 
 // ── Day Detail Page (opened from the overview calendar) ──
 let _detailDay = null; // ISO YYYY-MM-DD
+// While true, each habit row shows a void toggle. Reset whenever the page opens,
+// so you never void a day you only meant to look at — but kept across the ‹ ›
+// day arrows, since voiding a run of days is the common case.
+let _dayVoidMode = false;
 
 // Earliest day the ‹ arrow can reach — the ISO form of the calendar's 12-month floor.
 function _dayDetailFloor() {
@@ -882,6 +978,7 @@ function _fullDateLabel(ds) {
 
 function openDayDetail(ds) {
   _detailDay = ds;
+  _dayVoidMode = false;
   renderDayDetail(ds);
   const page = document.getElementById('dayDetailPage');
   page.scrollTop = 0;
@@ -904,14 +1001,28 @@ function renderDayDetail(ds) {
   const today     = habitDateStr(0);
   const habits    = getHabits();
   const scheduled = habits.filter(h => _habitScheduledOn(h, ds));
-  const counted   = scheduled.filter(h => !(h.endOfDay && ds === today));
+  const counted   = _habitsCountedOn(habits, ds, today);
   const doneIds   = getHabitLog(ds);
+  const voidIds   = getHabitVoids(ds);
+  const voidCount = scheduled.filter(h => _habitVoidedOn(h.id, ds)).length;
   const doneCount = counted.filter(h => doneIds.includes(h.id)).length;
   const pct       = counted.length ? Math.round(doneCount / counted.length * 100) : 0;
   const isMissed  = ds < today && counted.length > 0 && doneCount === 0;
+  const allVoided = !counted.length && voidCount > 0;
 
   const R = 15.5, C = 2 * Math.PI * R;
-  const arc = doneCount > 0
+  // Mirrors the calendar ring: a day carrying any void drops its completion
+  // colour and becomes one slate mark — arc, slash and label together. The
+  // percentage comes off entirely, since on a voided day the number is the
+  // misleading part; the summary line below still spells out the counts.
+  const hasVoid = voidCount > 0;
+  const arcPct  = allVoided ? 100 : pct;
+  const arc = hasVoid
+    ? (arcPct > 0
+      ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_HCAL_VOID}"
+           stroke-dasharray="${(arcPct / 100) * C} ${C}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
+      : '')
+    : doneCount > 0
     ? `<circle class="hcal-ring-fill" cx="18" cy="18" r="${R}" style="stroke:${_hcalRingColor(pct)}"
          stroke-dasharray="${(pct / 100) * C} ${C}" transform="translate(36 0) scale(-1 1) rotate(-90 18 18)"></circle>`
     : isMissed
@@ -919,11 +1030,20 @@ function renderDayDetail(ds) {
          stroke-dasharray="${C} ${C}"></circle>`
     : '';
 
+  // rotate(45) lays the word along the slash; the translate pushes it clear of
+  // the bar, into the lower-left half of the ring.
+  const voidMark = hasVoid ? `${_HCAL_SLASH_SVG}
+        <text class="hcal-ring-void-label" x="18" y="18" text-anchor="middle"
+          transform="rotate(45 18 18) translate(0 8.6)">VOIDED</text>` : '';
+
   const prevDisabled = ds <= _dayDetailFloor();
   const nextDisabled = ds >= today;
 
-  const summary = counted.length
-    ? `${doneCount} of ${counted.length} habit${counted.length === 1 ? '' : 's'} completed`
+  const summary = allVoided
+    ? `Day voided — ${voidCount} habit${voidCount === 1 ? '' : 's'} excused, nothing counted against you.`
+    : counted.length
+    ? `${doneCount} of ${counted.length} habit${counted.length === 1 ? '' : 's'} completed` +
+      (voidCount ? ` · ${voidCount} voided` : '')
     : 'No habits were active on this day.';
 
   const mode    = getHabitSort();
@@ -931,26 +1051,44 @@ function renderDayDetail(ds) {
 
   const areas   = getAreas();
   const sorted  = _sortHabitsForDisplay(scheduled, mode);
-  const ordered = [...sorted.filter(h => !doneIds.includes(h.id)), ...sorted.filter(h => doneIds.includes(h.id))];
+  // Out-of-play rows sink: voided below active, done below that. Held still while
+  // picking in void mode, so a row never jumps out from under the cursor.
+  const _rank = h => doneIds.includes(h.id) ? 2 : voidIds.includes(h.id) ? 1 : 0;
+  const ordered = _dayVoidMode ? sorted : [...sorted].sort((a, b) => _rank(a) - _rank(b));
   const rows = ordered.map(h => {
-    const isDone = doneIds.includes(h.id);
-    const rowDrag = canDrag && !isDone;
+    const isDone   = doneIds.includes(h.id);
+    const isVoided = voidIds.includes(h.id);
+    // A voided habit you managed to do anyway just reads as done — the void is
+    // dormant. The ∅ toggle still shows it, so it stays visible and undoable.
+    const voidActive = isVoided && !isDone;
+    const rowDrag  = canDrag && !isDone && !_dayVoidMode;
     const areaObj = h.area && areas.find(a => a.name === h.area);
     const areaTag = areaObj
       ? `<span class="day-detail-habit-area" style="background:${areaObj.color}BF">${areaObj.name}</span>`
       : '';
     return `
-    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}">
+    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}${voidActive ? ' is-voided' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}">
       ${rowDrag ? '<span class="habit-drag-handle" aria-hidden="true">⋮⋮</span>' : ''}
       <label class="habit-cb-wrap">
         <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}>
         <span class="habit-cb-box"></span>
       </label>
       <span class="day-detail-habit-name">${h.name}</span>
+      ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${areaTag}
+      ${_dayVoidMode ? `<button class="day-void-toggle${isVoided ? ' active' : ''}" data-void-id="${h.id}"
+        title="${isVoided ? 'Un-void this habit' : "Void this habit — it won't count on this day"}"
+        aria-pressed="${isVoided}">∅</button>` : ''}
     </div>`;
   }).join('');
+
+  const voidBar = _dayVoidMode ? `
+    <div class="day-void-bar">
+      <span class="day-void-hint">Pick the habits that didn't count on this day.</span>
+      <button class="day-void-bulk" id="dayVoidAll">Void all</button>
+      <button class="day-void-bulk" id="dayVoidNone">Clear</button>
+    </div>` : '';
 
   body.innerHTML = `
     <div class="day-detail-head">
@@ -960,22 +1098,53 @@ function renderDayDetail(ds) {
     </div>
     <div class="day-detail-summary-card">
       <div class="day-detail-ring-wrap">
-        <svg class="hcal-ring day-detail-ring" viewBox="0 0 36 36">
+        <svg class="hcal-ring day-detail-ring${hasVoid ? ' has-void' : ''}" viewBox="0 0 36 36">
           <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
           ${arc}
+          ${voidMark}
         </svg>
-        <span class="day-detail-ring-pct">${pct}%</span>
+        ${hasVoid ? '' : `<span class="day-detail-ring-pct">${pct}%</span>`}
       </div>
       <div class="day-detail-summary-text">${summary}</div>
     </div>
     ${scheduled.length ? `
-      ${_habitSortBarHTML()}
-      <div class="habit-detail-section-title">Habits</div>
-      <div class="day-detail-habit-list">${rows}</div>` : ''}
+      ${_dayVoidMode ? '' : _habitSortBarHTML()}
+      <div class="day-detail-list-head">
+        <div class="habit-detail-section-title">Habits</div>
+        <button class="day-void-btn${_dayVoidMode ? ' active' : ''}" id="dayVoidModeBtn">
+          ${_dayVoidMode ? 'Done' : 'Void'}
+        </button>
+      </div>
+      ${voidBar}
+      <div class="day-detail-habit-list${_dayVoidMode ? ' is-void-mode' : ''}">${rows}</div>` : ''}
   `;
 
   const dlist = body.querySelector('.day-detail-habit-list');
-  if (dlist && canDrag) wireDragReorder(dlist, 'day-detail-habit-row', _reorderHabitByDrag);
+  if (dlist && canDrag && !_dayVoidMode) wireDragReorder(dlist, 'day-detail-habit-row', _reorderHabitByDrag);
+
+  const modeBtn = document.getElementById('dayVoidModeBtn');
+  if (modeBtn) modeBtn.addEventListener('click', () => {
+    _dayVoidMode = !_dayVoidMode;
+    renderDayDetail(ds);
+  });
+
+  // Voids are stored per day as a habit-id list, mirroring the check-in log.
+  // renderHabits() re-renders this page (and the rings and streaks) via its sync block.
+  const _saveVoids = ids => { saveHabitVoids(ds, ids); renderHabits(); };
+
+  body.querySelectorAll('[data-void-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ids = [...getHabitVoids(ds)];
+      const i = ids.indexOf(btn.dataset.voidId);
+      if (i === -1) ids.push(btn.dataset.voidId); else ids.splice(i, 1);
+      _saveVoids(ids);
+    });
+  });
+
+  const allBtn  = document.getElementById('dayVoidAll');
+  const noneBtn = document.getElementById('dayVoidNone');
+  if (allBtn)  allBtn.addEventListener('click',  () => _saveVoids(scheduled.map(h => h.id)));
+  if (noneBtn) noneBtn.addEventListener('click', () => _saveVoids([]));
 
   body.querySelectorAll('input[data-habit-id]').forEach(cb => {
     cb.addEventListener('change', () => {
