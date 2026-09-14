@@ -647,6 +647,55 @@ async function _syncHabitNotes(habitId, notes) {
   }
 }
 
+// ── Reactive Habits (cue-triggered, logged per-occurrence — see js/reactiveHabits.js) ──
+async function _syncReactiveHabits(list) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (list.length) {
+    const { error } = await sb.from('reactive_habits').upsert(list.map(h => ({
+      id: h.id, user_id: uid, name: h.name, cue_type: h.cueType,
+      created_at: h.createdAt || new Date().toISOString(),
+    })), { onConflict: 'id' });
+    if (error) _syncFailed('reactive_habits upsert failed (run master.sql?)', error);
+  }
+  const { data: existing = [], error: selErr } = await sb.from('reactive_habits').select('id').eq('user_id', uid);
+  if (selErr) { _syncFailed('reactive_habits select failed', selErr); return; }
+  const keep = new Set(list.map(h => h.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('reactive_habits').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) _syncFailed('reactive_habits delete failed', delErr);
+  }
+}
+
+async function _syncReactiveOccurrences(list) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  if (list.length) {
+    const { error } = await sb.from('reactive_habit_logs').upsert(list.map(o => ({
+      id: o.id, user_id: uid, habit_id: o.habitId, ts: o.ts, outcome: o.outcome,
+    })), { onConflict: 'id' });
+    if (error) _syncFailed('reactive_habit_logs upsert failed (run master.sql?)', error);
+  }
+  const { data: existing = [], error: selErr } = await sb.from('reactive_habit_logs').select('id').eq('user_id', uid);
+  if (selErr) { _syncFailed('reactive_habit_logs select failed', selErr); return; }
+  const keep = new Set(list.map(o => o.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('reactive_habit_logs').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) _syncFailed('reactive_habit_logs delete failed', delErr);
+  }
+}
+
+// Deleting a reactive habit takes its occurrence log with it — one delete
+// clears every row keyed by habit_id (mirrors _syncPurgeHabit).
+async function _syncPurgeReactiveHabit(habitId) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _uid(); if (!uid) return;
+  const { error } = await sb.from('reactive_habit_logs').delete().eq('user_id', uid).eq('habit_id', habitId);
+  if (error) console.error('[sync] reactive_habit_logs purge failed:', error);
+}
+
 // ── Mobility (dedicated tables; MEM keeps the old blob shape) ──
 async function _syncMobExercises(list) {
   if (LOCAL_MODE) return _saveLocal();
@@ -800,6 +849,8 @@ async function loadFromSupabase() {
     sb.from('diet_foods').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_voids').select('*').eq('user_id', uid),
+    sb.from('reactive_habits').select('*').eq('user_id', uid).order('created_at'),
+    sb.from('reactive_habit_logs').select('*').eq('user_id', uid).order('ts'),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -815,6 +866,8 @@ async function loadFromSupabase() {
   const dietFds = results[9].data || [];
   const goalRows = results[10].data || [];
   const voids   = results[11].data || [];
+  const rHabits = results[12].data || [];
+  const rLogs   = results[13].data || [];
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -914,6 +967,13 @@ async function loadFromSupabase() {
   MEM['diet_healthy_v1']   = dietFds.filter(r => r.kind === 'healthy').map(r => r.name);
   MEM['diet_unhealthy_v1'] = dietFds.filter(r => r.kind === 'unhealthy').map(r => r.name);
 
+  MEM['reactive_habits:list'] = rHabits.map(h => ({
+    id: h.id, name: h.name, cueType: h.cue_type, createdAt: h.created_at,
+  }));
+  MEM['reactive_habits:log'] = rLogs.map(l => ({
+    id: l.id, habitId: l.habit_id, ts: l.ts, outcome: l.outcome,
+  }));
+
   _normalizeTasks();
 }
 
@@ -955,7 +1015,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
 }

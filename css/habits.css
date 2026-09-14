@@ -573,8 +573,11 @@
     pointer-events: none;
   }
 
-  /* ── Habits-tab overview calendar (ring per day) ── */
-  .hcal { max-width: 460px; margin: 0 auto; }
+  /* ── Habits-tab overview calendar (ring per day) ──
+     No max-width: this lives in the left (3fr) track of .habit-cal-split and
+     should fill it, not re-center at its old fixed width inside the new,
+     wider column. */
+  .hcal { width: 100%; }
   .hcal-nav {
     display: flex;
     align-items: center;
@@ -655,7 +658,7 @@
     position: relative;
     z-index: 1;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
@@ -668,6 +671,139 @@
   .hcal-day.none-sched .hcal-ring-track { stroke: rgba(255,255,255,0.04); }
   .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
   .hcal-empty { aspect-ratio: 1; pointer-events: none; }
+
+  /* ── Habit Calendar + Reactive Habits split ── */
+  .habit-cal-split {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 28px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .habit-cal-split { grid-template-columns: 1fr; }
+  }
+
+  .rh-panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .rh-view-all {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-left: 12px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .rh-view-all:hover { color: var(--text-primary); }
+
+  .rh-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-bottom: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.14) transparent;
+  }
+  .rh-list::-webkit-scrollbar { width: 6px; }
+  .rh-list::-webkit-scrollbar-track { background: transparent; }
+  .rh-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 3px; }
+  .rh-list::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+
+  .rh-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .rh-row:hover { background: rgba(255,255,255,0.055); }
+
+  .rh-name-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .rh-name { font-size: 13.5px; color: var(--text-primary); }
+
+  .rh-badge {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 5px; white-space: nowrap; width: fit-content;
+  }
+  .rh-badge-situational { color: #5EEAD4; background: rgba(94,234,212,0.12); }
+  .rh-badge-internal { color: #A78BFA; background: rgba(167,139,250,0.12); }
+
+  .rh-stat { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); flex-shrink: 0; }
+
+  .rh-log-btn {
+    width: 26px; height: 26px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; cursor: pointer; background: none; padding: 0;
+    transition: background 0.15s;
+  }
+  .rh-log-btn.good { background: rgba(107,227,164,0.10); border: 1px solid rgba(107,227,164,0.30); }
+  .rh-log-btn.good:hover { background: rgba(107,227,164,0.20); }
+  .rh-log-btn.bad { background: rgba(255,107,107,0.10); border: 1px solid rgba(255,107,107,0.25); }
+  .rh-log-btn.bad:hover { background: rgba(255,107,107,0.20); }
+
+  .rh-cue-btn {
+    font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.10); background: transparent; color: var(--text-tertiary);
+    cursor: pointer; font-family: var(--font-body); transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .rh-cue-btn.active { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.20); color: var(--text-primary); }
+
+  /* ── Reactive Habits detail overlay ── */
+  .rh-detail-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .rh-detail-row {
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+  }
+  .rh-detail-row-main { flex: 1; min-width: 0; }
+  .rh-detail-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .rh-bar-wrap { height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .rh-bar-fill { height: 100%; border-radius: 2px; background: var(--success); transition: width 0.5s cubic-bezier(0.22,1,0.36,1); }
+
+  .rh-detail-btn {
+    font-size: 11.5px; font-weight: 700; padding: 7px 13px; border-radius: 8px; white-space: nowrap;
+    flex-shrink: 0; cursor: pointer; font-family: var(--font-body); background: none;
+  }
+  .rh-detail-btn.good { background: rgba(107,227,164,0.10); border: 1px solid rgba(107,227,164,0.28); color: var(--success); }
+  .rh-detail-btn.good:hover { background: rgba(107,227,164,0.20); }
+  .rh-detail-btn.bad { background: rgba(255,107,107,0.10); border: 1px solid rgba(255,107,107,0.25); color: var(--danger); }
+  .rh-detail-btn.bad:hover { background: rgba(255,107,107,0.20); }
+
+  .rh-detail-delete {
+    background: none; border: none; cursor: pointer; color: var(--text-tertiary);
+    font-size: 18px; line-height: 1; padding: 2px 4px; border-radius: 6px; flex-shrink: 0;
+    transition: color 0.2s;
+  }
+  .rh-detail-delete:hover { color: var(--danger); }
+
+  .rh-timeline { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+  .rh-timeline-row {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px;
+  }
+  .rh-timeline-ts { font-size: 10.5px; color: var(--text-tertiary); width: 108px; flex-shrink: 0; }
+  .rh-timeline-name { flex: 1; min-width: 0; font-size: 13px; color: var(--text-primary); }
+
+  .rh-pill { font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .rh-pill-good { color: var(--success); background: rgba(107,227,164,0.14); }
+  .rh-pill-bad { color: var(--danger); background: rgba(255,107,107,0.14); }
+
+  .rh-timeline-delete {
+    background: none; border: none; cursor: pointer; color: var(--text-tertiary);
+    font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 6px; flex-shrink: 0;
+    transition: color 0.2s;
+  }
+  .rh-timeline-delete:hover { color: var(--danger); }
 
   /* Today check-in card */
   .habit-detail-checkin {

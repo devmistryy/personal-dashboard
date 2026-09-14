@@ -135,6 +135,36 @@ create index if not exists habit_notes_user_habit_idx
   on habit_notes (user_id, habit_id);
 alter table habit_notes enable row level security;
 
+-- ─────────────────────── reactive_habits ──────────────────────
+-- Cue-triggered habits (Situational: something happening around you; Internal:
+-- a state you notice in yourself), tracked per-occurrence rather than daily —
+-- see reactive_habit_logs. id is text: client generates 'rh_' + uuid (js/reactiveHabits.js _rhId).
+create table if not exists reactive_habits (
+  id         text primary key,
+  user_id    uuid references auth.users not null,
+  name       text not null,
+  cue_type   text not null check (cue_type in ('situational', 'internal')),
+  created_at timestamptz default now()
+);
+alter table reactive_habits enable row level security;
+
+-- ────────────────────── reactive_habit_logs ───────────────────
+-- One row per occurrence: the cue arose and the user logged whether they
+-- handled it well. Flat + timestamped like diet_entries, not date-bucketed
+-- like habit_logs — an occurrence needs its own time and an outcome, not just
+-- a day. id is text: client generates 'rh_' + uuid (js/reactiveHabits.js _rhId).
+create table if not exists reactive_habit_logs (
+  id         text primary key,
+  user_id    uuid references auth.users not null,
+  habit_id   text not null,                     -- matches reactive_habits.id
+  ts         timestamptz not null,
+  outcome    text not null check (outcome in ('good', 'bad')),
+  created_at timestamptz default now()
+);
+create index if not exists reactive_habit_logs_user_habit_idx
+  on reactive_habit_logs (user_id, habit_id);
+alter table reactive_habit_logs enable row level security;
+
 -- ─────────────────────────── tasks ────────────────────────────
 create table if not exists tasks (
   id         bigserial primary key,
@@ -310,7 +340,7 @@ declare t text;
 begin
   foreach t in array array[
     'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','areas',
-    'diet_entries','diet_foods','mobility_exercises','mobility_logs'
+    'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs'
   ] loop
     if not exists (
       select 1 from pg_policies
