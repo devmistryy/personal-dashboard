@@ -203,22 +203,42 @@ function daysBetween(a, b) {
   return Math.round((new Date(b) - new Date(a)) / 86400000);
 }
 
-function habitStreak(habitId) {
-  const habit = getHabits().find(h => h.id === habitId) || { id: habitId };
+// Streak ending on an arbitrary date (inclusive), walking backward. Shared by
+// habitStreak() (anchored on yesterday) and _habitRecentlyBroken() (anchored
+// one day earlier), so the "was there a real streak before this miss" question
+// reuses the exact same rules rather than a second copy of them.
+function _habitStreakEndingOn(habit, endDs) {
   let streak = 0;
-  let d = new Date();
-  d.setDate(d.getDate() - 1);
+  let ds = endDs;
   for (let i = 0; i < 365; i++) {
-    const ds = _localDateStr(d);
     // Retired day — the habit was already archived, so the day is out of play
     // entirely: it can't extend the streak and it can't end one either.
-    if (_habitRetiredOn(habit, ds)) { d.setDate(d.getDate() - 1); }
-    else if (_habitDoneOn(habit, ds)) { streak++; d.setDate(d.getDate() - 1); }
+    if (_habitRetiredOn(habit, ds)) { ds = _shiftDay(ds, -1); }
+    else if (_habitDoneOn(habit, ds)) { streak++; ds = _shiftDay(ds, -1); }
     // Voided day — excused, so carry the streak across it without crediting it.
-    else if (_habitVoidedOn(habitId, ds)) { d.setDate(d.getDate() - 1); }
+    else if (_habitVoidedOn(habit.id, ds)) { ds = _shiftDay(ds, -1); }
     else break;
   }
   return streak;
+}
+
+function habitStreak(habitId) {
+  const habit = getHabits().find(h => h.id === habitId) || { id: habitId };
+  return _habitStreakEndingOn(habit, _shiftDay(habitDateStr(0), -1));
+}
+
+// Purely a display nudge, never fed back into the streak count itself: if
+// yesterday was a genuine (non-voided/non-retired) miss that snuffed out an
+// actual streak, returns how long that streak was — so the badge can show a
+// "just went out" ember instead of a flat, indistinguishable "–". Returns 0
+// whenever there's nothing to report (yesterday was fine, or nothing preceded it).
+function _habitRecentlyBroken(habit) {
+  const today = habitDateStr(0);
+  const yesterday = _shiftDay(today, -1);
+  if (!_habitScheduledOn(habit, yesterday)) return 0;
+  if (_habitDoneOn(habit, yesterday)) return 0;
+  if (_habitVoidedOn(habit.id, yesterday)) return 0;
+  return _habitStreakEndingOn(habit, _shiftDay(yesterday, -1));
 }
 
 // Move an archived habit back into the active list, picking its day count up
@@ -291,6 +311,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const todayLog = getHabitLog(today);
   const done     = _habitDoneOn(habit, today);
   const streak   = habitStreak(habit.id);
+  const brokenN  = (!done && streak === 0) ? _habitRecentlyBroken(habit) : 0;
 
   const isTimed   = !!habit.endDate;
   const dayNum    = _habitDayNum(habit, today);
@@ -415,9 +436,11 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     const dotRetired = _habitRetiredOn(habit, ds);
     const dotBeforeStart = ds < (habit.startDate || today);
     const dotIsToday = ds === today;
+    const dotStreakBroke = brokenN > 0 && ds === _shiftDay(today, -1);
     dot.className = 'habit-day-dot' +
       (dotRetired ? '' : dotDone ? ' done' : dotVoided ? ' voided'
         : (!dotFuture && !dotBeforeStart && !dotIsToday ? ' missed' : '')) +
+      (dotStreakBroke ? ' streak-broke' : '') +
       (dotIsToday && !dotRetired ? ' today-dot' : '');
     if (dotVoided && !dotDone) dot.title = 'Voided';
     week.appendChild(dot);
@@ -426,10 +449,18 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
 
   // Streak (also acts as today's check-in toggle)
   const streakEl = document.createElement('span');
-  streakEl.className = 'habit-streak' + ((done ? streak + 1 : streak) >= 3 ? ' hot' : '');
+  streakEl.className = 'habit-streak';
   const displayStreak = done ? streak + 1 : streak;   // habitStreak() stops at yesterday
-  streakEl.textContent = displayStreak > 0 ? displayStreak + '🔥' : '–';
-  streakEl.title = done ? 'Click to uncheck today' : 'Click to check in today';
+  if (displayStreak > 0) {
+    streakEl.innerHTML = _fireStreakBadgeHtml(displayStreak, { size: 'row' });
+    streakEl.title = done ? 'Click to uncheck today' : 'Click to check in today';
+  } else if (brokenN > 0) {
+    streakEl.innerHTML = _fireStreakBadgeHtml(0, { size: 'row', ember: true });
+    streakEl.title = `You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one.`;
+  } else {
+    streakEl.textContent = '–';
+    streakEl.title = 'Click to check in today';
+  }
   if (!isArchived) {
     streakEl.style.cursor = 'pointer';
     streakEl.addEventListener('click', (e) => {
@@ -605,6 +636,33 @@ const _HCAL_VOID = 'rgb(124,147,184)';
 // (18 ± 15.5/√2 ≈ 7.04 / 28.96), so it spans the ring edge to edge at both sizes.
 const _HCAL_SLASH_SVG = '<line class="hcal-ring-slash" x1="7" y1="7" x2="29" y2="29"></line>';
 
+// ── Streak flame badge ──
+// Which pre-rendered flame art a streak count gets — yellow to blue as it
+// grows, matching real fire (hotter = bluer). Just thresholds; retune freely.
+const _FIRE_TIERS = [[4, 'yellow'], [13, 'orange'], [29, 'red']];
+function _fireStreakTier(count) {
+  for (const [max, name] of _FIRE_TIERS) if (count <= max) return name;
+  return 'blue';
+}
+
+// The flame icon plus its count, side by side — not baked into one image, so
+// this stays a plain flex row rather than needing the overlay math a
+// number-inside-the-flame treatment would.
+function _fireStreakBadgeHtml(count, opts) {
+  opts = opts || {};
+  const sizeClass = 'habit-flame-badge--' + (opts.size || 'row');
+  if (opts.ember) {
+    return `<span class="habit-flame-badge ${sizeClass} habit-flame-badge--ember">
+      <img class="habit-flame-img" src="img/flames/flame-ember.png" alt="">
+    </span>`;
+  }
+  const tier = _fireStreakTier(count);
+  return `<span class="habit-flame-badge ${sizeClass} habit-flame-badge--${tier}">
+    <img class="habit-flame-img" src="img/flames/flame-${tier}.png" alt="">
+    <span class="habit-flame-num">${count}</span>
+  </span>`;
+}
+
 function renderHabitOverviewCalendar() {
   const grid = document.getElementById('hcalGrid');
   if (!grid) return;
@@ -775,6 +833,7 @@ function renderHabitDetailPage(habit, allHabits) {
   const doneToday = _habitDoneOn(habit, today);
   const streak = habitStreak(habit.id);
   const displayStreak = doneToday ? streak + 1 : streak;
+  const brokenN = (!doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
   const isTimed = !!habit.endDate;
   const startDate = habit.startDate || today;
   const dayNum = _habitDayNum(habit, today);
@@ -825,10 +884,19 @@ function renderHabitDetailPage(habit, allHabits) {
   };
 
   // Stats
+  const streakBadgeHtml = displayStreak > 0
+    ? _fireStreakBadgeHtml(displayStreak, { size: 'stat' })
+    : brokenN > 0
+      ? _fireStreakBadgeHtml(0, { size: 'stat', ember: true })
+      : `<div class="habit-stat-val">–</div>`;
+  const streakTitleAttr = brokenN > 0
+    ? ` title="You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one."`
+    : '';
+
   document.getElementById('habitDetailStats').innerHTML = `
     <div class="habit-detail-stats-grid">
-      <div class="habit-stat-card">
-        <div class="habit-stat-val">${displayStreak > 0 ? displayStreak + '🔥' : '–'}</div>
+      <div class="habit-stat-card"${streakTitleAttr}>
+        ${streakBadgeHtml}
         <div class="habit-stat-label">Current Streak</div>
       </div>
       <div class="habit-stat-card">
@@ -1006,6 +1074,7 @@ function renderHabitHistoryGrid(habit) {
   const today = habitDateStr(0);
   const startDate = habit.startDate || today;
   const isArchived = !!habit.archived;
+  const brokenN = _habitRecentlyBroken(habit);
   const now = new Date();
 
   const MONTH_NAMES = ['January','February','March','April','May','June',
@@ -1046,6 +1115,7 @@ function renderHabitHistoryGrid(habit) {
     const isFuture = ds > today;
     const isRetired = _habitRetiredOn(habit, ds);
     const isBeforeStart = ds < startDate && !_habitInPriorRun(habit, ds);
+    const isStreakBroke = brokenN > 0 && ds === _shiftDay(today, -1);
 
     let cls = 'habit-cal-day';
     // A retired day gets the same inert treatment as a future one — the habit
@@ -1055,6 +1125,7 @@ function renderHabitHistoryGrid(habit) {
     else if (done) cls += ' done';
     else if (voided) cls += ' voided';
     else if (!isToday) cls += ' missed';
+    if (isStreakBroke) cls += ' streak-broke';
     if (isToday && !isRetired) cls += ' today';
 
     // An archived habit is a frozen record: nothing about it can be re-marked.

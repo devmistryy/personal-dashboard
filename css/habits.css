@@ -14,6 +14,13 @@
     background: rgba(255,255,255,0.08); color: var(--text-primary); border-color: rgba(255,255,255,0.15);
   }
 
+  .habit-flame-legend { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .habit-flame-legend-item {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary);
+  }
+  .habit-flame-legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
   .habit-row {
     display: flex;
     align-items: center;
@@ -157,17 +164,46 @@
   .habit-day-dot.done { background: rgba(52,199,89,0.85); box-shadow: 0 0 5px rgba(52,199,89,0.4); }
   .habit-day-dot.missed { background: rgba(255,69,58,0.50); }
   .habit-day-dot.today-dot { outline: 1.5px solid rgba(255,255,255,0.35); outline-offset: 1px; }
+  .habit-day-dot.streak-broke { outline: 1.5px solid rgba(242,192,99,0.55); outline-offset: 1px; }
 
   .habit-streak {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
     color: var(--text-tertiary);
     min-width: 32px;
-    text-align: right;
     flex-shrink: 0;
   }
-  .habit-streak.hot { color: var(--warning); }
+
+  .habit-flame-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .habit-flame-img { display: block; object-fit: contain; }
+  .habit-flame-badge--row .habit-flame-img { width: 12px; height: 16px; }
+  .habit-flame-badge--stat .habit-flame-img { width: 22px; height: 30px; }
+  .habit-flame-badge--ember .habit-flame-img { opacity: 0.85; }
+  .habit-flame-num {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  /* The flame art tapers to a thin point at top and bulges wide at the base, so
+     its visual weight sits noticeably below the image box's geometric centre —
+     nudge the number down to match where the flame actually "reads" as centred,
+     rather than the flame's raw bounding-box middle. */
+  .habit-flame-badge--row .habit-flame-num { font-size: 13px; transform: translateY(2px); }
+  .habit-flame-badge--stat .habit-flame-num { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; transform: translateY(4px); }
+
+  /* Number tinted to match its flame's own colour, sampled from the art itself. */
+  .habit-flame-badge--yellow .habit-flame-num { color: rgb(248,197,50); }
+  .habit-flame-badge--orange .habit-flame-num { color: rgb(253,135,51); }
+  .habit-flame-badge--red    .habit-flame-num { color: rgb(253,70,68); }
+  .habit-flame-badge--blue   .habit-flame-num { color: rgb(57,150,253); }
 
   .habit-restart-btn {
     background: none; border: none;
@@ -370,6 +406,7 @@
     box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: 6px;
   }
   .habit-stat-val {
@@ -546,6 +583,12 @@
   }
   .habit-cal-day.missed .habit-cal-day-num {
     color: rgba(255,255,255,0.55);
+  }
+  .habit-cal-day.streak-broke {
+    box-shadow: inset 0 0 0 1.5px rgba(242,192,99,0.55);
+  }
+  .habit-cal-day.streak-broke .habit-cal-day-num {
+    color: rgba(242,192,99,0.85);
   }
   .habit-cal-day.today {
     outline: 2px solid rgba(255,255,255,0.35);
@@ -1180,6 +1223,8 @@
     .habit-week { display: none; }
     .habit-detail-stats-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .habit-stat-val { font-size: 22px; }
+    .habit-flame-badge--stat .habit-flame-img { width: 17px; height: 23px; }
+    .habit-flame-badge--stat .habit-flame-num { font-size: 20px; transform: translateY(3px); }
     .habit-detail-name { font-size: 22px; }
     .day-detail-head .day-detail-date { font-size: 18px; }
     .hd-tab { padding: 7px 14px; }
@@ -1190,6 +1235,7 @@
        snug inside each one with no dead space on the right. */
     .habit-sort-bar { flex-wrap: nowrap; gap: 3px; }
     .habit-sort-label { font-size: 12.5px; flex-shrink: 0; }
+    .habit-flame-legend { display: none; }
     .habit-sort-btn {
       flex: 1 1 auto;
       min-width: 0;
