@@ -489,6 +489,15 @@
 
   /* Drag over indicator */
   .task-row.drag-over { border-top: 2px solid rgba(255,255,255,0.3); }
+  .task-row.dragging { opacity: 0.4; }
+
+  /* Today/Upcoming card while a task is being dragged over it */
+  #todayCard.drop-target-active,
+  .tm-card-tomorrow.drop-target-active {
+    outline: 2px dashed rgba(255,255,255,0.35);
+    outline-offset: -2px;
+    background: rgba(255,255,255,0.03);
+  }
 
   /* ── Sunday Reset ── */
   .tm-header-right {

@@ -1,6 +1,13 @@
 // To Do tab: rollover, streak, task rows, drag-reorder, inline edit,
 // quick-add + polish. Loaded before main.js.
 
+// The task currently being dragged (id + origin day-key), while a task-row
+// drag is in progress; null otherwise (including while a habit row, which
+// has no dataset.taskId, is being dragged). Lets a drop-target card tell an
+// in-list reorder apart from a genuine cross-day drag during dragover, when
+// dataTransfer's own payload isn't readable yet for security reasons.
+let _draggedTaskInfo = null;
+
 // Stable client-side task id (mirrors the habits `h_…` convention).
 function _taskId() {
   return 'g_' + ((crypto && crypto.randomUUID)
@@ -167,6 +174,62 @@ function reorderTaskByDrag(key, fromEl, toEl) {
   }
   storeSet(key, arr);
   if (key === todayKey()) loadToday(); else loadUpcoming();
+}
+
+// Move a task from one day's stored array to another's, matched by stable id
+// — the drop side of dragging a row onto the Upcoming card. No-ops if the
+// dates are the same or the task can't be found, and skips the move (leaving
+// the source alone) if the destination already has this exact task id — e.g.
+// a rollover copy already carried onto that day. Matched by id only (not
+// _taskInList's text fallback): two unrelated tasks that happen to share
+// wording shouldn't block a drag that's clearly about a specific row.
+function moveTaskToDate(fromKey, taskId, toDate) {
+  const toKey = 'tasks:' + toDate;
+  if (fromKey === toKey) return;
+  const fromArr = storeGet(fromKey) || [];
+  const idx = fromArr.findIndex(g => g.id === taskId);
+  if (idx < 0) return;
+  const toArr = storeGet(toKey) || [];
+  if (toArr.some(x => x.id === taskId)) return;
+  const [task] = fromArr.splice(idx, 1);
+  storeSet(fromKey, fromArr);
+  toArr.push(task);
+  storeSet(toKey, toArr);
+  if (fromKey === todayKey() || toKey === todayKey()) loadToday();
+  loadUpcoming();
+}
+
+// Wire `card` as a cross-day drop target for rows dragged out of a different
+// day's list (Today <-> Upcoming, or between two Upcoming days). The card
+// element is static across loadToday()/loadUpcoming() rebuilds, so this is
+// wired once per card. `resolveDate(e)` inspects the drop event and returns
+// the destination date string.
+function wireCrossDayDrop(card, resolveDate) {
+  card.addEventListener('dragover', e => {
+    e.preventDefault();
+    // Hovering over the row's own day (an in-list reorder in progress, or a
+    // task hovering the empty space of the day it's already on) would be a
+    // no-op move — don't outline the whole card for it, only for a hover
+    // that would actually reschedule the task.
+    if (_draggedTaskInfo && 'tasks:' + resolveDate(e) === _draggedTaskInfo.fromKey) return;
+    card.classList.add('drop-target-active');
+  });
+  card.addEventListener('dragleave', e => {
+    if (!card.contains(e.relatedTarget)) card.classList.remove('drop-target-active');
+  });
+  // dragend always fires on the drag source, whatever ends the drag (a drop
+  // wherever it landed, or the drag being cancelled entirely) — a document
+  // listener guarantees the highlight can't get stuck if the drag ends
+  // without a dragleave/drop ever reaching this card.
+  document.addEventListener('dragend', () => card.classList.remove('drop-target-active'));
+  card.addEventListener('drop', e => {
+    e.preventDefault();
+    card.classList.remove('drop-target-active');
+    let payload = null;
+    try { payload = JSON.parse(e.dataTransfer.getData('application/x-dashboard-task') || ''); } catch (err) { /* not a task drag */ }
+    if (!payload || !payload.id || !payload.fromKey) return;
+    moveTaskToDate(payload.fromKey, payload.id, resolveDate(e));
+  });
 }
 
 // ── Rollover + overdue ──
@@ -411,6 +474,7 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
   li.dataset.idx = idx;
   li.dataset.taskId = g.id || '';
+  li.dataset.taskKey = key;
   li.draggable = !!draggable && !g.done;   // done rows sink to the bottom, no drag
 
   const reload = () => { if (key === todayKey()) loadToday(); else loadUpcoming(); };
@@ -572,6 +636,18 @@ function wireDragReorder(listEl, rowClass, onReorder) {
     if (!row) return;
     dragFromEl = row;
     e.dataTransfer.effectAllowed = 'move';
+    row.classList.add('dragging');
+    _draggedTaskInfo = row.dataset.taskId ? { id: row.dataset.taskId, fromKey: row.dataset.taskKey } : null;
+    if (_draggedTaskInfo) {
+      e.dataTransfer.setData('application/x-dashboard-task', JSON.stringify(_draggedTaskInfo));
+    }
+  });
+  listEl.addEventListener('dragend', e => {
+    const row = e.target.closest(sel);
+    if (row) row.classList.remove('dragging');
+    clearOver();
+    dragFromEl = null;
+    _draggedTaskInfo = null;
   });
   listEl.addEventListener('dragover', e => {
     e.preventDefault();
@@ -625,6 +701,12 @@ function loadToday() {
     document.getElementById('emptyState'),
     todayKey(), false);
   paintTaskSortBar(document.getElementById('todaySortBar'), tasks.length);
+
+  const card = document.getElementById('todayCard');
+  if (card && !card._crossDropWired) {
+    card._crossDropWired = true;
+    wireCrossDayDrop(card, () => getActiveDateString());
+  }
 }
 
 // The "Upcoming" card: every future day that has tasks, grouped by date,
@@ -666,11 +748,21 @@ function loadUpcoming() {
 
     const ul = document.createElement('ul');
     ul.className = 'task-list';
+    ul.dataset.date = date;
     sortTasksForDisplay(tasks, mode).forEach((g, i) =>
       ul.appendChild(buildTaskRow(g, i, tasks, key, true, canDrag)));
     if (canDrag) wireDragReorder(ul, 'task-row', (fromEl, toEl) => reorderTaskByDrag(key, fromEl, toEl));
     wrap.appendChild(ul);
   });
+
+  const card = document.getElementById('tomorrowCard');
+  if (card && !card._crossDropWired) {
+    card._crossDropWired = true;
+    wireCrossDayDrop(card, e => {
+      const dayEl = e.target.closest('.task-list[data-date]');
+      return dayEl ? dayEl.dataset.date : getTomorrowDateString();
+    });
+  }
 }
 
 // ── Status message helper ──
