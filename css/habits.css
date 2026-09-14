@@ -204,8 +204,13 @@
   /* Always reserved, even when empty (ember/dormant render no digits) — so the
      icon itself never shifts left/right depending on whether a number follows
      it; only the reserved slot's content changes. */
-  .habit-flame-badge--row .habit-flame-num { font-size: 13px; min-width: 15px; transform: translateY(2px); }
-  .habit-flame-badge--stat .habit-flame-num { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; min-width: 28px; transform: translateY(4px); }
+  .habit-flame-badge--row .habit-flame-num {
+    font-size: 13px; width: 22px; flex-shrink: 0; text-align: left; transform: translateY(2px);
+  }
+  .habit-flame-badge--stat .habit-flame-num {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
+    width: 46px; flex-shrink: 0; text-align: left; transform: translateY(4px);
+  }
 
   /* Number tinted to match its flame's own colour, sampled from the art itself. */
   .habit-flame-badge--yellow .habit-flame-num { color: rgb(248,197,50); }
