@@ -134,6 +134,8 @@
   .habit-meta-tag.ongoing { color: var(--text-tertiary); }
   .habit-meta-tag.expired { color: var(--warning); background: rgba(242,192,99,0.12); }
   .habit-meta-tag.eod { color: #5EEAD4; background: rgba(94,234,212,0.12); }
+  .habit-meta-tag.morning { color: rgb(253,135,51); background: rgba(253,135,51,0.12); }
+  .habit-meta-tag.night { color: #C084FC; background: rgba(192,132,252,0.12); }
 
   .habit-progress-wrap {
     height: 3px;

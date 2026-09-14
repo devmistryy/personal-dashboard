@@ -92,6 +92,8 @@ create table if not exists habits (
 alter table habits add column if not exists area        text;
 alter table habits add column if not exists sort_order  integer;
 alter table habits add column if not exists end_of_day  boolean default false;
+alter table habits add column if not exists morning_routine boolean default false;
+alter table habits add column if not exists night_routine   boolean default false;
 -- Finished active spans, appended when an archived habit is started again, so
 -- its "Day N" resumes where it stopped instead of going back to day 1 — and so
 -- the earlier run keeps its check-ins and its place in each day's completion

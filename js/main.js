@@ -496,6 +496,7 @@ async function _syncHabits(habits) {
       start_date: h.startDate || null, end_date: h.endDate || null,
       archived: h.archived || false, archived_at: h.archivedAt || null,
       sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
+      morning_routine: h.morningRoutine || false, night_routine: h.nightRoutine || false,
       runs: Array.isArray(h.runs) ? h.runs : [],
     })), { onConflict: 'id' });
     if (error) _syncFailed('habits upsert failed', error);
@@ -873,6 +874,7 @@ async function loadFromSupabase() {
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
     area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
+    morningRoutine: h.morning_routine || false, nightRoutine: h.night_routine || false,
     runs: Array.isArray(h.runs) ? h.runs : [],
   }));
 

@@ -424,6 +424,18 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     eodTag.textContent = 'End of Day';
     meta.appendChild(eodTag);
   }
+  if (habit.morningRoutine) {
+    const morningTag = document.createElement('span');
+    morningTag.className = 'habit-meta-tag morning';
+    morningTag.textContent = 'Morning Routine';
+    meta.appendChild(morningTag);
+  }
+  if (habit.nightRoutine) {
+    const nightTag = document.createElement('span');
+    nightTag.className = 'habit-meta-tag night';
+    nightTag.textContent = 'Night Routine';
+    meta.appendChild(nightTag);
+  }
   nameCol.appendChild(meta);
 
   // Progress bar for timed habits
@@ -1012,6 +1024,22 @@ function renderHabitDetailPage(habit, allHabits) {
         </label>
       </div>
     </div>
+    <div class="habit-detail-row-split">
+      <div class="habit-detail-row-field habit-detail-row-field-toggle">
+        <span class="habit-detail-start-label">Morning Routine</span>
+        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+          <input type="checkbox" id="habitDetailMorning" ${habit.morningRoutine ? 'checked' : ''}>
+          <span class="habit-cb-box"></span>
+        </label>
+      </div>
+      <div class="habit-detail-row-field habit-detail-row-field-toggle">
+        <span class="habit-detail-start-label">Night Routine</span>
+        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+          <input type="checkbox" id="habitDetailNight" ${habit.nightRoutine ? 'checked' : ''}>
+          <span class="habit-cb-box"></span>
+        </label>
+      </div>
+    </div>
     ` : `
     <div class="habit-detail-checkin">
       <div style="flex:1;">
@@ -1059,9 +1087,27 @@ function renderHabitDetailPage(habit, allHabits) {
 
     document.getElementById('habitDetailEod').addEventListener('change', (e) => {
       habit.endOfDay = e.target.checked;
+      if (e.target.checked) { habit.morningRoutine = false; habit.nightRoutine = false; }
       saveHabits(allHabits);
       renderHabits();
       renderHabitOverviewCalendar();
+      renderHabitDetailPage(habit, allHabits);
+    });
+
+    document.getElementById('habitDetailMorning').addEventListener('change', (e) => {
+      habit.morningRoutine = e.target.checked;
+      if (e.target.checked) { habit.endOfDay = false; habit.nightRoutine = false; }
+      saveHabits(allHabits);
+      renderHabits();
+      renderHabitDetailPage(habit, allHabits);
+    });
+
+    document.getElementById('habitDetailNight').addEventListener('change', (e) => {
+      habit.nightRoutine = e.target.checked;
+      if (e.target.checked) { habit.endOfDay = false; habit.morningRoutine = false; }
+      saveHabits(allHabits);
+      renderHabits();
+      renderHabitDetailPage(habit, allHabits);
     });
 
     document.getElementById('habitDetailArchive').addEventListener('click', () => {
@@ -1489,7 +1535,7 @@ function addHabit() {
   const name    = input.value.trim();
   if (!name) return;
   const today   = habitDateStr(0);
-  const entry   = { id: _habitId(), name, startDate: today, archived: false, endOfDay: false, createdAt: new Date().toISOString() };
+  const entry   = { id: _habitId(), name, startDate: today, archived: false, endOfDay: false, morningRoutine: false, nightRoutine: false, createdAt: new Date().toISOString() };
   if (endDate.value && endDate.value <= today) {
     alert('The end date has to be after today. Clear it for an ongoing habit.');
     return;                       // keep what was typed so it can be corrected
