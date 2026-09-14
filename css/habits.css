@@ -493,6 +493,28 @@
   }
   .habit-detail-row-field-toggle .habit-detail-start-label { white-space: nowrap; }
 
+  /* End of Day / Morning / Night Routine — three toggles on one line. Each
+     stacks its label over its checkbox (rather than the label-beside-checkbox
+     layout used elsewhere) since three side-by-side label+checkbox pairs
+     don't fit this card's width without truncating. */
+  .habit-detail-row-split-3 { justify-content: space-around; gap: 8px; }
+  .habit-toggle-compact {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .habit-toggle-compact-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.25;
+  }
+
   /* Merged Archive + Delete row */
   .habit-detail-danger-row {
     display: flex;
@@ -510,7 +532,7 @@
   #habitDetailPage { padding-bottom: 36px; }
   .habit-detail-cols {
     display: grid;
-    grid-template-columns: minmax(260px, 340px) 1fr;
+    grid-template-columns: minmax(260px, 400px) 1fr;
     gap: 28px;
     align-items: start;
   }

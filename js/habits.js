@@ -1015,30 +1015,29 @@ function renderHabitDetailPage(habit, allHabits) {
         <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
           value="${startDate}" max="${today}">
       </div>
-      <div class="habit-detail-row-field habit-detail-row-field-toggle"
-        title="Excluded from the day's completion % until the day is over">
-        <span class="habit-detail-start-label">End of Day</span>
-        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+    </div>
+    <div class="habit-detail-row-split habit-detail-row-split-3">
+      <label class="habit-toggle-compact" title="Excluded from the day's completion % until the day is over">
+        <span class="habit-toggle-compact-label">End of Day</span>
+        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
           <input type="checkbox" id="habitDetailEod" ${habit.endOfDay ? 'checked' : ''}>
           <span class="habit-cb-box"></span>
-        </label>
-      </div>
-    </div>
-    <div class="habit-detail-row-split">
-      <div class="habit-detail-row-field habit-detail-row-field-toggle">
-        <span class="habit-detail-start-label">Morning Routine</span>
-        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+        </span>
+      </label>
+      <label class="habit-toggle-compact">
+        <span class="habit-toggle-compact-label">Morning Routine</span>
+        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
           <input type="checkbox" id="habitDetailMorning" ${habit.morningRoutine ? 'checked' : ''}>
           <span class="habit-cb-box"></span>
-        </label>
-      </div>
-      <div class="habit-detail-row-field habit-detail-row-field-toggle">
-        <span class="habit-detail-start-label">Night Routine</span>
-        <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+        </span>
+      </label>
+      <label class="habit-toggle-compact">
+        <span class="habit-toggle-compact-label">Night Routine</span>
+        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
           <input type="checkbox" id="habitDetailNight" ${habit.nightRoutine ? 'checked' : ''}>
           <span class="habit-cb-box"></span>
-        </label>
-      </div>
+        </span>
+      </label>
     </div>
     ` : `
     <div class="habit-detail-checkin">
