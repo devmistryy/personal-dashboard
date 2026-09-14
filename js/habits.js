@@ -241,6 +241,29 @@ function _habitRecentlyBroken(habit) {
   return _habitStreakEndingOn(habit, _shiftDay(yesterday, -1));
 }
 
+// Consecutive inactive days ending yesterday — the inverse of
+// _habitStreakEndingOn: walks backward counting scheduled days that were
+// neither done nor voided, stopping (not counting) at the first done day, or
+// at the point the habit stops being scheduled at all (its start date, or a
+// prior-run boundary). Voided days are skipped transparently, same as the
+// streak walk. `everDone` tells the caller whether the walk found a real
+// completion (true) or ran off the habit's schedule having never found one
+// (false) — the two dormant-tooltip variants need exactly this distinction.
+// Capped well past a plausible habit lifetime, since unlike a streak a
+// dormant stretch has no natural bound of its own.
+function _habitDormantDays(habit) {
+  let days = 0;
+  let ds = _shiftDay(habitDateStr(0), -1);
+  for (let i = 0; i < 3650; i++) {
+    if (!_habitScheduledOn(habit, ds)) return { days, everDone: false };
+    if (_habitDoneOn(habit, ds)) return { days, everDone: true };
+    if (_habitVoidedOn(habit.id, ds)) { ds = _shiftDay(ds, -1); continue; }
+    days++;
+    ds = _shiftDay(ds, -1);
+  }
+  return { days, everDone: false };
+}
+
 // Move an archived habit back into the active list, picking its day count up
 // where it stopped rather than starting over. The days already served are banked
 // as a finished run; the dormant stretch since archiving is simply skipped.
@@ -312,6 +335,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   const done     = _habitDoneOn(habit, today);
   const streak   = habitStreak(habit.id);
   const brokenN  = (!done && streak === 0) ? _habitRecentlyBroken(habit) : 0;
+  const dormant  = (!done && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
 
   const isTimed   = !!habit.endDate;
   const dayNum    = _habitDayNum(habit, today);
@@ -457,6 +481,11 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   } else if (brokenN > 0) {
     streakEl.innerHTML = _fireStreakBadgeHtml(0, { size: 'row', ember: true });
     streakEl.title = `You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one.`;
+  } else if (dormant && dormant.days >= 2) {
+    streakEl.innerHTML = _fireStreakBadgeHtml(dormant.days, { size: 'row', dormant: true });
+    streakEl.title = dormant.everDone
+      ? `You haven't done this in ${dormant.days} days. Check in today to start fresh.`
+      : `You haven't started this yet — it's been sitting for ${dormant.days} days.`;
   } else {
     streakEl.textContent = '–';
     streakEl.title = 'Click to check in today';
@@ -645,6 +674,17 @@ function _fireStreakTier(count) {
   return 'blue';
 }
 
+// Which pre-rendered icy-skull art a dormant stretch gets — a bare skull
+// icing over as the inactivity grows. Only checked once a habit is already
+// dormant (2+ inactive days), so the floor here is implicit, not encoded in
+// the array. Deliberately stricter pacing than the hot-streak tiers: fully
+// iced by day 10 rather than day 30, since missing habits should sting.
+const _DORMANT_TIERS = [[4, 'bare'], [9, 'frost']];
+function _dormantTier(days) {
+  for (const [max, name] of _DORMANT_TIERS) if (days <= max) return name;
+  return 'iced';
+}
+
 // The flame icon plus its count, side by side — not baked into one image, so
 // this stays a plain flex row rather than needing the overlay math a
 // number-inside-the-flame treatment would.
@@ -654,6 +694,14 @@ function _fireStreakBadgeHtml(count, opts) {
   if (opts.ember) {
     return `<span class="habit-flame-badge ${sizeClass} habit-flame-badge--ember">
       <img class="habit-flame-img" src="img/flames/flame-ember.png" alt="">
+      <span class="habit-flame-num"></span>
+    </span>`;
+  }
+  if (opts.dormant) {
+    const dTier = _dormantTier(count);
+    return `<span class="habit-flame-badge ${sizeClass} habit-flame-badge--dormant habit-flame-badge--${dTier}">
+      <img class="habit-flame-img" src="img/flames/flame-${dTier}.png" alt="">
+      <span class="habit-flame-num"></span>
     </span>`;
   }
   const tier = _fireStreakTier(count);
@@ -834,6 +882,7 @@ function renderHabitDetailPage(habit, allHabits) {
   const streak = habitStreak(habit.id);
   const displayStreak = doneToday ? streak + 1 : streak;
   const brokenN = (!doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
+  const dormant = (!doneToday && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
   const isTimed = !!habit.endDate;
   const startDate = habit.startDate || today;
   const dayNum = _habitDayNum(habit, today);
@@ -888,10 +937,19 @@ function renderHabitDetailPage(habit, allHabits) {
     ? _fireStreakBadgeHtml(displayStreak, { size: 'stat' })
     : brokenN > 0
       ? _fireStreakBadgeHtml(0, { size: 'stat', ember: true })
-      : `<div class="habit-stat-val">–</div>`;
+      : (dormant && dormant.days >= 2)
+        ? _fireStreakBadgeHtml(dormant.days, { size: 'stat', dormant: true })
+        : `<div class="habit-stat-val">–</div>`;
+  const dormantTitle = dormant && dormant.days >= 2
+    ? (dormant.everDone
+        ? `You haven't done this in ${dormant.days} days. Check in today to start fresh.`
+        : `You haven't started this yet — it's been sitting for ${dormant.days} days.`)
+    : '';
   const streakTitleAttr = brokenN > 0
     ? ` title="You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one."`
-    : '';
+    : dormantTitle
+      ? ` title="${dormantTitle}"`
+      : '';
 
   document.getElementById('habitDetailStats').innerHTML = `
     <div class="habit-detail-stats-grid">
