@@ -185,6 +185,11 @@
   }
   .habit-flame-img { display: block; object-fit: contain; }
   .habit-flame-badge--row .habit-flame-img { width: 12px; height: 16px; }
+  /* Stands in for the flame image on a never-started habit — same width as
+     the icon it replaces, so the dash lines up in the flame's own column. */
+  .habit-flame-badge--row .habit-flame-placeholder {
+    display: block; width: 12px; text-align: center; color: var(--text-tertiary);
+  }
   .habit-flame-badge--stat .habit-flame-img { width: 22px; height: 30px; }
   .habit-flame-badge--ember .habit-flame-img { opacity: 0.85; }
   /* The icy-skull art is a taller/narrower canvas (~0.61 aspect) than the

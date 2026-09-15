@@ -510,7 +510,12 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
       ? `You haven't done this in ${dormant.days} days. Check in today to start fresh.`
       : `You haven't started this yet — it's been sitting for ${dormant.days} days.`;
   } else {
-    streakEl.textContent = '–';
+    // No image here, but keep the same icon-slot + num-slot layout as the
+    // flame badges so the dash lands in the flame's column, not the number's.
+    streakEl.innerHTML = `<span class="habit-flame-badge habit-flame-badge--row">
+      <span class="habit-flame-placeholder">–</span>
+      <span class="habit-flame-num"></span>
+    </span>`;
     streakEl.title = 'Click to check in today';
   }
   if (!isArchived) {
