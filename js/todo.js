@@ -226,7 +226,7 @@ function wireCrossDayDrop(card, resolveDate) {
     e.preventDefault();
     card.classList.remove('drop-target-active');
     let payload = null;
-    try { payload = JSON.parse(e.dataTransfer.getData('application/x-dashboard-task') || ''); } catch (err) { /* not a task drag */ }
+    try { payload = JSON.parse(e.dataTransfer.getData('text/plain') || ''); } catch (err) { /* not a task drag */ }
     if (!payload || !payload.id || !payload.fromKey) return;
     moveTaskToDate(payload.fromKey, payload.id, resolveDate(e));
   });
@@ -639,7 +639,10 @@ function wireDragReorder(listEl, rowClass, onReorder) {
     row.classList.add('dragging');
     _draggedTaskInfo = row.dataset.taskId ? { id: row.dataset.taskId, fromKey: row.dataset.taskKey } : null;
     if (_draggedTaskInfo) {
-      e.dataTransfer.setData('application/x-dashboard-task', JSON.stringify(_draggedTaskInfo));
+      // 'text/plain' rather than a custom MIME type — Safari (desktop and
+      // iOS) is known to silently drop custom dataTransfer types, which
+      // would make a cross-day drop read back nothing on drop.
+      e.dataTransfer.setData('text/plain', JSON.stringify(_draggedTaskInfo));
     }
   });
   listEl.addEventListener('dragend', e => {
