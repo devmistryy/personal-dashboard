@@ -1,5 +1,16 @@
 # Supabase project config. Only the pieces this repo needs are set here — the
-# dashboard frontend talks to Supabase directly from the browser and has no
-# other server-side code.
+# dashboard frontend talks to Supabase directly from the browser, with two
+# small Edge Functions handling the WHOOP OAuth secret exchange.
 
 project_id = "tlqjmlocxxsdlxseumxw"
+
+[functions.whoop-oauth-callback]
+# Handles two callers: our own browser (with a real Supabase JWT, checked in
+# code) and WHOOP's servers hitting the OAuth redirect directly with no JWT
+# at all — so the gateway's automatic check has to be off for this function.
+verify_jwt = false
+
+[functions.whoop-webhook]
+# WHOOP calls this directly with no Supabase JWT at all — it authenticates
+# itself via a signed request (verified in code), not a session.
+verify_jwt = false

@@ -340,13 +340,160 @@ create index if not exists mobility_logs_user_ex_idx
   on mobility_logs (user_id, exercise_id);
 alter table mobility_logs enable row level security;
 
+-- ───────────────────── whoop_tokens ────────────────────────────
+-- Raw OAuth tokens. Deliberately given NO RLS policy below (RLS is enabled
+-- but the policy array is left empty for this table) — that makes it
+-- unreadable/unwritable via the anon/authenticated client key entirely.
+-- Only Edge Functions using the service-role key can touch this table.
+create table if not exists whoop_tokens (
+  user_id       uuid primary key references auth.users not null,
+  access_token  text not null,
+  refresh_token text not null,
+  expires_at    timestamptz not null,
+  scope         text,
+  whoop_user_id text,
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+alter table whoop_tokens enable row level security;
+
+-- ───────────────────── whoop_recovery ──────────────────────────
+-- One row per calendar day: WHOOP's cycle + recovery + sleep merged.
+-- This IS covered by the normal "own" RLS policy — the only WHOOP data the
+-- browser reads directly.
+create table if not exists whoop_recovery (
+  user_id                      uuid references auth.users not null,
+  date                         date not null,
+  -- cycle (GET /v2/cycle)
+  cycle_score_state            text,      -- SCORED | PENDING_SCORE | UNSCORABLE
+  strain                       numeric,
+  avg_heart_rate               numeric,
+  max_heart_rate               numeric,
+  kilojoule                    numeric,
+  -- recovery (GET /v2/cycle/{id}/recovery)
+  recovery_score_state         text,
+  user_calibrating             boolean,
+  recovery_score               integer,
+  resting_hr                   numeric,
+  hrv_ms                       numeric,   -- hrv_rmssd_milli
+  spo2_percentage              numeric,
+  skin_temp_celsius            numeric,
+  -- sleep (GET /v2/activity/sleep) — score + stage_summary + sleep_needed
+  sleep_score_state            text,
+  is_nap                       boolean,
+  sleep_start                  timestamptz,   -- when they fell asleep
+  sleep_end                    timestamptz,   -- when they woke up
+  sleep_performance            integer,
+  sleep_efficiency_percentage  numeric,
+  sleep_consistency_percentage numeric,
+  respiratory_rate             numeric,
+  total_in_bed_ms              integer,
+  total_awake_ms               integer,
+  total_no_data_ms             integer,
+  light_sleep_ms               integer,   -- total_light_sleep_time_milli
+  deep_sleep_ms                integer,   -- total_slow_wave_sleep_time_milli
+  rem_sleep_ms                 integer,   -- total_rem_sleep_time_milli
+  sleep_cycle_count            integer,
+  disturbance_count            integer,
+  sleep_need_baseline_ms       integer,
+  sleep_need_debt_ms           integer,
+  sleep_need_strain_ms         integer,
+  sleep_need_nap_ms            integer,
+  raw                          jsonb,     -- full cycle+recovery+sleep API responses, verbatim
+  synced_at                    timestamptz not null default now(),
+  primary key (user_id, date)
+);
+-- table may already exist from an earlier narrower version — add anything missing
+alter table whoop_recovery add column if not exists cycle_score_state text;
+alter table whoop_recovery add column if not exists recovery_score_state text;
+alter table whoop_recovery add column if not exists user_calibrating boolean;
+alter table whoop_recovery add column if not exists sleep_score_state text;
+alter table whoop_recovery add column if not exists is_nap boolean;
+alter table whoop_recovery add column if not exists sleep_start timestamptz;
+alter table whoop_recovery add column if not exists sleep_end timestamptz;
+alter table whoop_recovery add column if not exists total_in_bed_ms integer;
+alter table whoop_recovery add column if not exists total_awake_ms integer;
+alter table whoop_recovery add column if not exists total_no_data_ms integer;
+alter table whoop_recovery add column if not exists sleep_cycle_count integer;
+alter table whoop_recovery add column if not exists disturbance_count integer;
+alter table whoop_recovery add column if not exists sleep_need_baseline_ms integer;
+alter table whoop_recovery add column if not exists sleep_need_debt_ms integer;
+alter table whoop_recovery add column if not exists sleep_need_strain_ms integer;
+alter table whoop_recovery add column if not exists sleep_need_nap_ms integer;
+-- superseded by the granular columns above; table is brand-new and unsynced, safe to drop
+alter table whoop_recovery drop column if exists awake_ms;
+alter table whoop_recovery drop column if exists sleep_duration_ms;
+alter table whoop_recovery drop column if exists sleep_need_ms;
+create index if not exists whoop_recovery_user_date_idx
+  on whoop_recovery (user_id, date);
+alter table whoop_recovery enable row level security;
+
+-- ───────────────────── whoop_workouts ──────────────────────────
+-- One row per WHOOP workout (zero-to-many per day).
+create table if not exists whoop_workouts (
+  id                   text primary key,     -- WHOOP's own workout id
+  user_id              uuid references auth.users not null,
+  start                timestamptz not null,
+  "end"                timestamptz not null,
+  sport_id             integer,
+  sport_name           text,
+  score_state          text,
+  strain               numeric,
+  avg_heart_rate       numeric,
+  max_heart_rate       numeric,
+  kilojoule            numeric,
+  percent_recorded     numeric,
+  distance_meter       numeric,
+  altitude_gain_meter  numeric,
+  altitude_change_meter numeric,
+  zone_0_ms            integer,             -- zone_zero_milli
+  zone_1_ms            integer,
+  zone_2_ms            integer,
+  zone_3_ms            integer,
+  zone_4_ms            integer,
+  zone_5_ms            integer,
+  raw                  jsonb,
+  synced_at            timestamptz not null default now()
+);
+-- table may already exist from an earlier narrower version — add anything missing
+alter table whoop_workouts add column if not exists sport_id integer;
+alter table whoop_workouts add column if not exists score_state text;
+alter table whoop_workouts add column if not exists percent_recorded numeric;
+alter table whoop_workouts add column if not exists altitude_change_meter numeric;
+alter table whoop_workouts add column if not exists zone_0_ms integer;
+alter table whoop_workouts add column if not exists zone_1_ms integer;
+alter table whoop_workouts add column if not exists zone_2_ms integer;
+alter table whoop_workouts add column if not exists zone_3_ms integer;
+alter table whoop_workouts add column if not exists zone_4_ms integer;
+alter table whoop_workouts add column if not exists zone_5_ms integer;
+create index if not exists whoop_workouts_user_start_idx
+  on whoop_workouts (user_id, start desc);
+alter table whoop_workouts enable row level security;
+
+-- ───────────────────── whoop_profile ───────────────────────────
+-- Singleton per user: basic profile + body measurement. Low-churn,
+-- upserted whole on every sync.
+create table if not exists whoop_profile (
+  user_id         uuid primary key references auth.users not null,
+  first_name      text,
+  last_name       text,
+  email           text,
+  height_meter    numeric,
+  weight_kilogram numeric,
+  max_heart_rate  numeric,
+  raw             jsonb,
+  synced_at       timestamptz not null default now()
+);
+alter table whoop_profile enable row level security;
+
 -- ──────────────── RLS policies (create only if missing) ───────
 do $$
 declare t text;
 begin
   foreach t in array array[
     'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','areas',
-    'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs'
+    'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs',
+    'whoop_recovery','whoop_workouts','whoop_profile'
   ] loop
     if not exists (
       select 1 from pg_policies

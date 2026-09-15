@@ -13,7 +13,9 @@ const ANTHROPIC_API_KEY = '';           // task "Polish" (js/todo.js)
 // shared free test key (rate-limited); get your own free key (25k/month) at
 // https://ocr.space/ocrapi/freekey and paste it here.
 const OCR_SPACE_API_KEY = 'helloworld';
-const WAKE_HOUR  = 8;
+// Default until WHOOP overrides it with today's real wake time (js/whoop.js
+// _whoopApplyWakeTime) — a `let` so that can happen.
+let WAKE_HOUR  = 8;
 const SLEEP_HOUR = 24;
 
 // ── Supabase ──
@@ -325,6 +327,15 @@ function fmtClock(date) {
   return `${h}:${m} ${ampm}`;
 }
 
+// Formats a decimal hour (e.g. 9.116, or 24 for midnight) as a clock string,
+// for WAKE_HOUR/SLEEP_HOUR which aren't tied to "now".
+function fmtHourDecimal(hDec) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setMinutes(Math.round((hDec % 24) * 60));
+  return fmtClock(d);
+}
+
 function updateDayBar() {
   const now = new Date();
   const C = 2 * Math.PI * 52;
@@ -337,6 +348,9 @@ function updateDayBar() {
 
   ring.style.strokeDasharray = C;
   clockEl.textContent = fmtClock(now);
+
+  const hoursEl = document.getElementById('ringHours');
+  if (hoursEl) hoursEl.textContent = fmtHourDecimal(WAKE_HOUR) + ' – ' + fmtHourDecimal(SLEEP_HOUR);
 
   const h = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
 
@@ -854,6 +868,9 @@ async function loadFromSupabase() {
     sb.from('habit_voids').select('*').eq('user_id', uid),
     sb.from('reactive_habits').select('*').eq('user_id', uid).order('created_at'),
     sb.from('reactive_habit_logs').select('*').eq('user_id', uid).order('ts'),
+    sb.from('whoop_recovery').select('*').eq('user_id', uid).order('date', { ascending: false }).limit(7),
+    sb.from('whoop_workouts').select('*').eq('user_id', uid).order('start', { ascending: false }).limit(20),
+    sb.from('whoop_profile').select('*').eq('user_id', uid).maybeSingle(),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -871,6 +888,9 @@ async function loadFromSupabase() {
   const voids   = results[11].data || [];
   const rHabits = results[12].data || [];
   const rLogs   = results[13].data || [];
+  MEM['whoop:recovery'] = results[14].data || [];
+  MEM['whoop:workouts'] = results[15].data || [];
+  MEM['whoop:profile']  = results[16].data || null;
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -1019,7 +1039,8 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
+  _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
 }

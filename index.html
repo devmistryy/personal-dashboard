@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
 <link rel="stylesheet" href="css/mobility.css?v=6">
+<link rel="stylesheet" href="css/whoop.css?v=1">
 </head>
 <body>
 <div class="page-wrap">
@@ -85,7 +86,7 @@
       <div class="day-ring-info">
         <div class="day-ring-status" id="ringStatus">Loading…</div>
         <div class="day-ring-remain" id="ringRemain"></div>
-        <div class="day-ring-hours">8:00 AM – 12:00 AM</div>
+        <div class="day-ring-hours" id="ringHours">8:00 AM – 12:00 AM</div>
       </div>
     </div>
   </div>
@@ -98,6 +99,7 @@
     <button class="tab-btn" data-tab="areas">Areas &amp; Goals</button>
     <button class="tab-btn" data-tab="diet">Diet</button>
     <button class="tab-btn" data-tab="mobility">Mobility</button>
+    <button class="tab-btn" data-tab="whoop">WHOOP</button>
   </div>
 
   <!-- Tab: Tasks -->
@@ -447,6 +449,58 @@
     </div>
   </div>
 
+  <!-- Tab: WHOOP -->
+  <div class="tab-panel" id="tab-whoop">
+    <div class="section">
+      <div class="card" id="whoopNotConnected" hidden>
+        <p class="whoop-blurb">Connect your WHOOP band to see real recovery, sleep, and strain here.</p>
+        <button class="whoop-connect-btn" id="whoopConnectBtn" type="button">Connect WHOOP</button>
+        <p class="whoop-error" id="whoopConnectError" hidden></p>
+      </div>
+
+      <div id="whoopBanner" class="whoop-banner" hidden></div>
+
+      <div id="whoopConnected" hidden>
+        <div class="card">
+          <div class="whoop-head">
+            <span class="whoop-date" id="whoopDate">—</span>
+            <button class="whoop-sync-btn" id="whoopSyncBtn" type="button">Sync now</button>
+          </div>
+          <div class="whoop-sleep-window" id="whoopSleepWindow" hidden></div>
+          <div class="whoop-stat-row">
+            <div class="whoop-stat">
+              <div class="whoop-stat-label">Recovery</div>
+              <div class="whoop-stat-value" id="whoopRecoveryVal">—</div>
+            </div>
+            <div class="whoop-stat">
+              <div class="whoop-stat-label">Strain</div>
+              <div class="whoop-stat-value" id="whoopStrainVal">—</div>
+            </div>
+            <div class="whoop-stat">
+              <div class="whoop-stat-label">Sleep</div>
+              <div class="whoop-stat-value" id="whoopSleepVal">—</div>
+            </div>
+          </div>
+          <div class="whoop-detail-grid" id="whoopDetailGrid"></div>
+          <details class="whoop-raw" id="whoopRawWrap">
+            <summary>Raw API response (cycle + recovery + sleep)</summary>
+            <pre id="whoopRawJson"></pre>
+          </details>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Today's Workouts</div>
+          <div class="card" id="whoopWorkoutsCard">
+            <div class="whoop-empty" id="whoopWorkoutsEmpty">No workouts logged today.</div>
+            <div id="whoopWorkoutsList"></div>
+          </div>
+        </div>
+
+        <div class="card whoop-profile-card" id="whoopProfileCard"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Job status/platform/location dropdown -->
@@ -627,6 +681,7 @@
 <script src="js/goals.js?v=1"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
+<script src="js/whoop.js?v=1"></script>
 <script src="js/main.js?v=32"></script>
 </body>
 </html>
