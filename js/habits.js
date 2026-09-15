@@ -1425,6 +1425,8 @@ function renderDayDetail(ds) {
       ${isLocked ? '<span class="habit-meta-tag archived-tag">Archived</span>' : ''}
       ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
+      ${h.morningRoutine ? '<span class="habit-meta-tag morning">Morning Routine</span>' : ''}
+      ${h.nightRoutine ? '<span class="habit-meta-tag night">Night Routine</span>' : ''}
       ${areaTag}
       ${_dayVoidMode && !isLocked ? `<button class="day-void-toggle${isVoided ? ' active' : ''}" data-void-id="${h.id}"
         title="${isVoided ? 'Un-void this habit' : "Void this habit — it won't count on this day"}"
