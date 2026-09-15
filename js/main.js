@@ -93,6 +93,7 @@ function _seedLocalData() {
     return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0'); };
   const h1 = 'h_' + Math.random().toString(36).slice(2, 10);
   const h2 = 'h_' + Math.random().toString(36).slice(2, 10);
+  const jobSeedId = 'j_' + Math.random().toString(36).slice(2, 10);
   return {
     'areas:list': [
       { name: 'Health', color: '#52C97A' },
@@ -110,10 +111,14 @@ function _seedLocalData() {
     ],
     'task_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
-      { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', role: 'Software Engineer', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
+      { id: jobSeedId, company: 'Example Corp', role: 'Software Engineer', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
     ],
     'job_roles_v1': ['Software Engineer', 'Product Manager'],
     'job_sites_v1': ['linkedin', 'indeed'],
+    'referrals:list': [
+      { id: 'rf_seed1', name: 'Jordan (college friend)', jobId: jobSeedId, createdAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+      { id: 'rf_seed2', name: 'Sam Lee', jobId: null, createdAt: new Date().toISOString() },
+    ],
     'goals:list': [
       { id: 'gl_seed1', title: 'Ship the dashboard v2', area: 'Work',   notes: 'Areas & Goals tab, then a weekly review.', done: false, doneAt: null, createdAt: new Date(Date.now() - 6 * 86400000).toISOString() },
       { id: 'gl_seed2', title: 'Run a 10k',             area: 'Health', notes: '', done: false, doneAt: null, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
@@ -457,6 +462,17 @@ function buildAreaPill(currentArea, onChange) {
 // ── Supabase sync (fire-and-forget) ──
 async function _uid() { return (await sb.auth.getSession()).data.session?.user?.id; }
 
+// Every _sync* function calls this instead of raw _uid(). A missing/expired
+// session used to make `if (!uid) return;` exit silently — no _syncFailed
+// call, unlike every other failure path in these functions — so the change
+// looked saved (MEM was already updated) but never reached the database,
+// with no warning until the next reload quietly reverted it.
+async function _requireUid() {
+  const uid = await _uid();
+  if (!uid) _syncFailed('no active session — sign-in may have expired', new Error('missing uid'));
+  return uid;
+}
+
 // Every _sync* function reports its failures here instead of to console.error
 // alone. The writes are fire-and-forget, so a rejected one used to leave MEM and
 // the database quietly diverged: the change looks saved, and the next reload
@@ -490,6 +506,31 @@ function _dismissSyncError() {
 }
 document.getElementById('syncErrorBanner').addEventListener('click', _dismissSyncError);
 
+// Wrap every _syncX function (from this file and every feature file loaded
+// before it) to count in-flight calls, so signOut() can wait for pending
+// writes to land instead of reloading mid-flight and silently cancelling
+// whatever the user just changed. Relies on function-declaration hoisting —
+// by the time this runs, every `_syncXxx` declared anywhere in this file is
+// already bound, and every earlier-loaded file's has already executed.
+let _pendingSyncs = 0;
+Object.keys(window)
+  .filter(k => /^_sync[A-Z]/.test(k) && k !== '_syncFailed' && typeof window[k] === 'function')
+  .forEach(name => {
+    const orig = window[name];
+    window[name] = async function (...args) {
+      _pendingSyncs++;
+      try { return await orig.apply(this, args); }
+      finally { _pendingSyncs--; }
+    };
+  });
+
+async function _waitForPendingSyncs(maxMs = 3000) {
+  const start = Date.now();
+  while (_pendingSyncs > 0 && Date.now() - start < maxMs) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+}
+
 // Re-tag every task carrying `oldName` in ONE server-side update. The day-scoped
 // _syncTasks would need a full rewrite per date — up to 90 round trips for one
 // rename — and could only reach days inside the load window, which is why area
@@ -497,7 +538,7 @@ document.getElementById('syncErrorBanner').addEventListener('click', _dismissSyn
 // (their pill silently went blank). Pass null for `newArea` to clear the tag.
 async function _syncTaskAreaRename(oldName, newArea) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   const { error } = await sb.from('tasks').update({ area: newArea })
     .eq('user_id', uid).eq('area', oldName);
   if (error) _syncFailed('task area re-tag failed', error);
@@ -505,7 +546,7 @@ async function _syncTaskAreaRename(oldName, newArea) {
 
 async function _syncHabits(habits) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (habits.length) {
     const { error } = await sb.from('habits').upsert(habits.map((h, i) => ({
       id: h.id, user_id: uid, name: h.name,
@@ -536,7 +577,7 @@ async function _syncHabits(habits) {
 
 async function _syncHabitLog(dateStr, ids) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
 
   if (ids.length) {
     const { error: insErr } = await sb.from('habit_logs').upsert(
@@ -553,7 +594,7 @@ async function _syncHabitLog(dateStr, ids) {
 
 async function _syncHabitVoids(dateStr, ids) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
 
   if (ids.length) {
     const { error: insErr } = await sb.from('habit_voids').upsert(
@@ -604,7 +645,7 @@ function _syncTasks(dateStr, tasks) {
 }
 
 async function _syncTasksNow(dateStr, tasks) {
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
 
   if (!tasks.length) {
     const { error } = await sb.from('tasks').delete().eq('user_id', uid).eq('date', dateStr);
@@ -633,7 +674,7 @@ async function _syncTasksNow(dateStr, tasks) {
 
 async function _syncSetting(key, value) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   const { error } = await sb.from('settings').upsert({ user_id: uid, key, value }, { onConflict: 'user_id,key' });
   if (error) _syncFailed('settings upsert failed', error);
 }
@@ -643,7 +684,7 @@ async function _syncSetting(key, value) {
 // far cheaper than replaying every affected date through the day-scoped syncs.
 async function _syncPurgeHabit(habitId) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   for (const table of ['habit_logs', 'habit_voids', 'habit_notes']) {
     const { error } = await sb.from(table).delete().eq('user_id', uid).eq('habit_id', habitId);
     if (error) console.error(`[sync] ${table} purge failed:`, error);
@@ -652,7 +693,7 @@ async function _syncPurgeHabit(habitId) {
 
 async function _syncHabitNotes(habitId, notes) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   const { error: delErr } = await sb.from('habit_notes').delete().eq('user_id', uid).eq('habit_id', habitId);
   if (delErr) { _syncFailed('habit_notes delete failed', delErr); return; }
   if (notes.length) {
@@ -667,7 +708,7 @@ async function _syncHabitNotes(habitId, notes) {
 // ── Reactive Habits (cue-triggered, logged per-occurrence — see js/reactiveHabits.js) ──
 async function _syncReactiveHabits(list) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
     const { error } = await sb.from('reactive_habits').upsert(list.map(h => ({
       id: h.id, user_id: uid, name: h.name, cue_type: h.cueType,
@@ -687,7 +728,7 @@ async function _syncReactiveHabits(list) {
 
 async function _syncReactiveOccurrences(list) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
     const { error } = await sb.from('reactive_habit_logs').upsert(list.map(o => ({
       id: o.id, user_id: uid, habit_id: o.habitId, ts: o.ts, outcome: o.outcome,
@@ -708,7 +749,7 @@ async function _syncReactiveOccurrences(list) {
 // clears every row keyed by habit_id (mirrors _syncPurgeHabit).
 async function _syncPurgeReactiveHabit(habitId) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   const { error } = await sb.from('reactive_habit_logs').delete().eq('user_id', uid).eq('habit_id', habitId);
   if (error) console.error('[sync] reactive_habit_logs purge failed:', error);
 }
@@ -716,7 +757,7 @@ async function _syncPurgeReactiveHabit(habitId) {
 // ── Mobility (dedicated tables; MEM keeps the old blob shape) ──
 async function _syncMobExercises(list) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
     const { error } = await sb.from('mobility_exercises').upsert(list.map(ex => ({
       id: ex.id, user_id: uid, name: ex.name,
@@ -741,7 +782,7 @@ async function _syncMobExercises(list) {
 
 async function _syncMobLog(exerciseId, entries) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   const rows = entries.map(e => ({
     user_id: uid, exercise_id: exerciseId, date: e.date,
     sets: e.sets || 1, measure: e.measure || 'hold',
@@ -770,7 +811,7 @@ async function _syncMobLog(exerciseId, entries) {
 // ── Diet (dedicated tables; MEM keeps the old blob shape) ──
 async function _syncDietEntries(list) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
     const { error } = await sb.from('diet_entries').upsert(list.map(e => ({
       id: e.id, user_id: uid, date: e.date, time: e.time || null,
@@ -795,7 +836,7 @@ async function _syncDietEntries(list) {
 
 async function _syncDietFoods(kind, names) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
   if (names.length) {
     const { error } = await sb.from('diet_foods').upsert(
       names.map(n => ({ user_id: uid, name: n, kind })),
@@ -814,34 +855,37 @@ async function _syncDietFoods(kind, names) {
   }
 }
 
-// Goals (Areas & Goals tab). Flat collection, client id — upsert the current
-// set, then delete rows that are no longer present. Write first, delete stale
-// second (see the memory note): a failed upsert bails before any delete.
+// Goals (Areas & Goals tab). Flat collection, client id — upsert-only.
+// Deletion used to be inferred by diffing the full remote set against this
+// local array and deleting whatever was missing, but that's wrong the moment
+// two saves can be in flight at once: deleteGoal builds its array via
+// `.filter()` (a new array, decoupled from whatever addGoal/edit is doing
+// concurrently via in-place mutation), so a delete racing another save could
+// delete a goal the other save had just added, or fail to delete the one the
+// user actually removed. Deletion is now explicit — see deleteGoal below.
 async function _syncGoals(goals) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
-  if (goals.length) {
-    const { error } = await sb.from('goals').upsert(goals.map((g, i) => ({
-      id: g.id, user_id: uid, title: g.title, area: g.area || null,
-      notes: g.notes || null, done: g.done || false, done_at: g.doneAt || null,
-      sort_order: i, created_at: g.createdAt || null,
-    })), { onConflict: 'id' });
-    if (error) _syncFailed('goals upsert failed', error);
-  }
-  const { data: existing = [], error: selErr } = await sb.from('goals').select('id').eq('user_id', uid);
-  if (selErr) { _syncFailed('goals select failed', selErr); return; }
-  const keep = new Set(goals.map(g => g.id));
-  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
-  if (toDelete.length) {
-    const { error: delErr } = await sb.from('goals').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) _syncFailed('goals delete failed', delErr);
-  }
+  const uid = await _requireUid(); if (!uid) return;
+  if (!goals.length) return;
+  const { error } = await sb.from('goals').upsert(goals.map((g, i) => ({
+    id: g.id, user_id: uid, title: g.title, area: g.area || null,
+    notes: g.notes || null, done: g.done || false, done_at: g.doneAt || null,
+    sort_order: i, created_at: g.createdAt || null,
+  })), { onConflict: 'id' });
+  if (error) _syncFailed('goals upsert failed', error);
+}
+
+async function _deleteGoalRemote(id) {
+  if (LOCAL_MODE) return;
+  const uid = await _requireUid(); if (!uid) return;
+  const { error } = await sb.from('goals').delete().eq('user_id', uid).eq('id', id);
+  if (error) _syncFailed('goals delete failed', error);
 }
 
 // ── Load all data from Supabase into MEM (parallel) ──
 async function loadFromSupabase() {
   if (LOCAL_MODE) return _loadLocal();
-  const uid = await _uid(); if (!uid) return;
+  const uid = await _requireUid(); if (!uid) return;
 
   // Tasks load from 90 days back (matches TASK_HISTORY_DAYS) with NO upper
   // bound. There used to be one at today+1, which silently broke the Upcoming
@@ -865,6 +909,7 @@ async function loadFromSupabase() {
     sb.from('diet_entries').select('*').eq('user_id', uid).order('date'),
     sb.from('diet_foods').select('*').eq('user_id', uid),
     sb.from('goals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
+    sb.from('referrals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_voids').select('*').eq('user_id', uid),
     sb.from('reactive_habits').select('*').eq('user_id', uid).order('created_at'),
     sb.from('reactive_habit_logs').select('*').eq('user_id', uid).order('ts'),
@@ -885,12 +930,13 @@ async function loadFromSupabase() {
   const dietEnt = results[8].data || [];
   const dietFds = results[9].data || [];
   const goalRows = results[10].data || [];
-  const voids   = results[11].data || [];
-  const rHabits = results[12].data || [];
-  const rLogs   = results[13].data || [];
-  MEM['whoop:recovery'] = results[14].data || [];
-  MEM['whoop:workouts'] = results[15].data || [];
-  MEM['whoop:profile']  = results[16].data || null;
+  const referralRows = results[11].data || [];
+  const voids   = results[12].data || [];
+  const rHabits = results[13].data || [];
+  const rLogs   = results[14].data || [];
+  MEM['whoop:recovery'] = results[15].data || [];
+  MEM['whoop:workouts'] = results[16].data || [];
+  MEM['whoop:profile']  = results[17].data || null;
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -961,6 +1007,10 @@ async function loadFromSupabase() {
   MEM['goals:list'] = goalRows.map(g => ({
     id: g.id, title: g.title, area: g.area || null, notes: g.notes || '',
     done: !!g.done, doneAt: g.done_at || null, createdAt: g.created_at,
+  }));
+
+  MEM['referrals:list'] = referralRows.map(r => ({
+    id: r.id, name: r.name, jobId: r.job_id || null, createdAt: r.created_at,
   }));
 
   hNotes.forEach(n => {
@@ -1039,13 +1089,18 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
   _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
 }
 
 async function signOut() {
+  // Let any sync still in flight from the user's last click land first —
+  // every save is fire-and-forget, so reloading immediately could cancel one
+  // mid-request with no warning. Capped at 3s so a stuck request can't hang
+  // sign-out indefinitely.
+  if (!LOCAL_MODE) await _waitForPendingSyncs();
   try { if (!LOCAL_MODE) await sb.auth.signOut(); } catch (e) { console.error('sign out error:', e); }
   localStorage.removeItem(LOCAL_FLAG_KEY);
   location.reload();

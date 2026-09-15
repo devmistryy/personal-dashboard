@@ -80,7 +80,11 @@ function _whoopApplySyncResult(body) {
     _whoopSetBanner(body.error === 'reauth_required'
       ? 'WHOOP access expired — reconnect below.'
       : 'WHOOP unreachable — showing last-known data.');
-    if (body.error === 'reauth_required') MEM['whoop:recovery'] = [];
+    // Clear profile alongside recovery: renderWhoop()'s hasEverConnected check
+    // treats a cached profile alone as "connected", so leaving it set while
+    // recovery is empty fell through to the connected branch and crashed on
+    // an empty recovery list instead of showing the reconnect prompt.
+    if (body.error === 'reauth_required') { MEM['whoop:recovery'] = []; MEM['whoop:profile'] = null; }
     renderWhoop();
     return;
   }

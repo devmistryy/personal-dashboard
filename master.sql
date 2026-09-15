@@ -219,8 +219,14 @@ alter table settings enable row level security;
 
 -- ──────────────────── job_applications ────────────────────────
 -- id is text: client generates crypto.randomUUID() (see js/jobs.js _jobId)
+-- id is uuid (not text) in the live table — confirmed 2026-09-15 when adding
+-- the referrals FK below surfaced the mismatch: this file's `id text` was
+-- never actually applied here since the table already existed, so it had
+-- silently drifted from the real column type. js/jobs.js's _jobId() already
+-- generates crypto.randomUUID() strings, which Postgres/PostgREST accept for
+-- either column type, so nothing in the app needed to change.
 create table if not exists job_applications (
-  id            text primary key,
+  id            uuid primary key,
   user_id       uuid references auth.users not null,
   company       text not null,
   platform      text,
@@ -235,6 +241,22 @@ create table if not exists job_applications (
 -- see js/jobs.js _renderJobRoleDropdown), not a fixed enum.
 alter table job_applications add column if not exists role text;
 alter table job_applications enable row level security;
+
+-- ───────────────────────── referrals ─────────────────────────
+-- People who can refer the user into a company, shown in the Jobs tab
+-- sidebar below Job Boards. Optionally linked to a job_applications row;
+-- unlinking (or the linked application being deleted) just clears the
+-- company, it doesn't delete the referral. id is text: client generates
+-- 'rf_' + uuid (js/jobs.js _referralId).
+create table if not exists referrals (
+  id         text primary key,
+  user_id    uuid references auth.users not null,
+  name       text not null,
+  job_id     uuid references job_applications(id) on delete set null,
+  sort_order integer,
+  created_at timestamptz default now()
+);
+alter table referrals enable row level security;
 
 -- ─────────────────────────── goals ────────────────────────────
 -- Long-term objectives shown in the "Areas & Goals" tab, each optionally
@@ -491,7 +513,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','areas',
+    'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','referrals','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs',
     'whoop_recovery','whoop_workouts','whoop_profile'
   ] loop

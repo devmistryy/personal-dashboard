@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="css/main.css?v=14">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=43">
-<link rel="stylesheet" href="css/jobs.css?v=6">
+<link rel="stylesheet" href="css/jobs.css?v=9">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -252,6 +252,16 @@
             <span class="job-sort-label">Sort by</span>
             <button class="job-sort-btn active" data-sort="date">Date</button>
             <button class="job-sort-btn" data-sort="status">Status</button>
+            <div class="job-stats">
+              <div class="job-stat-pill">
+                <span class="job-stat-num" id="jobStatTotal">0</span>
+                <span class="job-stat-label">Total</span>
+              </div>
+              <div class="job-stat-pill job-stat-pill-today">
+                <span class="job-stat-num" id="jobStatToday">0</span>
+                <span class="job-stat-label">Today</span>
+              </div>
+            </div>
           </div>
           <div class="job-table-wrap">
             <table class="job-table">
@@ -284,6 +294,16 @@
           <ul class="job-site-list" id="jobSiteList"></ul>
           <div class="job-site-empty" id="jobSiteEmptyState" style="display:none;">No sites ranked yet.</div>
           <button type="button" class="job-site-add-btn" id="jobSiteAddBtn">+ Add site</button>
+        </div>
+
+        <div class="section-title">Referrals</div>
+        <div class="card referral-card">
+          <ul class="referral-list" id="referralList"></ul>
+          <div class="referral-empty" id="referralEmptyState" style="display:none;">No referrals yet.</div>
+          <div class="referral-add-row">
+            <span class="job-add-plus">+</span>
+            <input type="text" class="referral-add-input" id="referralAddInput" placeholder="Referrer name…">
+          </div>
         </div>
       </div>
     </div>
@@ -673,15 +693,15 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=24"></script>
-<script src="js/habits.js?v=36"></script>
+<script src="js/todo.js?v=25"></script>
+<script src="js/habits.js?v=38"></script>
 <script src="js/reactiveHabits.js?v=1"></script>
-<script src="js/jobs.js?v=8"></script>
-<script src="js/areas.js?v=8"></script>
-<script src="js/goals.js?v=1"></script>
+<script src="js/jobs.js?v=13"></script>
+<script src="js/areas.js?v=9"></script>
+<script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
-<script src="js/whoop.js?v=1"></script>
-<script src="js/main.js?v=32"></script>
+<script src="js/whoop.js?v=2"></script>
+<script src="js/main.js?v=34"></script>
 </body>
 </html>

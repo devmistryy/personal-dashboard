@@ -15,6 +15,7 @@ const JOB_PLATFORM_STYLE = {
   'Indeed':       { bg:'rgba(99,153,34,0.20)',  color:'#97C459' },
   'Company Site': { bg:'rgba(255,255,255,0.10)', color:'rgba(255,255,255,0.75)' },
 };
+const JOB_PLATFORM_FALLBACK_STYLE = { bg:'rgba(255,255,255,0.08)', color:'var(--text-secondary)' };
 
 let _jobSort = 'date';
 
@@ -26,26 +27,24 @@ function saveJobs(jobs) { MEM['jobs:list'] = jobs; _syncJobs(jobs); }
 function getJobRoles() { return MEM['job_roles_v1'] || []; }
 function saveJobRoles(list) { MEM['job_roles_v1'] = list; _syncSetting('job_roles_v1', list); }
 
+// Upsert-only: there is no delete-job-application feature (jobs only ever get
+// added or have fields edited), so unlike _syncReferrals this never needs to
+// reconcile deletions. It used to infer deletions by diffing the full remote
+// set against the local array and deleting whatever was missing — but that's
+// wrong on more than one device/tab: a stale local array (this device hasn't
+// loaded a job another device just added) would delete that job's row the
+// next time this device saved anything at all.
 async function _syncJobs(jobs) {
   if (LOCAL_MODE) return _saveLocal();
-  const uid = await _uid(); if (!uid) return;
-  if (jobs.length) {
-    const { error } = await sb.from('job_applications').upsert(jobs.map(j => ({
-      id: j.id, user_id: uid, company: j.company, platform: j.platform || null,
-      date_applied: j.dateApplied || null, status: j.status || 'Applied',
-      location_type: j.locationType || null, location_city: j.locationCity || null,
-      role: j.role || null,
-    })), { onConflict: 'id' });
-    if (error) _syncFailed('job_applications upsert failed', error);
-  }
-  const { data: existing, error: selErr } = await sb.from('job_applications').select('id').eq('user_id', uid);
-  if (selErr) { _syncFailed('job_applications select failed', selErr); return; }
-  const currentIds = new Set(jobs.map(j => j.id));
-  const toDelete = (existing || []).filter(r => !currentIds.has(r.id)).map(r => r.id);
-  if (toDelete.length) {
-    const { error: delErr } = await sb.from('job_applications').delete().eq('user_id', uid).in('id', toDelete);
-    if (delErr) _syncFailed('job_applications delete failed', delErr);
-  }
+  const uid = await _requireUid(); if (!uid) return;
+  if (!jobs.length) return;
+  const { error } = await sb.from('job_applications').upsert(jobs.map(j => ({
+    id: j.id, user_id: uid, company: j.company, platform: j.platform || null,
+    date_applied: j.dateApplied || null, status: j.status || 'Applied',
+    location_type: j.locationType || null, location_city: j.locationCity || null,
+    role: j.role || null,
+  })), { onConflict: 'id' });
+  if (error) _syncFailed('job_applications upsert failed', error);
 }
 
 function _jobId() {
@@ -64,9 +63,9 @@ function _fmtJobDate(ds) {
   return new Date(y, m-1, d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 
-function _esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// _esc() is defined in habits.js (loaded before this file) and shared via the
+// global scope — do not redeclare it here. A jobs.js-local copy previously
+// shadowed it with a weaker version that didn't escape single quotes.
 
 function renderJobs() {
   const jobs = [...getJobs()];
@@ -75,6 +74,10 @@ function renderJobs() {
   } else {
     jobs.sort((a,b) => JOB_STATUSES.indexOf(a.status) - JOB_STATUSES.indexOf(b.status));
   }
+  const totalEl = document.getElementById('jobStatTotal');
+  const todayEl = document.getElementById('jobStatToday');
+  if (totalEl) totalEl.textContent = jobs.length;
+  if (todayEl) todayEl.textContent = jobs.filter(j => j.dateApplied === _todayStr()).length;
   const tbody = document.getElementById('jobTableBody');
   if (!tbody) return;
   if (!jobs.length) {
@@ -83,7 +86,8 @@ function renderJobs() {
   }
   tbody.innerHTML = jobs.map(job => {
     const ss = JOB_STATUS_STYLE[job.status] || JOB_STATUS_STYLE['Applied'];
-    const ps = job.platform ? (JOB_PLATFORM_STYLE[job.platform] || { bg:'rgba(255,255,255,0.08)', color:'var(--text-secondary)' }) : null;
+    const ps = job.platform ? (JOB_PLATFORM_STYLE[job.platform] || JOB_PLATFORM_FALLBACK_STYLE) : null;
+    const pSite = job.platform ? JOB_SITE_CATALOG.find(s => s.name === job.platform) : null;
     const locLabel = job.locationType === 'remote' ? 'Remote'
       : job.locationType === 'hybrid'  ? (job.locationCity ? _esc(job.locationCity) + ' · Hybrid' : 'Hybrid')
       : job.locationType === 'onsite'  ? (job.locationCity ? _esc(job.locationCity) + ' · On-site' : 'On-site')
@@ -101,7 +105,7 @@ function renderJobs() {
       </td>
       <td class="job-td">
         ${ps
-          ? `<span class="job-pill" style="background:${ps.bg};color:${ps.color}" data-action="platform" data-id="${job.id}">${_esc(job.platform)}</span>`
+          ? `<span class="job-pill job-pill-platform" style="background:${ps.bg};color:${ps.color}" data-action="platform" data-id="${job.id}">${pSite ? `<img class="job-platform-logo" src="${_jobSiteLogoUrl(pSite.domain)}" alt="">` : ''}${_esc(job.platform)}</span>`
           : `<span class="job-pill job-pill-empty" data-action="platform" data-id="${job.id}">—</span>`}
       </td>
       <td class="job-td">
@@ -109,13 +113,14 @@ function renderJobs() {
         <input type="date" class="job-date-input" data-id="${job.id}" value="${job.dateApplied||''}" max="${_todayStr()}">
       </td>
       <td class="job-td">
-        <span class="job-pill" style="background:${ss.bg};color:${ss.color}" data-action="status" data-id="${job.id}">${job.status}</span>
+        <span class="job-pill" style="background:${ss.bg};color:${ss.color}" data-action="status" data-id="${job.id}">${_esc(job.status)}</span>
       </td>
       <td class="job-td">
         <span class="job-location-display" data-action="location" data-id="${job.id}">${locLabel || '<span style="color:var(--text-tertiary)">—</span>'}</span>
       </td>
     </tr>`;
   }).join('');
+  tbody.querySelectorAll('.job-platform-logo').forEach(img => { img.onerror = () => img.remove(); });
 }
 
 function _getJobById(id) { return getJobs().find(j => j.id === id); }
@@ -189,6 +194,7 @@ function _updateJob(id, patch) {
   Object.assign(jobs[idx], patch);
   saveJobs(jobs);
   renderJobs();
+  if ('platform' in patch) renderJobSites();
 }
 
 // Dropdown
@@ -251,16 +257,27 @@ document.addEventListener('click', (e) => {
     });
     return;
   }
-  // Platform
+  // Platform — options are the user's ranked Job Boards list, plus a fixed
+  // "Company Site" catch-all for applications made directly on an employer's site.
   const platEl = e.target.closest('[data-action="platform"]');
   if (platEl) {
     const id = platEl.dataset.id;
-    const platforms = ['LinkedIn','Indeed','Company Site'];
+    const job = _getJobById(id);
+    const sites = getJobSites().map(_jobSiteCatalogEntry).filter(Boolean);
+    sites.push({ name: 'Company Site', domain: null });
+    // Keep the job's already-assigned platform selectable even if its board
+    // was since removed from Job Boards — otherwise there'd be no way to see
+    // or change it without re-adding the board first.
+    if (job && job.platform && !sites.some(s => s.name === job.platform)) {
+      sites.unshift(JOB_SITE_CATALOG.find(s => s.name === job.platform) || { name: job.platform, domain: null });
+    }
     _openJobDropdown(platEl, (dd) => {
-      dd.innerHTML = platforms.map(p => {
-        const ps = JOB_PLATFORM_STYLE[p];
-        return `<div class="job-dd-item" data-platform="${p}"><span class="job-pill" style="background:${ps.bg};color:${ps.color};font-size:11px;padding:2px 8px;">${p}</span></div>`;
+      dd.innerHTML = sites.map(s => {
+        const ps = JOB_PLATFORM_STYLE[s.name] || JOB_PLATFORM_FALLBACK_STYLE;
+        const logo = s.domain ? `<img class="job-platform-logo" src="${_jobSiteLogoUrl(s.domain)}" alt="">` : '';
+        return `<div class="job-dd-item" data-platform="${_esc(s.name)}"><span class="job-pill job-pill-platform" style="background:${ps.bg};color:${ps.color};font-size:11px;padding:2px 8px;">${logo}${_esc(s.name)}</span></div>`;
       }).join('');
+      dd.querySelectorAll('.job-platform-logo').forEach(img => { img.onerror = () => img.remove(); });
       dd.querySelectorAll('[data-platform]').forEach(item => {
         item.addEventListener('click', () => { _updateJob(id, { platform: item.dataset.platform }); _closeJobDropdown(); });
       });
@@ -338,11 +355,17 @@ document.addEventListener('click', (e) => {
 document.addEventListener('blur', (e) => {
   if (!e.target.classList.contains('job-company-name')) return;
   const id = e.target.dataset.id;
-  const name = e.target.textContent.trim();
-  if (!name || !id) return;
+  if (!id) return;
   const jobs = getJobs();
   const idx = jobs.findIndex(j => j.id === id);
-  if (idx !== -1 && jobs[idx].company !== name) { jobs[idx].company = name; saveJobs(jobs); }
+  if (idx === -1) return;
+  const name = e.target.textContent.trim();
+  if (!name) { e.target.textContent = jobs[idx].company; return; }
+  if (jobs[idx].company !== name) {
+    jobs[idx].company = name;
+    saveJobs(jobs);
+    renderReferrals(); // a referral may be linked to this job's company
+  }
 }, true);
 
 document.addEventListener('keydown', (e) => {
@@ -402,10 +425,12 @@ function renderJobSites() {
   const list = document.getElementById('jobSiteList');
   if (!list) return;
   const keys = getJobSites();
+  const counts = {};
+  getJobs().forEach(j => { if (j.platform) counts[j.platform] = (counts[j.platform] || 0) + 1; });
   list.innerHTML = '';
   keys.forEach((key, idx) => {
     const site = _jobSiteCatalogEntry(key);
-    if (site) list.appendChild(buildJobSiteRow(site, idx));
+    if (site) list.appendChild(buildJobSiteRow(site, idx, counts[site.name] || 0));
   });
   const empty = document.getElementById('jobSiteEmptyState');
   if (empty) empty.style.display = keys.length ? 'none' : 'block';
@@ -428,7 +453,7 @@ function _buildSiteLogo(site) {
   return img;
 }
 
-function buildJobSiteRow(site, idx) {
+function buildJobSiteRow(site, idx, count) {
   const li = document.createElement('li');
   li.className = 'job-site-row';
   li.dataset.key = site.key;
@@ -455,6 +480,14 @@ function buildJobSiteRow(site, idx) {
   name.rel = 'noopener noreferrer';
   name.textContent = site.name;
   li.appendChild(name);
+
+  if (count > 0) {
+    const countEl = document.createElement('span');
+    countEl.className = 'job-site-count';
+    countEl.textContent = count;
+    countEl.title = count === 1 ? '1 application' : count + ' applications';
+    li.appendChild(countEl);
+  }
 
   const del = document.createElement('button');
   del.className = 'job-site-delete';
@@ -534,6 +567,167 @@ document.addEventListener('click', (e) => {
         renderJobSites();
         _closeJobDropdown();
       });
+      dd.appendChild(item);
+    });
+  });
+});
+
+// ── Referrals ──
+// People who can refer the user into a company. Each entry optionally links
+// to a job_applications row (by id) so the shown company always tracks that
+// application's current company name rather than a copy typed at link time.
+function getReferrals() { return MEM['referrals:list'] || []; }
+function saveReferrals(list) { MEM['referrals:list'] = list; _syncReferrals(list); }
+function _referralId() {
+  return 'rf_' + ((crypto && crypto.randomUUID) ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2));
+}
+
+// Upsert-only, like _syncJobs — deletion is handled separately by
+// _deleteReferralRemote (called directly from deleteReferral), not inferred
+// by diffing the full remote set against this local array. Inferring deletes
+// that way broke on a second tab/device: a local array that simply hadn't
+// loaded a referral added elsewhere would delete that referral's row the
+// next time this device saved anything (e.g. an unrelated name edit).
+async function _syncReferrals(referrals) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _requireUid(); if (!uid) return;
+  if (!referrals.length) return;
+  const { error } = await sb.from('referrals').upsert(referrals.map((r, i) => ({
+    id: r.id, user_id: uid, name: r.name, job_id: r.jobId || null,
+    sort_order: i, created_at: r.createdAt || null,
+  })), { onConflict: 'id' });
+  if (error) _syncFailed('referrals upsert failed', error);
+}
+
+async function _deleteReferralRemote(id) {
+  if (LOCAL_MODE) return;
+  const uid = await _requireUid(); if (!uid) return;
+  const { error } = await sb.from('referrals').delete().eq('user_id', uid).eq('id', id);
+  if (error) _syncFailed('referrals delete failed', error);
+}
+
+function _updateReferral(id, patch) {
+  const referrals = getReferrals();
+  const idx = referrals.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  Object.assign(referrals[idx], patch);
+  saveReferrals(referrals);
+  renderReferrals();
+}
+
+function deleteReferral(id) {
+  saveReferrals(getReferrals().filter(r => r.id !== id));
+  _deleteReferralRemote(id);
+  renderReferrals();
+}
+
+function buildReferralRow(r) {
+  const li = document.createElement('li');
+  li.className = 'referral-row';
+  li.dataset.id = r.id;
+
+  const name = document.createElement('span');
+  name.className = 'referral-name';
+  name.contentEditable = 'true';
+  name.spellcheck = false;
+  name.dataset.id = r.id;
+  name.textContent = r.name;
+  li.appendChild(name);
+
+  const job = r.jobId ? _getJobById(r.jobId) : null;
+  const pill = document.createElement('span');
+  pill.className = job ? 'job-pill' : 'job-pill job-pill-empty';
+  pill.dataset.action = 'referral-company';
+  pill.dataset.id = r.id;
+  pill.textContent = job ? job.company : '—';
+  li.appendChild(pill);
+
+  const del = document.createElement('button');
+  del.className = 'referral-delete';
+  del.type = 'button';
+  del.textContent = '×';
+  del.title = 'Remove referral';
+  del.addEventListener('click', () => deleteReferral(r.id));
+  li.appendChild(del);
+
+  return li;
+}
+
+function renderReferrals() {
+  const list = document.getElementById('referralList');
+  if (!list) return;
+  const referrals = getReferrals();
+  list.innerHTML = '';
+  referrals.forEach(r => list.appendChild(buildReferralRow(r)));
+  const empty = document.getElementById('referralEmptyState');
+  if (empty) empty.style.display = referrals.length ? 'none' : 'block';
+}
+
+// Referral name inline save (mirrors the job company-name pattern above).
+document.addEventListener('blur', (e) => {
+  if (!e.target.classList.contains('referral-name')) return;
+  const id = e.target.dataset.id;
+  if (!id) return;
+  const referrals = getReferrals();
+  const idx = referrals.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  const name = e.target.textContent.trim();
+  if (!name) { e.target.textContent = referrals[idx].name; return; }
+  if (referrals[idx].name !== name) { referrals[idx].name = name; saveReferrals(referrals); }
+}, true);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('referral-name')) { e.preventDefault(); e.target.blur(); }
+});
+
+// Add new referral
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.target.id !== 'referralAddInput') return;
+  const name = e.target.value.trim();
+  if (!name) return;
+  const referrals = getReferrals();
+  referrals.unshift({ id: _referralId(), name, jobId: null, createdAt: new Date().toISOString() });
+  saveReferrals(referrals);
+  e.target.value = '';
+  renderReferrals();
+});
+
+// Company link picker — distinct companies from the Job Applications table,
+// plus "Unlink" when the referral currently has one.
+document.addEventListener('click', (e) => {
+  const pill = e.target.closest('[data-action="referral-company"]');
+  if (!pill) return;
+  const id = pill.dataset.id;
+  const referral = getReferrals().find(r => r.id === id);
+  const byCompany = new Map();
+  getJobs().forEach(j => {
+    if (!j.company) return;
+    const existing = byCompany.get(j.company);
+    if (!existing || (j.dateApplied || '') > (existing.dateApplied || '')) byCompany.set(j.company, j);
+  });
+  const options = [...byCompany.values()];
+  _openJobDropdown(pill, (dd) => {
+    dd.innerHTML = '';
+    if (referral && referral.jobId) {
+      const unlink = document.createElement('div');
+      unlink.className = 'job-dd-item';
+      unlink.textContent = 'Unlink';
+      unlink.addEventListener('click', () => { _updateReferral(id, { jobId: null }); _closeJobDropdown(); });
+      dd.appendChild(unlink);
+    }
+    if (!options.length) {
+      const empty = document.createElement('div');
+      empty.className = 'job-site-picker-empty';
+      empty.textContent = 'Add a job application first';
+      dd.appendChild(empty);
+      return;
+    }
+    options.forEach(job => {
+      const item = document.createElement('div');
+      item.className = 'job-dd-item';
+      item.textContent = job.company;
+      item.addEventListener('click', () => { _updateReferral(id, { jobId: job.id }); _closeJobDropdown(); });
       dd.appendChild(item);
     });
   });

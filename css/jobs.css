@@ -3,6 +3,23 @@
   .job-sort-label { font-size:11px; color:var(--text-tertiary); font-weight:500; margin-right:2px; }
   .job-sort-btn { font-size:11px; font-weight:500; padding:3px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:transparent; color:var(--text-tertiary); cursor:pointer; font-family:var(--font-body); transition:background 0.15s,color 0.15s; }
   .job-sort-btn.active { background:rgba(255,255,255,0.08); color:var(--text-primary); border-color:rgba(255,255,255,0.15); }
+  .job-stats { display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .job-stat-pill {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:5px 12px; border-radius:999px;
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+  }
+  .job-stat-num {
+    font-family:var(--font-mono); font-weight:700; font-size:13px;
+    color:var(--text-primary); font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .job-stat-label {
+    font-size:9.5px; font-weight:600; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--text-tertiary); line-height:1;
+  }
+  .job-stat-pill-today { background:rgba(242,192,99,0.10); border-color:rgba(242,192,99,0.28); }
+  .job-stat-pill-today .job-stat-num { color:var(--warning); }
+  .job-stat-pill-today .job-stat-label { color:var(--warning); opacity:0.85; }
   .job-table-wrap { overflow-x:auto; }
   .job-table { width:100%; border-collapse:collapse; min-width:620px; table-layout:fixed; }
   .job-table col.col-company   { width:17%; }
@@ -28,6 +45,8 @@
      Status labels — cap it to the cell and ellipsize instead of hard-clipping
      mid-word; the title attribute (set in js/jobs.js) covers the rest on hover. */
   .job-pill-role { max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
+  .job-pill-platform { display:inline-flex; align-items:center; gap:6px; }
+  .job-platform-logo { width:14px; height:14px; border-radius:3px; object-fit:contain; flex-shrink:0; }
   .job-date-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
   .job-date-display:hover { color:var(--text-primary); }
   .job-date-input { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14); border-radius:6px; color:var(--text-primary); font-size:12px; padding:3px 6px; display:none; }
@@ -74,6 +93,12 @@
   .job-site-logo-fallback { flex-shrink:0; width:18px; height:18px; border-radius:5px; background:rgba(255,255,255,0.1); color:var(--text-secondary); font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .job-site-name { flex:1; min-width:0; font-size:12.5px; color:var(--text-primary); text-decoration:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .job-site-name:hover { text-decoration:underline; }
+  .job-site-count {
+    flex-shrink:0; font-family:var(--font-mono); font-size:10.5px; font-weight:700;
+    color:var(--text-tertiary); background:rgba(255,255,255,0.06);
+    border-radius:999px; padding:2px 6px; min-width:14px; text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
   .job-site-delete { flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--text-tertiary); font-size:14px; line-height:1; padding:2px 3px; border-radius:6px; opacity:0; transition:opacity 0.2s, color 0.2s; }
   .job-site-delete:hover { color:var(--danger); }
   .job-site-empty { color:var(--text-tertiary); font-size:12px; padding:10px 4px 12px; text-align:center; }
@@ -81,3 +106,19 @@
   .job-site-add-btn:hover { background:rgba(255,255,255,0.09); color:var(--text-primary); }
   .job-site-picker-item { display:flex; align-items:center; gap:8px; }
   .job-site-picker-empty { padding:8px 12px; font-size:12px; color:var(--text-tertiary); text-align:center; }
+
+  /* ── Referrals — compact sidebar card, mirrors Job Boards ── */
+  .referral-card { padding:6px; }
+  .referral-list { list-style:none; margin:0; padding:0; }
+  .referral-row { display:flex; align-items:center; gap:7px; padding:6px 6px; border-radius:8px; transition:background 0.15s; }
+  .referral-row:hover { background:rgba(255,255,255,0.05); }
+  .referral-row:hover .referral-delete { opacity:1; }
+  .referral-name { flex:1; min-width:0; outline:none; border-radius:4px; padding:2px 4px; font-size:12.5px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .referral-name:focus { background:rgba(255,255,255,0.06); white-space:normal; }
+  .referral-row .job-pill { flex-shrink:0; max-width:110px; overflow:hidden; text-overflow:ellipsis; font-size:11.5px; padding:3px 9px; }
+  .referral-delete { flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--text-tertiary); font-size:14px; line-height:1; padding:2px 3px; border-radius:6px; opacity:0; transition:opacity 0.2s, color 0.2s; }
+  .referral-delete:hover { color:var(--danger); }
+  .referral-empty { color:var(--text-tertiary); font-size:12px; padding:10px 4px 12px; text-align:center; }
+  .referral-add-row { display:flex; align-items:center; gap:8px; padding:8px 8px 6px; }
+  .referral-add-input { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-size:12.5px; font-family:var(--font-body); min-width:0; }
+  .referral-add-input::placeholder { color:var(--text-tertiary); }

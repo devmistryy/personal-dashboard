@@ -170,7 +170,10 @@ function reorderTaskByDrag(key, fromEl, toEl) {
     arr.forEach((g, i) => { if (!g.done) lastOpen = i; });
     arr.splice(lastOpen + 1, 0, item);
   } else {
-    arr.splice(to, 0, item);
+    // `to` was found before the splice above removed `from`'s row — dragging
+    // forward (from < to) shifts every later index left by one, so it has to
+    // be adjusted or the item lands one row past the intended drop target.
+    arr.splice(to > from ? to - 1 : to, 0, item);
   }
   storeSet(key, arr);
   if (key === todayKey()) loadToday(); else loadUpcoming();
@@ -585,10 +588,12 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   del.textContent = '×';
   del.title = 'Delete task';
   del.addEventListener('click', () => {
-    // A carried-over task also lives on earlier days. Dismiss its id AND purge
-    // those copies, so rollover can't resurrect it after a reload even if the
-    // dismissed id no longer matches (pre-id rows drift on each load).
-    if (key === todayKey() && taskAppearsEarlier(g)) {
+    // A carried-over task also lives on earlier days — including one that's
+    // since been dragged onto a future Upcoming date, which is why this isn't
+    // gated to `key === todayKey()`. Dismiss its id AND purge those copies, so
+    // rollover can't resurrect it after a reload even if the dismissed id no
+    // longer matches (pre-id rows drift on each load).
+    if (taskAppearsEarlier(g)) {
       dismissTask(g.id);
       if (!isSundayResetTask(g)) purgeTaskHistory(g);
     }

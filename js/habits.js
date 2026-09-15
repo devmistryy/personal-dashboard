@@ -10,7 +10,13 @@ function habitDateStr(offsetDays) {
 
 function getHabits()              { return MEM['habits:list'] || []; }
 function saveHabits(h)            { MEM['habits:list'] = h; _syncHabits(h); }
-function getHabitLog(dateStr)     { return MEM['habits:log:' + dateStr] || []; }
+// Lazily creates and persists the backing array on first access (rather than
+// handing back a fresh `[]` fallback every call) so every caller shares the
+// same reference from the start — including the very first check-in of a day,
+// before anything has been saved yet. Callers rely on mutating this array in
+// place; a throwaway fallback array would let two near-simultaneous first
+// check-ins each hold their own copy instead of converging (see saveHabitVoids).
+function getHabitLog(dateStr)     { return MEM['habits:log:' + dateStr] || (MEM['habits:log:' + dateStr] = []); }
 function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncHabitLog(dateStr, ids); }
 
 // ── Voided (excused) habit-days ──
@@ -20,7 +26,7 @@ function saveHabitLog(dateStr, ids) { MEM['habits:log:' + dateStr] = ids; _syncH
 // do counts as a normal win: voiding only ever removes a penalty, never a
 // completion — hence the `!getHabitLog(...)` guard in `_habitVoidedOn`, which is
 // the single predicate every other site below asks.
-function getHabitVoids(dateStr)      { return MEM['habits:void:' + dateStr] || []; }
+function getHabitVoids(dateStr)      { return MEM['habits:void:' + dateStr] || (MEM['habits:void:' + dateStr] = []); }
 function saveHabitVoids(dateStr, ids) { MEM['habits:void:' + dateStr] = ids; _syncHabitVoids(dateStr, ids); }
 
 function _habitVoidedOn(habitId, ds) {
@@ -1488,9 +1494,16 @@ function renderDayDetail(ds) {
   // renderHabits() re-renders this page (and the rings and streaks) via its sync block.
   const _saveVoids = ids => { saveHabitVoids(ds, ids); renderHabits(); };
 
+  // Mutate the array MEM already holds for `ds`, in place, rather than
+  // building a new array (spread/map/[]) — saveHabitLog's call sites all do
+  // this too. Two _syncHabitVoids calls for the same day both do "upsert
+  // mine, delete everything else"; sharing the same live reference means a
+  // second in-flight call sees the first call's addition already applied by
+  // the time it actually runs, instead of each holding a stale snapshot that
+  // can delete what the other just wrote.
   body.querySelectorAll('[data-void-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const ids = [...getHabitVoids(ds)];
+      const ids = getHabitVoids(ds);
       const i = ids.indexOf(btn.dataset.voidId);
       if (i === -1) ids.push(btn.dataset.voidId); else ids.splice(i, 1);
       _saveVoids(ids);
@@ -1499,8 +1512,17 @@ function renderDayDetail(ds) {
 
   const allBtn  = document.getElementById('dayVoidAll');
   const noneBtn = document.getElementById('dayVoidNone');
-  if (allBtn)  allBtn.addEventListener('click',  () => _saveVoids(scheduled.map(h => h.id)));
-  if (noneBtn) noneBtn.addEventListener('click', () => _saveVoids([]));
+  if (allBtn) allBtn.addEventListener('click', () => {
+    const ids = getHabitVoids(ds);
+    ids.length = 0;
+    scheduled.forEach(h => ids.push(h.id));
+    _saveVoids(ids);
+  });
+  if (noneBtn) noneBtn.addEventListener('click', () => {
+    const ids = getHabitVoids(ds);
+    ids.length = 0;
+    _saveVoids(ids);
+  });
 
   body.querySelectorAll('input[data-habit-id]').forEach(cb => {
     cb.addEventListener('change', () => {

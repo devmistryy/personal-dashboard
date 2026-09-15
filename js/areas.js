@@ -63,6 +63,16 @@ function renderAreaDetail() {
     const areas = getAreas();
     const idx = areas.findIndex(a => a.name === name);
     if (idx === -1) return;
+    // Unlike the create-area modal, this had no duplicate check at all — a
+    // rename that collided with an existing area's name silently produced two
+    // distinct area objects sharing one display name, which then merged
+    // visually (everything tagged with either name matches both) but stayed
+    // split in the Areas grid, and deleting either one wiped the tag from both.
+    if (areas.some((a, i) => i !== idx && a.name.toLowerCase() === newName.toLowerCase())) {
+      alert(`An area named "${newName}" already exists.`);
+      nameEl.textContent = name;
+      return;
+    }
     areas[idx] = { ...areas[idx], name: newName };
     saveAreas(areas);
     // rename notes key

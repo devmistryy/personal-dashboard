@@ -195,6 +195,7 @@ function deleteGoal(id) {
   if (!confirm(`Delete goal "${g.title}"?`)) return;
   _goalExpanded.delete(id);
   saveGoals(getGoals().filter(x => x.id !== id));
+  _deleteGoalRemote(id);
   renderGoals();
 }
 
