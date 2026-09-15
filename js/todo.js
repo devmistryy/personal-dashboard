@@ -301,21 +301,32 @@ function rollover() {
 // were deliberately scheduled, and (sharing an id with the real past-day task)
 // they stop rollover from carrying the real one forward.
 //
-// A stranded copy is any future-dated task whose id also sits on today or an
-// earlier day. Planner tasks get a fresh id, so they never match. Drop the
-// future copy; the earlier one carries forward normally below.
+// A stranded copy is any future-dated task whose id ALSO sits on today
+// specifically (not just any earlier day — see below). Planner tasks get a
+// fresh id, so they never match. Drop the future copy; the real one on today
+// carries forward normally below.
+//
+// This used to match "today or an earlier day", but dragging a task forward
+// (js/todo.js moveTaskToDate) legitimately creates that same shape on
+// purpose: an old, chronically-overdue task keeps its original day's row as
+// history (rollover never deletes it) while the drag removes it from today
+// and places it on a future date. That's not a stranded clock-glitch copy —
+// it's the point of the feature — but the old "<= activeDate" check couldn't
+// tell the two apart and deleted the deliberate future placement every load,
+// which let rollover's carry-forward put the task right back on today.
+// Narrowing to "today exactly" keeps the clock-glitch case (rollover only
+// ever strands copies by copying FROM today, so the genuine original is
+// always still on today when the clock corrects) while leaving an
+// intentionally-rescheduled task's older history rows alone.
 function reclaimStrandedFutureTasks(activeDate) {
-  const behindOrToday = new Set();
-  storeListKeys('tasks:').forEach(k => {
-    if (k.slice(6) <= activeDate)
-      (storeGet(k) || []).forEach(g => { if (g.id) behindOrToday.add(g.id); });
-  });
-  if (!behindOrToday.size) return;
+  const onToday = new Set();
+  (storeGet('tasks:' + activeDate) || []).forEach(g => { if (g.id) onToday.add(g.id); });
+  if (!onToday.size) return;
 
   storeListKeys('tasks:').forEach(k => {
     if (k.slice(6) <= activeDate) return;
     const arr = storeGet(k) || [];
-    const kept = arr.filter(g => !g.id || !behindOrToday.has(g.id));
+    const kept = arr.filter(g => !g.id || !onToday.has(g.id));
     if (kept.length !== arr.length) storeSet(k, kept);
   });
 }
