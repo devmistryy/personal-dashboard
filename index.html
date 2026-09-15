@@ -17,10 +17,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=12">
+<link rel="stylesheet" href="css/main.css?v=14">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=43">
-<link rel="stylesheet" href="css/jobs.css?v=1">
+<link rel="stylesheet" href="css/jobs.css?v=6">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -242,34 +242,46 @@
 
   <!-- Tab: Jobs -->
   <div class="tab-panel" id="tab-jobs">
-    <div class="section">
-      <div class="section-title">Job Applications</div>
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div class="job-sort-bar">
-          <span class="job-sort-label">Sort by</span>
-          <button class="job-sort-btn active" data-sort="date">Date</button>
-          <button class="job-sort-btn" data-sort="status">Status</button>
+    <div class="jobs-split">
+      <div class="section jobs-col-main">
+        <div class="section-title">Job Applications</div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="job-sort-bar">
+            <span class="job-sort-label">Sort by</span>
+            <button class="job-sort-btn active" data-sort="date">Date</button>
+            <button class="job-sort-btn" data-sort="status">Status</button>
+          </div>
+          <div class="job-table-wrap">
+            <table class="job-table">
+              <colgroup>
+                <col class="col-company"><col class="col-role"><col class="col-platform"><col class="col-date"><col class="col-status"><col class="col-location">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th><span class="th-inner"><i class="ti ti-letter-case" aria-hidden="true"></i>Company</span></th>
+                  <th><span class="th-inner"><i class="ti ti-briefcase" aria-hidden="true"></i>Job Role</span></th>
+                  <th><span class="th-inner"><i class="ti ti-target" aria-hidden="true"></i>Platform</span></th>
+                  <th><span class="th-inner"><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</span></th>
+                  <th><span class="th-inner"><i class="ti ti-list-check" aria-hidden="true"></i>Status</span></th>
+                  <th><span class="th-inner"><i class="ti ti-map-pin" aria-hidden="true"></i>Location</span></th>
+                </tr>
+              </thead>
+              <tbody id="jobTableBody"></tbody>
+            </table>
+          </div>
+          <div class="job-add-row">
+            <span class="job-add-plus">+</span>
+            <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
+          </div>
         </div>
-        <div class="job-table-wrap">
-          <table class="job-table">
-            <colgroup>
-              <col class="col-company"><col class="col-platform"><col class="col-date"><col class="col-status"><col class="col-location">
-            </colgroup>
-            <thead>
-              <tr>
-                <th><span class="th-inner"><i class="ti ti-letter-case" aria-hidden="true"></i>Company</span></th>
-                <th><span class="th-inner"><i class="ti ti-target" aria-hidden="true"></i>Platform</span></th>
-                <th><span class="th-inner"><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</span></th>
-                <th><span class="th-inner"><i class="ti ti-list-check" aria-hidden="true"></i>Status</span></th>
-                <th><span class="th-inner"><i class="ti ti-map-pin" aria-hidden="true"></i>Location</span></th>
-              </tr>
-            </thead>
-            <tbody id="jobTableBody"></tbody>
-          </table>
-        </div>
-        <div class="job-add-row">
-          <span class="job-add-plus">+</span>
-          <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
+      </div>
+
+      <div class="section jobs-col-side">
+        <div class="section-title">Job Boards</div>
+        <div class="card job-site-card">
+          <ul class="job-site-list" id="jobSiteList"></ul>
+          <div class="job-site-empty" id="jobSiteEmptyState" style="display:none;">No sites ranked yet.</div>
+          <button type="button" class="job-site-add-btn" id="jobSiteAddBtn">+ Add site</button>
         </div>
       </div>
     </div>
@@ -610,11 +622,11 @@
 <script src="js/todo.js?v=24"></script>
 <script src="js/habits.js?v=36"></script>
 <script src="js/reactiveHabits.js?v=1"></script>
-<script src="js/jobs.js?v=2"></script>
+<script src="js/jobs.js?v=8"></script>
 <script src="js/areas.js?v=8"></script>
 <script src="js/goals.js?v=1"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
-<script src="js/main.js?v=30"></script>
+<script src="js/main.js?v=32"></script>
 </body>
 </html>

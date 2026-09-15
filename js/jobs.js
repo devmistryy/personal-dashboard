@@ -21,6 +21,11 @@ let _jobSort = 'date';
 function getJobs() { return MEM['jobs:list'] || []; }
 function saveJobs(jobs) { MEM['jobs:list'] = jobs; _syncJobs(jobs); }
 
+// User-created Job Role options (settings key, like the job boards catalog
+// picks but user-authored) — jobs store the plain role string.
+function getJobRoles() { return MEM['job_roles_v1'] || []; }
+function saveJobRoles(list) { MEM['job_roles_v1'] = list; _syncSetting('job_roles_v1', list); }
+
 async function _syncJobs(jobs) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _uid(); if (!uid) return;
@@ -29,6 +34,7 @@ async function _syncJobs(jobs) {
       id: j.id, user_id: uid, company: j.company, platform: j.platform || null,
       date_applied: j.dateApplied || null, status: j.status || 'Applied',
       location_type: j.locationType || null, location_city: j.locationCity || null,
+      role: j.role || null,
     })), { onConflict: 'id' });
     if (error) _syncFailed('job_applications upsert failed', error);
   }
@@ -72,7 +78,7 @@ function renderJobs() {
   const tbody = document.getElementById('jobTableBody');
   if (!tbody) return;
   if (!jobs.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="job-empty">No applications yet — type a company name below.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="job-empty">No applications yet — type a company name below.</td></tr>';
     return;
   }
   tbody.innerHTML = jobs.map(job => {
@@ -87,6 +93,11 @@ function renderJobs() {
         <div class="job-company-cell">
           <span class="job-company-name" contenteditable="true" spellcheck="false" data-id="${job.id}">${_esc(job.company)}</span>
         </div>
+      </td>
+      <td class="job-td">
+        ${job.role
+          ? `<span class="job-pill job-pill-role" style="background:rgba(255,255,255,0.10);color:var(--text-secondary)" data-action="role" data-id="${job.id}" title="${_esc(job.role)}">${_esc(job.role)}</span>`
+          : `<span class="job-pill job-pill-empty" data-action="role" data-id="${job.id}">—</span>`}
       </td>
       <td class="job-td">
         ${ps
@@ -109,6 +120,68 @@ function renderJobs() {
 
 function _getJobById(id) { return getJobs().find(j => j.id === id); }
 
+// Renders into an already-open job-dropdown: existing role options (click to
+// assign, × to remove from the list) plus an input to create a new one.
+// Re-invoked in place after add/remove so the list stays current without
+// closing the dropdown.
+function _renderJobRoleDropdown(dd, id) {
+  const roles = getJobRoles();
+  const job = _getJobById(id);
+  dd.innerHTML = '';
+  if (!roles.length) {
+    const empty = document.createElement('div');
+    empty.className = 'job-dd-empty';
+    empty.textContent = 'No roles yet';
+    dd.appendChild(empty);
+  }
+  roles.forEach(role => {
+    const item = document.createElement('div');
+    item.className = 'job-dd-item job-dd-item-removable';
+    if (job && job.role === role) item.style.background = 'rgba(255,255,255,0.07)';
+    const label = document.createElement('span');
+    label.className = 'job-dd-item-label';
+    label.textContent = role;
+    item.appendChild(label);
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'job-dd-item-remove';
+    rm.textContent = '×';
+    rm.title = 'Remove role option';
+    rm.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      saveJobRoles(getJobRoles().filter(r => r !== role));
+      _renderJobRoleDropdown(dd, id);
+    });
+    item.appendChild(rm);
+    item.addEventListener('click', () => { _updateJob(id, { role }); _closeJobDropdown(); });
+    dd.appendChild(item);
+  });
+  const addRow = document.createElement('div');
+  addRow.className = 'job-dd-add-row';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'job-loc-city-input';
+  input.placeholder = '+ Add a role…';
+  addRow.appendChild(input);
+  dd.appendChild(addRow);
+  input.addEventListener('click', ev => ev.stopPropagation());
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') {
+      const val = input.value.trim();
+      if (!val) return;
+      const roles2 = getJobRoles();
+      if (!roles2.includes(val)) { roles2.push(val); saveJobRoles(roles2); }
+      _updateJob(id, { role: val });
+      _closeJobDropdown();
+    }
+    if (ev.key === 'Escape') _closeJobDropdown();
+  });
+  // preventScroll: this input sits after every existing role in the list, so a
+  // plain .focus() scrolls the (possibly tall, scrollable) dropdown down to
+  // reveal it — hiding the very options list the dropdown opened to show.
+  setTimeout(() => input.focus({ preventScroll: true }), 0);
+}
+
 function _updateJob(id, patch) {
   const jobs = getJobs();
   const idx = jobs.findIndex(j => j.id === id);
@@ -125,11 +198,27 @@ function _openJobDropdown(triggerEl, buildFn) {
   buildFn(dd);
   const rect = triggerEl.getBoundingClientRect();
   dd.style.display = 'block';
+  // dd is a single shared element reused by every dropdown (status, platform,
+  // role, job-site picker, ...) and is only ever hidden, never removed — so a
+  // scroll position left over from a previous, taller dropdown (e.g. the job
+  // site picker scrolled halfway down) would otherwise carry over and open
+  // this one already scrolled past its first items. Must run after `display`
+  // is set to 'block' — assigning scrollTop on a display:none element is a
+  // silent no-op.
+  dd.scrollTop = 0;
   const ddW = 180;
   let left = rect.left;
   if (left + ddW > window.innerWidth - 8) left = window.innerWidth - ddW - 8;
   dd.style.left = left + 'px';
   dd.style.top = (rect.bottom + 5) + 'px';
+  // Flip above the trigger (or clamp) when there isn't room below — otherwise a
+  // long list (e.g. the job site picker) renders partly off-screen with no way
+  // to reach the rest, since the dropdown is position:fixed.
+  const ddH = dd.getBoundingClientRect().height;
+  if (rect.bottom + 5 + ddH > window.innerHeight - 8) {
+    const above = rect.top - 5 - ddH;
+    dd.style.top = (above >= 8 ? above : Math.max(8, window.innerHeight - ddH - 8)) + 'px';
+  }
   if (_jddCloseHandler) document.removeEventListener('click', _jddCloseHandler, true);
   _jddCloseHandler = (e) => {
     if (!dd.contains(e.target) && e.target !== triggerEl) {
@@ -176,6 +265,14 @@ document.addEventListener('click', (e) => {
         item.addEventListener('click', () => { _updateJob(id, { platform: item.dataset.platform }); _closeJobDropdown(); });
       });
     });
+    return;
+  }
+  // Job Role — options the user creates themselves, managed right in this
+  // dropdown (type + Enter to add, × to remove) rather than a separate screen.
+  const roleEl = e.target.closest('[data-action="role"]');
+  if (roleEl) {
+    const id = roleEl.dataset.id;
+    _openJobDropdown(roleEl, (dd) => _renderJobRoleDropdown(dd, id));
     return;
   }
   // Date
@@ -258,7 +355,7 @@ document.addEventListener('keydown', (e) => {
   const name = e.target.value.trim();
   if (!name) return;
   const jobs = getJobs();
-  jobs.unshift({ id: _jobId(), company:name, platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
+  jobs.unshift({ id: _jobId(), company:name, role:'', platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
   saveJobs(jobs);
   e.target.value = '';
   renderJobs();
@@ -271,4 +368,173 @@ document.addEventListener('click', (e) => {
   _jobSort = btn.dataset.sort;
   document.querySelectorAll('.job-sort-btn').forEach(b => b.classList.toggle('active', b === btn));
   renderJobs();
+});
+
+// ── Job Boards (ranked list of job listing sites) ──
+// A fixed catalog of well-known sites, each with a logo + link already set up —
+// the user just picks which ones to rank (drag to reorder) rather than typing
+// in a name and URL by hand. Add a new option here to make it pickable.
+const JOB_SITE_CATALOG = [
+  { key: 'linkedin',      name: 'LinkedIn',      domain: 'linkedin.com',      url: 'https://www.linkedin.com/jobs' },
+  { key: 'indeed',        name: 'Indeed',        domain: 'indeed.com',        url: 'https://www.indeed.com' },
+  { key: 'glassdoor',     name: 'Glassdoor',     domain: 'glassdoor.com',     url: 'https://www.glassdoor.com' },
+  { key: 'ziprecruiter',  name: 'ZipRecruiter',  domain: 'ziprecruiter.com',  url: 'https://www.ziprecruiter.com' },
+  { key: 'wellfound',     name: 'Wellfound',     domain: 'wellfound.com',     url: 'https://wellfound.com' },
+  { key: 'builtin',       name: 'Built In',      domain: 'builtin.com',       url: 'https://builtin.com' },
+  { key: 'monster',       name: 'Monster',       domain: 'monster.com',       url: 'https://www.monster.com' },
+  { key: 'dice',          name: 'Dice',          domain: 'dice.com',          url: 'https://www.dice.com' },
+  { key: 'handshake',     name: 'Handshake',     domain: 'joinhandshake.com', url: 'https://joinhandshake.com' },
+  { key: 'hired',         name: 'Hired',         domain: 'hired.com',         url: 'https://hired.com' },
+  { key: 'simplyhired',   name: 'SimplyHired',   domain: 'simplyhired.com',   url: 'https://www.simplyhired.com' },
+  { key: 'careerbuilder', name: 'CareerBuilder', domain: 'careerbuilder.com', url: 'https://www.careerbuilder.com' },
+  { key: 'usajobs',       name: 'USAJOBS',       domain: 'usajobs.gov',       url: 'https://www.usajobs.gov' },
+];
+function _jobSiteCatalogEntry(key) { return JOB_SITE_CATALOG.find(s => s.key === key); }
+function _jobSiteLogoUrl(domain) { return `https://www.google.com/s2/favicons?sz=64&domain=${domain}`; }
+
+// MEM['job_sites_v1'] is just an array of catalog keys — rank = position.
+function getJobSites() { return MEM['job_sites_v1'] || []; }
+function saveJobSites(keys) { MEM['job_sites_v1'] = keys; _syncSetting('job_sites_v1', keys); }
+
+let _jobSiteDragFrom = null;
+
+function renderJobSites() {
+  const list = document.getElementById('jobSiteList');
+  if (!list) return;
+  const keys = getJobSites();
+  list.innerHTML = '';
+  keys.forEach((key, idx) => {
+    const site = _jobSiteCatalogEntry(key);
+    if (site) list.appendChild(buildJobSiteRow(site, idx));
+  });
+  const empty = document.getElementById('jobSiteEmptyState');
+  if (empty) empty.style.display = keys.length ? 'none' : 'block';
+  const addBtn = document.getElementById('jobSiteAddBtn');
+  if (addBtn) addBtn.style.display = keys.length >= JOB_SITE_CATALOG.length ? 'none' : '';
+}
+
+function _buildSiteLogo(site) {
+  const img = document.createElement('img');
+  img.className = 'job-site-logo';
+  img.src = _jobSiteLogoUrl(site.domain);
+  img.alt = '';
+  img.loading = 'lazy';
+  img.onerror = () => {
+    const fallback = document.createElement('span');
+    fallback.className = 'job-site-logo-fallback';
+    fallback.textContent = site.name[0].toUpperCase();
+    img.replaceWith(fallback);
+  };
+  return img;
+}
+
+function buildJobSiteRow(site, idx) {
+  const li = document.createElement('li');
+  li.className = 'job-site-row';
+  li.dataset.key = site.key;
+  li.draggable = true;
+
+  const drag = document.createElement('span');
+  drag.className = 'job-site-drag';
+  drag.textContent = '⋮⋮';
+  drag.setAttribute('aria-hidden', 'true');
+  li.appendChild(drag);
+  _wireJobSiteDrag(li, site.key);
+
+  const rank = document.createElement('span');
+  rank.className = 'job-site-rank';
+  rank.textContent = idx + 1;
+  li.appendChild(rank);
+
+  li.appendChild(_buildSiteLogo(site));
+
+  const name = document.createElement('a');
+  name.className = 'job-site-name';
+  name.href = site.url;
+  name.target = '_blank';
+  name.rel = 'noopener noreferrer';
+  name.textContent = site.name;
+  li.appendChild(name);
+
+  const del = document.createElement('button');
+  del.className = 'job-site-delete';
+  del.type = 'button';
+  del.textContent = '×';
+  del.title = 'Remove from ranking';
+  del.addEventListener('click', () => deleteJobSite(site.key));
+  li.appendChild(del);
+
+  return li;
+}
+
+function deleteJobSite(key) {
+  saveJobSites(getJobSites().filter(k => k !== key));
+  renderJobSites();
+}
+
+function _wireJobSiteDrag(li, key) {
+  li.addEventListener('dragstart', e => {
+    _jobSiteDragFrom = key;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => li.classList.add('dragging'), 0);
+  });
+  li.addEventListener('dragend', () => {
+    li.classList.remove('dragging');
+    document.querySelectorAll('#jobSiteList .job-site-row').forEach(r => r.classList.remove('drag-over'));
+  });
+  li.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('#jobSiteList .job-site-row').forEach(r => r.classList.remove('drag-over'));
+    if (key !== _jobSiteDragFrom) li.classList.add('drag-over');
+  });
+  li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+  li.addEventListener('drop', e => {
+    e.preventDefault();
+    li.classList.remove('drag-over');
+    if (_jobSiteDragFrom == null || _jobSiteDragFrom === key) return;
+    const keys = getJobSites();
+    const from = keys.indexOf(_jobSiteDragFrom);
+    const to   = keys.indexOf(key);
+    if (from < 0 || to < 0) return;
+    const [moved] = keys.splice(from, 1);
+    keys.splice(to, 0, moved);
+    saveJobSites(keys);
+    _jobSiteDragFrom = null;
+    renderJobSites();
+  });
+}
+
+// "+ Add a job site" — pick from the catalog entries not already ranked.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('#jobSiteAddBtn');
+  if (!btn) return;
+  const already = new Set(getJobSites());
+  const available = JOB_SITE_CATALOG.filter(s => !already.has(s.key));
+  _openJobDropdown(btn, (dd) => {
+    dd.innerHTML = '';
+    if (!available.length) {
+      const empty = document.createElement('div');
+      empty.className = 'job-site-picker-empty';
+      empty.textContent = 'All sites added';
+      dd.appendChild(empty);
+      return;
+    }
+    available.forEach(site => {
+      const item = document.createElement('div');
+      item.className = 'job-dd-item job-site-picker-item';
+      item.appendChild(_buildSiteLogo(site));
+      const label = document.createElement('span');
+      label.textContent = site.name;
+      item.appendChild(label);
+      item.addEventListener('click', () => {
+        const keys = getJobSites();
+        keys.push(site.key);
+        saveJobSites(keys);
+        renderJobSites();
+        _closeJobDropdown();
+      });
+      dd.appendChild(item);
+    });
+  });
 });

@@ -230,6 +230,10 @@ create table if not exists job_applications (
   location_city text,
   created_at    timestamptz default now()
 );
+-- Job Role: a free-text value the user picks from their own self-authored
+-- option list (settings key 'job_roles_v1', managed inline in the dropdown —
+-- see js/jobs.js _renderJobRoleDropdown), not a fixed enum.
+alter table job_applications add column if not exists role text;
 alter table job_applications enable row level security;
 
 -- ─────────────────────────── goals ────────────────────────────

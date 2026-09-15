@@ -108,8 +108,10 @@ function _seedLocalData() {
     ],
     'task_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
-      { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
+      { id: 'j_' + Math.random().toString(36).slice(2, 10), company: 'Example Corp', role: 'Software Engineer', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
     ],
+    'job_roles_v1': ['Software Engineer', 'Product Manager'],
+    'job_sites_v1': ['linkedin', 'indeed'],
     'goals:list': [
       { id: 'gl_seed1', title: 'Ship the dashboard v2', area: 'Work',   notes: 'Areas & Goals tab, then a weekly review.', done: false, doneAt: null, createdAt: new Date(Date.now() - 6 * 86400000).toISOString() },
       { id: 'gl_seed2', title: 'Run a 10k',             area: 'Health', notes: '', done: false, doneAt: null, createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
@@ -931,7 +933,7 @@ async function loadFromSupabase() {
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
 
   MEM['jobs:list'] = jobs.map(j => ({
-    id: j.id, company: j.company, platform: j.platform || '',
+    id: j.id, company: j.company, role: j.role || '', platform: j.platform || '',
     dateApplied: j.date_applied || '', status: j.status || 'Applied',
     locationType: j.location_type || '', locationCity: j.location_city || '',
   }));
@@ -1017,7 +1019,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderAreas(); renderGoals(); renderDiet(); renderMobility();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
 }

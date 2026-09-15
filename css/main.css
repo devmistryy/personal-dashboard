@@ -87,6 +87,20 @@
     z-index: 1;
   }
 
+  /* Jobs tab breaks out of the 1100px reading-width column (every other tab
+     stays centered in it) — its table + job-boards sidebar can use the full
+     window width. Only kicks in once page-wrap has actually hit its cap
+     (viewport content area > 1100px, i.e. viewport > 1140px incl. body's
+     20px side padding) — below that page-wrap already fills the width. */
+  @media (min-width: 1140px) {
+    #tab-jobs.active {
+      width: calc(100vw - 40px);
+      max-width: none;
+      margin-left: calc(50% - 50vw + 20px);
+      margin-right: calc(50% - 50vw + 20px);
+    }
+  }
+
   /* ── Card chassis ── */
   .card {
     background: var(--card-bg);
