@@ -99,6 +99,12 @@ function setHabitSort(mode)  { MEM['habit_sort_v1'] = mode; _syncSetting('habit_
 
 function _habitCreatedKey(h) { return h.createdAt || h.startDate || ''; }
 
+// Morning / (untoggled) / Night / End-of-Day — the three routine flags are
+// mutually exclusive, so this places each habit in exactly one of four bands.
+function _habitGroupRank(h) {
+  return h.morningRoutine ? 0 : h.nightRoutine ? 2 : h.endOfDay ? 3 : 1;
+}
+
 // Returns a new array sorted for display. `MEM['habits:list']` is never mutated —
 // its order is the canonical "custom" order and the tiebreak for the other modes.
 function _sortHabitsForDisplay(list, mode) {
@@ -117,8 +123,12 @@ function _sortHabitsForDisplay(list, mode) {
       if (!!aa !== !!ba) return aa ? -1 : 1;            // no-area group last
       return aa.localeCompare(ba, undefined, { sensitivity: 'base' }) || byCustom(a, b);
     });
+  } else if (mode === 'custom') {
+    // Morning-routine habits first, then untoggled, then Night-routine, then
+    // End-of-Day — custom drag order is the tiebreak within each band.
+    arr.sort((a, b) => _habitGroupRank(a) - _habitGroupRank(b) || byCustom(a, b));
   }
-  return arr; // 'custom' / unknown → stored order
+  return arr; // unknown mode → stored order
 }
 
 const _HABIT_SORT_MODES = [
@@ -151,6 +161,7 @@ function _reorderHabitByDrag(fromEl, toEl) {
   const target  = list.find(h => h.id === toId);
   if (!dragged || !target) return;
   if (m === 'area' && (dragged.area || null) !== (target.area || null)) return;
+  if (m === 'custom' && _habitGroupRank(dragged) !== _habitGroupRank(target)) return;
   const next = list.filter(h => h.id !== fromId);
   next.splice(next.indexOf(target), 0, dragged);
   saveHabits(next);
