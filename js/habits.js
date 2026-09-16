@@ -46,7 +46,7 @@ function _isIncrementHabit(habit)        { return habit.trackType === 'increment
 function _habitTarget(habit)             { return Math.max(1, habit.target || 1); }
 
 function setHabitCount(dateStr, habit, count) {
-  const clamped = Math.max(0, count);
+  const clamped = Math.max(0, Math.min(count, _habitTarget(habit)));
   const counts  = getHabitCounts(dateStr);
   if (clamped > 0) counts[habit.id] = clamped; else delete counts[habit.id];
   MEM['habits:count:' + dateStr] = counts;
@@ -1076,7 +1076,7 @@ function renderHabitDetailPage(habit, allHabits) {
       <div class="habit-stepper">
         <button class="habit-stepper-btn" id="habitCountMinus" ${todayCount <= 0 ? 'disabled' : ''} aria-label="Decrement">−</button>
         <span class="habit-stepper-count${todayCount >= target ? ' complete' : ''}">${todayCount} / ${target}</span>
-        <button class="habit-stepper-btn" id="habitCountPlus" aria-label="Increment">+</button>
+        <button class="habit-stepper-btn" id="habitCountPlus" ${todayCount >= target ? 'disabled' : ''} aria-label="Increment">+</button>
       </div>
       ` : `
       <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
@@ -1306,6 +1306,8 @@ function renderHabitHistoryGrid(habit) {
   const startDate = habit.startDate || today;
   const isArchived = !!habit.archived;
   const brokenN = _habitRecentlyBroken(habit);
+  const isIncrement = _isIncrementHabit(habit);
+  const target = isIncrement ? _habitTarget(habit) : 0;
   const now = new Date();
 
   const MONTH_NAMES = ['January','February','March','April','May','June',
@@ -1347,6 +1349,7 @@ function renderHabitHistoryGrid(habit) {
     const isRetired = _habitRetiredOn(habit, ds);
     const isBeforeStart = ds < startDate && !_habitInPriorRun(habit, ds);
     const isStreakBroke = brokenN > 0 && ds === _shiftDay(today, -1);
+    const count = isIncrement ? getHabitCount(ds, habit.id) : 0;
 
     let cls = 'habit-cal-day';
     // A retired day gets the same inert treatment as a future one — the habit
@@ -1360,9 +1363,19 @@ function renderHabitHistoryGrid(habit) {
     if (isToday && !isRetired) cls += ' today';
 
     // An archived habit is a frozen record: nothing about it can be re-marked.
-    const clickable = !isFuture && !isBeforeStart && !isArchived;
-    const cellTitle = isRetired ? `${ds} — archived` : voided ? `${ds} — voided` : ds;
-    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${cellTitle}"><span class="habit-cal-day-num">${d}</span></div>`;
+    // An increment habit's count only changes via a stepper (Today's check-in,
+    // or the Day Detail page) — the calendar square is read-only for it.
+    const clickable = !isFuture && !isBeforeStart && !isArchived && !isIncrement;
+    // The tally reads as plain text (e.g. "2/5") rather than a color tint, so
+    // it only shows on days the habit was actually in play.
+    const showCount = isIncrement && !isFuture && !isBeforeStart && !isRetired;
+    if (showCount) cls += ' has-count';
+    const countSub = showCount ? `<span class="habit-cal-day-sub">${count}/${target}</span>` : '';
+    const cellTitle = isRetired ? `${ds} — archived`
+      : voided ? `${ds} — voided`
+      : isIncrement ? `${ds} — ${count} / ${target}`
+      : ds;
+    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${cellTitle}"><span class="habit-cal-day-num">${d}</span>${countSub}</div>`;
   }
 
   // Fill trailing cells to complete the last row
@@ -1527,17 +1540,29 @@ function renderDayDetail(ds) {
     const areaTag = areaObj
       ? `<span class="day-detail-habit-area" style="background:${_esc(areaObj.color)}BF">${_esc(areaObj.name)}</span>`
       : '';
-    return `
-    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}${voidActive ? ' is-voided' : ''}${isLocked ? ' is-locked' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}"${isLocked ? ' title="Archived — its check-ins are locked"' : ''}>
-      ${rowDrag ? '<span class="habit-drag-handle" aria-hidden="true">⋮⋮</span>' : ''}
+    const isIncrement = _isIncrementHabit(h);
+    const count  = isIncrement ? getHabitCount(ds, h.id) : 0;
+    const target = isIncrement ? _habitTarget(h) : 0;
+    // Any day (not just today) gets its own exact count here — the stepper
+    // writes straight through setHabitCount(ds, ...), same as the "Today's
+    // check-in" card on the habit's own detail page.
+    const doneCtl = isIncrement ? `
+      <div class="habit-stepper habit-stepper--compact">
+        <button class="habit-stepper-btn" data-count-op="dec" data-habit-id="${h.id}"${(isLocked || count <= 0) ? ' disabled' : ''} aria-label="Decrement">−</button>
+        <span class="habit-stepper-count${count >= target ? ' complete' : ''}">${count} / ${target}</span>
+        <button class="habit-stepper-btn" data-count-op="inc" data-habit-id="${h.id}"${(isLocked || count >= target) ? ' disabled' : ''} aria-label="Increment">+</button>
+      </div>` : `
       <label class="habit-cb-wrap">
         <input type="checkbox" data-habit-id="${h.id}"${isDone ? ' checked' : ''}${isLocked ? ' disabled' : ''}>
         <span class="habit-cb-box"></span>
-      </label>
+      </label>`;
+    return `
+    <div class="day-detail-habit-row${isDone ? ' is-done' : ''}${voidActive ? ' is-voided' : ''}${isLocked ? ' is-locked' : ''}"${rowDrag ? ' draggable="true"' : ''} data-habit-id="${h.id}"${isLocked ? ' title="Archived — its check-ins are locked"' : ''}>
+      ${rowDrag ? '<span class="habit-drag-handle" aria-hidden="true">⋮⋮</span>' : ''}
+      ${doneCtl}
       <span class="day-detail-habit-name">${_esc(h.name)}</span>
       ${isLocked ? '<span class="habit-meta-tag archived-tag">Archived</span>' : ''}
       ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
-      ${_isIncrementHabit(h) ? `<span class="habit-meta-tag count">${getHabitCount(ds, h.id)} / ${_habitTarget(h)}</span>` : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${h.morningRoutine ? '<span class="habit-meta-tag morning">Morning Routine</span>' : ''}
       ${h.nightRoutine ? '<span class="habit-meta-tag night">Night Routine</span>' : ''}
@@ -1633,6 +1658,16 @@ function renderDayDetail(ds) {
       const h = habits.find(x => x.id === cb.dataset.habitId);
       if (h) _toggleHabitDone(ds, h);
       // renderHabits re-renders the open day view via its sync block
+      _flipRows(document.getElementById('dayDetailBody'), '.day-detail-habit-row', renderHabits);
+    });
+  });
+
+  body.querySelectorAll('[data-count-op]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const h = habits.find(x => x.id === btn.dataset.habitId);
+      if (!h) return;
+      const delta = btn.dataset.countOp === 'inc' ? 1 : -1;
+      setHabitCount(ds, h, getHabitCount(ds, h.id) + delta);
       _flipRows(document.getElementById('dayDetailBody'), '.day-detail-habit-row', renderHabits);
     });
   });
