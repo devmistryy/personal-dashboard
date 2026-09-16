@@ -33,6 +33,48 @@ function _habitVoidedOn(habitId, ds) {
   return getHabitVoids(ds).includes(habitId) && !getHabitLog(ds).includes(habitId);
 }
 
+// ── Increment (count) habits ──
+// A 'checkbox' habit (the default) is done or not; an 'increment' habit is
+// done N times a day against a `target` the user sets (e.g. "drink water 8
+// times"). The raw daily tally lives here, keyed like the void log; whether
+// the day counts as *done* still lives entirely in habits:log, kept in sync
+// by setHabitCount below, so streaks/rings/history never need to know a
+// count habit exists.
+function getHabitCounts(dateStr)         { return MEM['habits:count:' + dateStr] || (MEM['habits:count:' + dateStr] = {}); }
+function getHabitCount(dateStr, habitId) { return getHabitCounts(dateStr)[habitId] || 0; }
+function _isIncrementHabit(habit)        { return habit.trackType === 'increment'; }
+function _habitTarget(habit)             { return Math.max(1, habit.target || 1); }
+
+function setHabitCount(dateStr, habit, count) {
+  const clamped = Math.max(0, count);
+  const counts  = getHabitCounts(dateStr);
+  if (clamped > 0) counts[habit.id] = clamped; else delete counts[habit.id];
+  MEM['habits:count:' + dateStr] = counts;
+  _syncHabitCounts(dateStr, counts);
+
+  const log = getHabitLog(dateStr);
+  const wasDone = log.includes(habit.id);
+  const isDone  = clamped >= _habitTarget(habit);
+  if (isDone && !wasDone) log.push(habit.id);
+  else if (!isDone && wasDone) log.splice(log.indexOf(habit.id), 1);
+  if (isDone !== wasDone) saveHabitLog(dateStr, log);
+}
+
+// Toggle a day fully done/undone — shared by every checkbox and calendar cell
+// in the habits UI. A count habit toggles its tally between 0 and its target
+// rather than touching the log directly, so the count store can never drift
+// from the done-ness everything else reads off the log.
+function _toggleHabitDone(ds, habit) {
+  if (_isIncrementHabit(habit)) {
+    setHabitCount(ds, habit, _habitDoneOn(habit, ds) ? 0 : _habitTarget(habit));
+    return;
+  }
+  const log = getHabitLog(ds);
+  const i = log.indexOf(habit.id);
+  if (i !== -1) log.splice(i, 1); else log.push(habit.id);
+  saveHabitLog(ds, log);
+}
+
 // Did this habit count as done on `ds`? A retired day never does. Archiving can
 // happen after you have already ticked the habit that morning, and that leaves a
 // check-in behind in the log; since the archive day is out of play, the leftover
@@ -330,6 +372,10 @@ function _deleteHabit(habit, allHabits) {
       if (i !== -1) { ids.splice(i, 1); MEM[k] = ids; }
     });
   });
+  storeListKeys('habits:count:').forEach(k => {
+    const counts = MEM[k];
+    if (counts && habit.id in counts) { delete counts[habit.id]; MEM[k] = counts; }
+  });
   delete MEM['habit_notes:' + habit.id];
   _syncPurgeHabit(habit.id);
   renderHabits();
@@ -389,10 +435,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   cbWrap.appendChild(cbBox);
   if (!isArchived) {
     cb.addEventListener('change', () => {
-      const log = getHabitLog(today);
-      if (cb.checked) { if (!log.includes(habit.id)) log.push(habit.id); }
-      else { const i = log.indexOf(habit.id); if (i !== -1) log.splice(i, 1); }
-      saveHabitLog(today, log);
+      _toggleHabitDone(today, habit);
       _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits);
     });
   }
@@ -428,6 +471,12 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     tag.textContent = `Day ${dayNum}`;
   }
   meta.appendChild(tag);
+  if (_isIncrementHabit(habit)) {
+    const countTag = document.createElement('span');
+    countTag.className = 'habit-meta-tag count';
+    countTag.textContent = `${getHabitCount(today, habit.id)} / ${_habitTarget(habit)}`;
+    meta.appendChild(countTag);
+  }
   if (isVoided) {
     const voidTag = document.createElement('span');
     voidTag.className = 'habit-meta-tag voided';
@@ -528,13 +577,7 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     streakEl.style.cursor = 'pointer';
     streakEl.addEventListener('click', (e) => {
       e.stopPropagation();
-      const log = getHabitLog(today);
-      if (log.includes(habit.id)) {
-        log.splice(log.indexOf(habit.id), 1);
-      } else {
-        log.push(habit.id);
-      }
-      saveHabitLog(today, log);
+      _toggleHabitDone(today, habit);
       setTimeout(() => _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits), 0);
     });
   }
@@ -924,6 +967,9 @@ function renderHabitDetailPage(habit, allHabits) {
   const pct = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / Math.max(totalDays - 1, 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
   const isArchived = !!habit.archived;
+  const isIncrement = _isIncrementHabit(habit);
+  const target = _habitTarget(habit);
+  const todayCount = isIncrement ? getHabitCount(today, habit.id) : 0;
 
   // Count total completions across the habit's tracked window. Check-ins live in
   // MEM ('habits:log:<date>'), not localStorage — the old localStorage scan never
@@ -1026,10 +1072,18 @@ function renderHabitDetailPage(habit, allHabits) {
         <div class="habit-detail-checkin-label">Today's check-in</div>
         <div class="habit-detail-checkin-sub">${formatDate(today)}</div>
       </div>
+      ${isIncrement ? `
+      <div class="habit-stepper">
+        <button class="habit-stepper-btn" id="habitCountMinus" ${todayCount <= 0 ? 'disabled' : ''} aria-label="Decrement">−</button>
+        <span class="habit-stepper-count${todayCount >= target ? ' complete' : ''}">${todayCount} / ${target}</span>
+        <button class="habit-stepper-btn" id="habitCountPlus" aria-label="Increment">+</button>
+      </div>
+      ` : `
       <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
         <input type="checkbox" id="habitDetailCb" ${doneToday ? 'checked' : ''}>
         <span class="habit-cb-box"></span>
       </label>
+      `}
     </div>
     <div class="habit-detail-row-split">
       <div class="habit-detail-row-field">
@@ -1037,6 +1091,22 @@ function renderHabitDetailPage(habit, allHabits) {
         <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
           value="${startDate}" max="${today}">
       </div>
+    </div>
+    <div class="habit-detail-row-split">
+      <label class="habit-detail-row-field" style="cursor:pointer;">
+        <span class="habit-detail-start-label">Track as a count</span>
+        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
+          <input type="checkbox" id="habitDetailIncrement" ${isIncrement ? 'checked' : ''}>
+          <span class="habit-cb-box"></span>
+        </span>
+      </label>
+      ${isIncrement ? `
+      <div class="habit-detail-row-field">
+        <span class="habit-detail-start-label">Target / day</span>
+        <input type="number" min="1" step="1" class="habit-detail-start-input habit-detail-target-input"
+          id="habitTargetInput" value="${target}">
+      </div>
+      ` : ''}
     </div>
     <div class="habit-detail-row-split habit-detail-row-split-3">
       <label class="habit-toggle-compact" title="Excluded from the day's completion % until the day is over">
@@ -1084,14 +1154,50 @@ function renderHabitDetailPage(habit, allHabits) {
   }
 
   if (!isArchived) {
-    document.getElementById('habitDetailCb').addEventListener('change', (e) => {
-      const log = getHabitLog(today);
-      if (e.target.checked) { if (!log.includes(habit.id)) log.push(habit.id); }
-      else { const i = log.indexOf(habit.id); if (i !== -1) log.splice(i, 1); }
-      saveHabitLog(today, log);
+    if (isIncrement) {
+      document.getElementById('habitCountPlus').addEventListener('click', () => {
+        setHabitCount(today, habit, getHabitCount(today, habit.id) + 1);
+        renderHabits();
+        renderHabitDetailPage(habit, allHabits);
+      });
+      document.getElementById('habitCountMinus').addEventListener('click', () => {
+        setHabitCount(today, habit, getHabitCount(today, habit.id) - 1);
+        renderHabits();
+        renderHabitDetailPage(habit, allHabits);
+      });
+    } else {
+      document.getElementById('habitDetailCb').addEventListener('change', () => {
+        _toggleHabitDone(today, habit);
+        renderHabits();
+        renderHabitDetailPage(habit, allHabits);
+      });
+    }
+
+    document.getElementById('habitDetailIncrement').addEventListener('change', (e) => {
+      habit.trackType = e.target.checked ? 'increment' : 'checkbox';
+      if (habit.trackType === 'increment' && !habit.target) habit.target = 1;
+      saveHabits(allHabits);
       renderHabits();
       renderHabitDetailPage(habit, allHabits);
     });
+
+    const _targetInput = document.getElementById('habitTargetInput');
+    if (_targetInput) {
+      const _saveTarget = () => {
+        const v = Math.max(1, parseInt(_targetInput.value, 10) || 1);
+        if (v === _habitTarget(habit)) return;
+        habit.target = v;
+        saveHabits(allHabits);
+        // Re-check today's done-ness against the new target without changing the tally.
+        setHabitCount(today, habit, getHabitCount(today, habit.id));
+        renderHabits();
+        renderHabitDetailPage(habit, allHabits);
+      };
+      _targetInput.addEventListener('blur', _saveTarget);
+      _targetInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); _targetInput.blur(); }
+      });
+    }
 
     const _startInput = document.getElementById('habitStartDateInput');
     const _saveStartDate = () => {
@@ -1274,11 +1380,7 @@ function renderHabitHistoryGrid(habit) {
     const cell = e.target.closest('[data-date]');
     if (!cell) return;
     const ds = cell.dataset.date;
-    const log = getHabitLog(ds);
-    const idx = log.indexOf(habit.id);
-    if (idx !== -1) log.splice(idx, 1);
-    else log.push(habit.id);
-    saveHabitLog(ds, log);
+    _toggleHabitDone(ds, habit);
     renderHabits();
     const allH = getHabits();
     renderHabitDetailPage(allH.find(h => h.id === habit.id) || habit, allH);
@@ -1435,6 +1537,7 @@ function renderDayDetail(ds) {
       <span class="day-detail-habit-name">${_esc(h.name)}</span>
       ${isLocked ? '<span class="habit-meta-tag archived-tag">Archived</span>' : ''}
       ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
+      ${_isIncrementHabit(h) ? `<span class="habit-meta-tag count">${getHabitCount(ds, h.id)} / ${_habitTarget(h)}</span>` : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${h.morningRoutine ? '<span class="habit-meta-tag morning">Morning Routine</span>' : ''}
       ${h.nightRoutine ? '<span class="habit-meta-tag night">Night Routine</span>' : ''}
@@ -1527,12 +1630,8 @@ function renderDayDetail(ds) {
   body.querySelectorAll('input[data-habit-id]').forEach(cb => {
     cb.addEventListener('change', () => {
       if (cb.disabled) return;
-      const id  = cb.dataset.habitId;
-      const log = getHabitLog(ds);
-      const i   = log.indexOf(id);
-      if (cb.checked) { if (i === -1) log.push(id); }
-      else if (i !== -1) log.splice(i, 1);
-      saveHabitLog(ds, log);
+      const h = habits.find(x => x.id === cb.dataset.habitId);
+      if (h) _toggleHabitDone(ds, h);
       // renderHabits re-renders the open day view via its sync block
       _flipRows(document.getElementById('dayDetailBody'), '.day-detail-habit-row', renderHabits);
     });

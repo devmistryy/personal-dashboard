@@ -136,6 +136,10 @@
   .habit-meta-tag.eod { color: #5EEAD4; background: rgba(94,234,212,0.12); }
   .habit-meta-tag.morning { color: rgb(253,135,51); background: rgba(253,135,51,0.12); }
   .habit-meta-tag.night { color: #C084FC; background: rgba(192,132,252,0.12); }
+  .habit-meta-tag.count {
+    color: #4A9EFF; background: rgba(74,158,255,0.12);
+    font-family: var(--font-mono); letter-spacing: normal; text-transform: none;
+  }
 
   .habit-progress-wrap {
     height: 3px;
@@ -914,6 +918,34 @@
     font-family: var(--font-mono);
     margin-top: 3px;
   }
+
+  /* Increment habit — Today's check-in stepper (replaces the checkbox) */
+  .habit-stepper { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .habit-stepper-btn {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .habit-stepper-btn:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
+  .habit-stepper-btn:disabled { opacity: 0.35; cursor: default; }
+  .habit-stepper-count {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 46px;
+    text-align: center;
+  }
+  .habit-stepper-count.complete { color: var(--success); }
+
+  .habit-detail-target-input { width: 60px; text-align: center; }
 
   /* Progress bar section */
   .habit-detail-progress-section { margin-bottom: 24px; }

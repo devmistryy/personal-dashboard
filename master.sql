@@ -102,6 +102,11 @@ alter table habits add column if not exists runs jsonb default '[]'::jsonb;
 -- Superseded by `runs` before either shipped; drop if an early version created them.
 alter table habits drop column if exists prior_days;
 alter table habits drop column if exists prior_done;
+-- 'checkbox' (default, done/not-done) or 'increment' (done N of `target` times
+-- a day — see habit_counts). track_type never gates any query, only client
+-- rendering, so it's a plain text column rather than an enum.
+alter table habits add column if not exists track_type text default 'checkbox';
+alter table habits add column if not exists target     integer;
 alter table habits enable row level security;
 
 -- ───────────────────────── habit_logs ─────────────────────────
@@ -112,6 +117,21 @@ create table if not exists habit_logs (
   primary key (user_id, habit_id, date)
 );
 alter table habit_logs enable row level security;
+
+-- ──────────────────────── habit_counts ────────────────────────
+-- Raw daily tally for a track_type='increment' habit — e.g. "drank water 5 of
+-- 8 times today". A row only exists once the count is > 0; reaching `target`
+-- also adds the day to habit_logs (see setHabitCount in js/habits.js), so
+-- streaks, the completion rings and every other done/not-done read still
+-- come from habit_logs alone and never need to know about counts.
+create table if not exists habit_counts (
+  user_id  uuid references auth.users not null,
+  habit_id text not null,
+  date     date not null,
+  count    integer not null default 0,
+  primary key (user_id, habit_id, date)
+);
+alter table habit_counts enable row level security;
 
 -- ───────────────────────── habit_voids ────────────────────────
 -- A voided (habit, day) pair didn't count: the day is excused, not failed. It
@@ -513,7 +533,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'habits','habit_logs','habit_voids','habit_notes','tasks','goals','settings','job_applications','referrals','areas',
+    'habits','habit_logs','habit_voids','habit_counts','habit_notes','tasks','goals','settings','job_applications','referrals','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs',
     'whoop_recovery','whoop_workouts','whoop_profile'
   ] loop

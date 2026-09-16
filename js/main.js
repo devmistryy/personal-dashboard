@@ -555,6 +555,7 @@ async function _syncHabits(habits) {
       sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
       morning_routine: h.morningRoutine || false, night_routine: h.nightRoutine || false,
       runs: Array.isArray(h.runs) ? h.runs : [],
+      track_type: h.trackType || 'checkbox', target: h.target || null,
     })), { onConflict: 'id' });
     if (error) _syncFailed('habits upsert failed', error);
   }
@@ -607,6 +608,27 @@ async function _syncHabitVoids(dateStr, ids) {
   if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
   const { error: delErr } = await del;
   if (delErr) _syncFailed('habit_voids stale-delete failed', delErr);
+}
+
+// Unlike habit_logs/habit_voids (plain presence markers, upserted with
+// ignoreDuplicates), a count row's whole point is its `count` column changing
+// day over day, so this upsert must actually overwrite on conflict.
+async function _syncHabitCounts(dateStr, counts) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _requireUid(); if (!uid) return;
+  const ids = Object.keys(counts).filter(id => counts[id] > 0);
+
+  if (ids.length) {
+    const { error: insErr } = await sb.from('habit_counts').upsert(
+      ids.map(id => ({ user_id: uid, habit_id: id, date: dateStr, count: counts[id] })),
+      { onConflict: 'user_id,habit_id,date' });
+    if (insErr) { _syncFailed('habit_counts upsert failed (run master.sql?)', insErr); return; }
+  }
+
+  let del = sb.from('habit_counts').delete().eq('user_id', uid).eq('date', dateStr);
+  if (ids.length) del = del.not('habit_id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`);
+  const { error: delErr } = await del;
+  if (delErr) _syncFailed('habit_counts stale-delete failed', delErr);
 }
 
 // Day-scoped task sync. `_syncTasksNow` writes insert-then-stale-delete, so two
@@ -685,7 +707,7 @@ async function _syncSetting(key, value) {
 async function _syncPurgeHabit(habitId) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _requireUid(); if (!uid) return;
-  for (const table of ['habit_logs', 'habit_voids', 'habit_notes']) {
+  for (const table of ['habit_logs', 'habit_voids', 'habit_counts', 'habit_notes']) {
     const { error } = await sb.from(table).delete().eq('user_id', uid).eq('habit_id', habitId);
     if (error) console.error(`[sync] ${table} purge failed:`, error);
   }
@@ -911,6 +933,7 @@ async function loadFromSupabase() {
     sb.from('goals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('referrals').select('*').eq('user_id', uid).order('sort_order', { nullsFirst: false }).order('created_at'),
     sb.from('habit_voids').select('*').eq('user_id', uid),
+    sb.from('habit_counts').select('*').eq('user_id', uid),
     sb.from('reactive_habits').select('*').eq('user_id', uid).order('created_at'),
     sb.from('reactive_habit_logs').select('*').eq('user_id', uid).order('ts'),
     sb.from('whoop_recovery').select('*').eq('user_id', uid).order('date', { ascending: false }).limit(7),
@@ -932,11 +955,12 @@ async function loadFromSupabase() {
   const goalRows = results[10].data || [];
   const referralRows = results[11].data || [];
   const voids   = results[12].data || [];
-  const rHabits = results[13].data || [];
-  const rLogs   = results[14].data || [];
-  MEM['whoop:recovery'] = results[15].data || [];
-  MEM['whoop:workouts'] = results[16].data || [];
-  MEM['whoop:profile']  = results[17].data || null;
+  const counts  = results[13].data || [];
+  const rHabits = results[14].data || [];
+  const rLogs   = results[15].data || [];
+  MEM['whoop:recovery'] = results[16].data || [];
+  MEM['whoop:workouts'] = results[17].data || [];
+  MEM['whoop:profile']  = results[18].data || null;
 
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
@@ -944,6 +968,7 @@ async function loadFromSupabase() {
     area: h.area || null, createdAt: h.created_at, endOfDay: h.end_of_day || false,
     morningRoutine: h.morning_routine || false, nightRoutine: h.night_routine || false,
     runs: Array.isArray(h.runs) ? h.runs : [],
+    trackType: h.track_type || 'checkbox', target: h.target || null,
   }));
 
   logs.forEach(l => {
@@ -956,6 +981,12 @@ async function loadFromSupabase() {
     const k = 'habits:void:' + v.date;
     if (!MEM[k]) MEM[k] = [];
     MEM[k].push(v.habit_id);
+  });
+
+  counts.forEach(c => {
+    const k = 'habits:count:' + c.date;
+    if (!MEM[k]) MEM[k] = {};
+    MEM[k][c.habit_id] = c.count;
   });
 
   // Rows written before the tid migration have tid = null. Without a stable
