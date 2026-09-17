@@ -368,7 +368,7 @@ document.addEventListener('click', (e) => {
             const val = ci.value.trim();
             if (!val) return;
             const cur = _getJobById(id)?.locationCities || [];
-            if (!cur.includes(val)) {
+            if (!cur.some(c => c.toLowerCase() === val.toLowerCase())) {
               _updateJob(id, { locationType: selType, locationCities: [...cur, val] });
               document.getElementById('jobLocCityChips').innerHTML = '';
               renderChips();
