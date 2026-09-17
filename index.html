@@ -296,7 +296,7 @@
           <button type="button" class="job-site-add-btn" id="jobSiteAddBtn">+ Add site</button>
         </div>
 
-        <div class="section-title">Referrals</div>
+        <div class="section-title section-title-clickable" id="referralNotesOpenBtn">Referrals</div>
         <div class="card referral-card">
           <ul class="referral-list" id="referralList"></ul>
           <div class="referral-empty" id="referralEmptyState" style="display:none;">No referrals yet.</div>
@@ -627,6 +627,29 @@
   <div class="habit-detail-wrap">
     <button id="mobExDetailBack" class="habit-detail-back">← Back</button>
     <div id="mobExDetailBody"></div>
+  </div>
+</div>
+
+<div id="referralNotesModal" class="sr-modal">
+  <div class="sr-modal-card referral-notes-card" role="dialog" aria-modal="true" aria-label="Referral notes">
+    <button id="referralNotesClose" class="sr-modal-close" aria-label="Close">×</button>
+    <h2 class="sr-modal-title">Referral notes</h2>
+    <div class="referral-notes-sub">Who to follow up with, favors owed, talking points — anything worth remembering.</div>
+    <div class="referral-notes-toolbar">
+      <button type="button" class="referral-notes-tool-btn" data-insert="heading" title="Insert heading">H</button>
+      <button type="button" class="referral-notes-tool-btn" data-insert="bullet" title="Insert bullet list">•</button>
+      <button type="button" class="referral-notes-tool-btn" data-insert="checkbox" title="Insert checklist item">☐</button>
+      <button type="button" class="referral-notes-tool-btn" data-insert="date" title="Insert today's date">📅</button>
+      <span class="referral-notes-toolbar-spacer"></span>
+      <span class="referral-notes-count" id="referralNotesCount">0 words</span>
+    </div>
+    <div class="area-note-input-wrap">
+      <textarea id="referralNotesInput" class="area-note-input referral-notes-textarea" placeholder="Write notes about your referrals…&#10;&#10;e.g.&#10;- Jordan: worked together at Acme, offered to refer for Eng roles&#10;- Follow up with Sam after his interview loop" rows="10"></textarea>
+      <div class="mob-modal-actions">
+        <button class="btn-add" id="referralNotesSaveBtn" type="button">Save</button>
+        <span class="polish-status" id="referralNotesStatus"></span>
+      </div>
+    </div>
   </div>
 </div>
 

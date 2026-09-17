@@ -227,7 +227,8 @@ alter table tasks enable row level security;
 -- ────────────────────────── settings ──────────────────────────
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
 -- Backs: habit_sort_v1, task_sort_v1, task_streak_v1, task_dismissed_v1,
---        sunday_reset_v1, sunday_reset_removed_v1, areas:list, area_notes:<name>
+--        sunday_reset_v1, sunday_reset_removed_v1, areas:list, area_notes:<name>,
+--        job_roles_v1, job_sites_v1, referral_notes_v1
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
   user_id uuid references auth.users not null,

@@ -125,4 +125,15 @@
   .referral-empty { color:var(--text-tertiary); font-size:12px; padding:10px 4px 12px; text-align:center; }
   .referral-add-row { display:flex; align-items:center; gap:8px; padding:8px 8px 6px; }
   .referral-add-input { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-size:12.5px; font-family:var(--font-body); min-width:0; }
+
+  /* ── Referral notes modal ── */
+  .referral-notes-card { width:640px; max-width:94vw; max-height:88vh; display:flex; flex-direction:column; }
+  .referral-notes-sub { font-size:12.5px; color:var(--text-tertiary); margin:2px 0 14px; line-height:1.5; }
+  .referral-notes-toolbar { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .referral-notes-tool-btn { display:flex; align-items:center; justify-content:center; min-width:28px; height:28px; padding:0 8px; border-radius:7px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); color:var(--text-secondary); font-size:12.5px; font-weight:600; font-family:var(--font-body); cursor:pointer; transition:background 0.15s, color 0.15s; }
+  .referral-notes-tool-btn:hover { background:rgba(255,255,255,0.10); color:var(--text-primary); }
+  .referral-notes-toolbar-spacer { flex:1; }
+  .referral-notes-count { font-size:11px; color:var(--text-tertiary); font-variant-numeric:tabular-nums; }
+  .referral-notes-textarea { flex:1; min-height:320px; font-size:13.5px; line-height:1.7; }
+  .referral-notes-card .area-note-input-wrap { flex:1; min-height:0; margin-top:0; }
   .referral-add-input::placeholder { color:var(--text-tertiary); }

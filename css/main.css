@@ -164,6 +164,8 @@
   }
   .section-title::before { content: ''; width: 18px; height: 1px; background: var(--text-tertiary); opacity: 0.6; flex-shrink: 0; }
   .section-title::after  { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent); }
+  .section-title-clickable { cursor: pointer; transition: color 0.15s; }
+  .section-title-clickable:hover { color: var(--text-secondary); }
 
   /* ── Task Ticker ── */
   .ticker-row { margin-bottom: 18px; }

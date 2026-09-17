@@ -791,3 +791,109 @@ document.addEventListener('click', (e) => {
     });
   });
 });
+
+// Freeform notes about referrals in general (settings key — a single blob
+// shaped { text, updatedAt } rather than the plain string other settings use,
+// so the modal can show a "Saved HH:MM" timestamp across reopens).
+function getReferralNotesData() {
+  const raw = MEM['referral_notes_v1'];
+  if (!raw) return { text: '', updatedAt: null };
+  if (typeof raw === 'string') return { text: raw, updatedAt: null }; // pre-timestamp shape
+  return { text: raw.text || '', updatedAt: raw.updatedAt || null };
+}
+function saveReferralNotesData(text) {
+  const data = { text, updatedAt: new Date().toISOString() };
+  MEM['referral_notes_v1'] = data;
+  _syncSetting('referral_notes_v1', data);
+  return data;
+}
+
+let _referralNotesAutosaveTimer = null;
+
+function _referralNotesWordCount() {
+  const val = document.getElementById('referralNotesInput').value.trim();
+  const words = val ? val.split(/\s+/).length : 0;
+  document.getElementById('referralNotesCount').textContent = words + (words === 1 ? ' word' : ' words');
+}
+
+function _renderReferralNotesSavedStatus(updatedAt) {
+  const status = document.getElementById('referralNotesStatus');
+  if (!updatedAt) { status.textContent = ''; return; }
+  const time = new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  status.textContent = 'Saved ' + time;
+}
+
+function saveReferralNotesForm() {
+  clearTimeout(_referralNotesAutosaveTimer);
+  const data = saveReferralNotesData(document.getElementById('referralNotesInput').value);
+  _renderReferralNotesSavedStatus(data.updatedAt);
+}
+
+function _scheduleReferralNotesAutosave() {
+  document.getElementById('referralNotesStatus').textContent = 'Saving…';
+  clearTimeout(_referralNotesAutosaveTimer);
+  _referralNotesAutosaveTimer = setTimeout(saveReferralNotesForm, 700);
+}
+
+function openReferralNotesModal() {
+  const data = getReferralNotesData();
+  document.getElementById('referralNotesInput').value = data.text;
+  _referralNotesWordCount();
+  _renderReferralNotesSavedStatus(data.updatedAt);
+  const modal = document.getElementById('referralNotesModal');
+  modal.classList.add('open');
+  modal.querySelector('.sr-modal-card').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('referralNotesInput').focus(), 0);
+}
+function closeReferralNotesModal() {
+  if (_referralNotesAutosaveTimer) saveReferralNotesForm(); // flush a pending debounce so nothing typed is lost
+  document.getElementById('referralNotesModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Markdown-ish insert helpers for the toolbar — prefix buttons act on the
+// current line, the date button inserts plain text at the caret.
+function _referralNotesInsertAtLineStart(prefix) {
+  const ta = document.getElementById('referralNotesInput');
+  const pos = ta.selectionStart;
+  const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1;
+  ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+  const newPos = pos + prefix.length;
+  ta.setSelectionRange(newPos, newPos);
+}
+function _referralNotesInsertAtCursor(text) {
+  const ta = document.getElementById('referralNotesInput');
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+  const newPos = start + text.length;
+  ta.setSelectionRange(newPos, newPos);
+}
+
+document.querySelectorAll('.referral-notes-tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.insert;
+    if (kind === 'heading') _referralNotesInsertAtLineStart('## ');
+    else if (kind === 'bullet') _referralNotesInsertAtLineStart('- ');
+    else if (kind === 'checkbox') _referralNotesInsertAtLineStart('- [ ] ');
+    else if (kind === 'date') _referralNotesInsertAtCursor(new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }));
+    document.getElementById('referralNotesInput').focus();
+    _referralNotesWordCount();
+    _scheduleReferralNotesAutosave();
+  });
+});
+
+document.getElementById('referralNotesInput').addEventListener('input', () => {
+  _referralNotesWordCount();
+  _scheduleReferralNotesAutosave();
+});
+
+document.getElementById('referralNotesOpenBtn').addEventListener('click', openReferralNotesModal);
+document.getElementById('referralNotesClose').addEventListener('click', closeReferralNotesModal);
+document.getElementById('referralNotesSaveBtn').addEventListener('click', saveReferralNotesForm);
+document.getElementById('referralNotesModal').addEventListener('click', (e) => {
+  if (e.target.id === 'referralNotesModal') closeReferralNotesModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('referralNotesModal').classList.contains('open')) closeReferralNotesModal();
+});
