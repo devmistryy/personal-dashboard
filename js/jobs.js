@@ -355,9 +355,33 @@ document.addEventListener('click', (e) => {
           chips.appendChild(chip);
         });
       };
+      // Wires up the city input's Enter-to-add / Escape-to-close behavior.
+      // Called both when the dropdown opens already on hybrid/onsite (i.e. a
+      // city is already listed) and right after switching to hybrid/onsite —
+      // previously this only ran on the switch, so reopening a dropdown that
+      // was already hybrid/onsite left the input dead (Enter did nothing).
+      const wireCityInput = () => {
+        const ci = document.getElementById('jobLocCityInput');
+        ci.onclick = ev2 => ev2.stopPropagation();
+        ci.onkeydown = ev2 => {
+          if (ev2.key === 'Enter') {
+            const val = ci.value.trim();
+            if (!val) return;
+            const cur = _getJobById(id)?.locationCities || [];
+            if (!cur.includes(val)) {
+              _updateJob(id, { locationType: selType, locationCities: [...cur, val] });
+              document.getElementById('jobLocCityChips').innerHTML = '';
+              renderChips();
+            }
+            ci.value = '';
+          }
+          if (ev2.key === 'Escape') _closeJobDropdown();
+        };
+      };
       if (selType === 'hybrid' || selType === 'onsite') {
         document.getElementById('jobLocCitiesWrap').style.display = 'block';
         renderChips();
+        wireCityInput();
       }
       dd.querySelectorAll('[data-loctype]').forEach(item => {
         item.addEventListener('click', (ev) => {
@@ -372,27 +396,12 @@ document.addEventListener('click', (e) => {
             _updateJob(id, { locationType: selType });
             const wrap = document.getElementById('jobLocCitiesWrap');
             wrap.style.display = 'block';
-            const chips = document.getElementById('jobLocCityChips');
-            chips.innerHTML = '';
+            document.getElementById('jobLocCityChips').innerHTML = '';
             renderChips();
             const ci = document.getElementById('jobLocCityInput');
             ci.value = '';
             ci.focus();
-            ci.onclick = ev2 => ev2.stopPropagation();
-            ci.onkeydown = ev2 => {
-              if (ev2.key === 'Enter') {
-                const val = ci.value.trim();
-                if (!val) return;
-                const cur = _getJobById(id)?.locationCities || [];
-                if (!cur.includes(val)) {
-                  _updateJob(id, { locationType: selType, locationCities: [...cur, val] });
-                  chips.innerHTML = '';
-                  renderChips();
-                }
-                ci.value = '';
-              }
-              if (ev2.key === 'Escape') _closeJobDropdown();
-            };
+            wireCityInput();
           }
         });
       });
