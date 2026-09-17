@@ -264,10 +264,26 @@ alter table job_applications add column if not exists role text;
 -- (text[]) so a hybrid/onsite application can list more than one city (e.g.
 -- open to either of two offices). location_type still picks exactly one of
 -- remote/hybrid/onsite — that choice stays mutually exclusive.
+-- Guarded in a DO block (rather than a plain UPDATE) because the live table
+-- had already drifted from this file before this migration was written (see
+-- the id-type note above) — it turned out to have no location_city column at
+-- all, which would make a bare `update ... set location_cities =
+-- array[location_city]` fail with "column does not exist" before the `drop
+-- column if exists` below ever ran. Checking information_schema first keeps
+-- this file safe to run regardless of whatever the live table's actual
+-- pre-migration shape is.
 alter table job_applications add column if not exists location_cities text[];
-update job_applications set location_cities = array[location_city]
-  where location_city is not null and location_cities is null;
-alter table job_applications drop column if exists location_city;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'job_applications' and column_name = 'location_city'
+  ) then
+    update job_applications set location_cities = array[location_city]
+      where location_city is not null and location_cities is null;
+    alter table job_applications drop column location_city;
+  end if;
+end $$;
 alter table job_applications enable row level security;
 
 -- ───────────────────────── referrals ─────────────────────────
