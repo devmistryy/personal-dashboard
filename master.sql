@@ -253,13 +253,21 @@ create table if not exists job_applications (
   date_applied  date,
   status        text default 'Applied',
   location_type text,
-  location_city text,
+  location_cities text[],
   created_at    timestamptz default now()
 );
 -- Job Role: a free-text value the user picks from their own self-authored
 -- option list (settings key 'job_roles_v1', managed inline in the dropdown —
 -- see js/jobs.js _renderJobRoleDropdown), not a fixed enum.
 alter table job_applications add column if not exists role text;
+-- Migrated 2026-09-16: location_city (single string) -> location_cities
+-- (text[]) so a hybrid/onsite application can list more than one city (e.g.
+-- open to either of two offices). location_type still picks exactly one of
+-- remote/hybrid/onsite — that choice stays mutually exclusive.
+alter table job_applications add column if not exists location_cities text[];
+update job_applications set location_cities = array[location_city]
+  where location_city is not null and location_cities is null;
+alter table job_applications drop column if exists location_city;
 alter table job_applications enable row level security;
 
 -- ───────────────────────── referrals ─────────────────────────

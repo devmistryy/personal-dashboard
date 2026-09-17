@@ -111,7 +111,7 @@ function _seedLocalData() {
     ],
     'task_streak_v1': { count: 0, lastProcessedDate: null },
     'jobs:list': [
-      { id: jobSeedId, company: 'Example Corp', role: 'Software Engineer', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'Remote', locationCity: '' },
+      { id: jobSeedId, company: 'Example Corp', role: 'Software Engineer', platform: 'LinkedIn', dateApplied: today, status: 'Applied', locationType: 'remote', locationCities: [] },
     ],
     'job_roles_v1': ['Software Engineer', 'Product Manager'],
     'job_sites_v1': ['linkedin', 'indeed'],
@@ -1032,7 +1032,7 @@ async function loadFromSupabase() {
   MEM['jobs:list'] = jobs.map(j => ({
     id: j.id, company: j.company, role: j.role || '', platform: j.platform || '',
     dateApplied: j.date_applied || '', status: j.status || 'Applied',
-    locationType: j.location_type || '', locationCity: j.location_city || '',
+    locationType: j.location_type || '', locationCities: Array.isArray(j.location_cities) ? j.location_cities : [],
   }));
 
   MEM['goals:list'] = goalRows.map(g => ({

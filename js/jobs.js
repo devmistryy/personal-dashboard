@@ -41,7 +41,8 @@ async function _syncJobs(jobs) {
   const { error } = await sb.from('job_applications').upsert(jobs.map(j => ({
     id: j.id, user_id: uid, company: j.company, platform: j.platform || null,
     date_applied: j.dateApplied || null, status: j.status || 'Applied',
-    location_type: j.locationType || null, location_city: j.locationCity || null,
+    location_type: j.locationType || null,
+    location_cities: (j.locationCities && j.locationCities.length) ? j.locationCities : null,
     role: j.role || null,
   })), { onConflict: 'id' });
   if (error) _syncFailed('job_applications upsert failed', error);
@@ -88,9 +89,10 @@ function renderJobs() {
     const ss = JOB_STATUS_STYLE[job.status] || JOB_STATUS_STYLE['Applied'];
     const ps = job.platform ? (JOB_PLATFORM_STYLE[job.platform] || JOB_PLATFORM_FALLBACK_STYLE) : null;
     const pSite = job.platform ? JOB_SITE_CATALOG.find(s => s.name === job.platform) : null;
+    const cities = (job.locationCities && job.locationCities.length) ? _esc(job.locationCities.join(', ')) : '';
     const locLabel = job.locationType === 'remote' ? 'Remote'
-      : job.locationType === 'hybrid'  ? (job.locationCity ? _esc(job.locationCity) + ' · Hybrid' : 'Hybrid')
-      : job.locationType === 'onsite'  ? (job.locationCity ? _esc(job.locationCity) + ' · On-site' : 'On-site')
+      : job.locationType === 'hybrid'  ? (cities ? cities + ' · Hybrid' : 'Hybrid')
+      : job.locationType === 'onsite'  ? (cities ? cities + ' · On-site' : 'On-site')
       : '';
     return `<tr class="job-row" data-id="${job.id}">
       <td class="job-td">
@@ -309,7 +311,9 @@ document.addEventListener('click', (e) => {
     input.onkeydown = ev => { if (ev.key === 'Enter') input.blur(); if (ev.key === 'Escape') { input.value = _getJobById(id)?.dateApplied || ''; input.blur(); } };
     return;
   }
-  // Location
+  // Location — locationType is a single choice (remote/hybrid/onsite can't mix
+  // on one application), but hybrid/onsite can list more than one city (e.g.
+  // an onsite role open to either of two offices).
   const locEl = e.target.closest('[data-action="location"]');
   if (locEl) {
     const id = locEl.dataset.id;
@@ -320,9 +324,41 @@ document.addEventListener('click', (e) => {
         <div class="job-dd-item" data-loctype="remote">Remote</div>
         <div class="job-dd-item" data-loctype="hybrid">Hybrid</div>
         <div class="job-dd-item" data-loctype="onsite">On-site</div>
-        <div id="jobLocCityWrap" style="display:none;padding:4px 8px 6px;">
-          <input class="job-loc-city-input" id="jobLocCityInput" placeholder="City (e.g. New York)">
+        <div id="jobLocCitiesWrap" style="display:none;padding:4px 8px 6px;">
+          <div id="jobLocCityChips" class="job-loc-city-chips"></div>
+          <input class="job-loc-city-input" id="jobLocCityInput" placeholder="Add a city, press Enter">
         </div>`;
+      dd.querySelectorAll('[data-loctype]').forEach(item => {
+        if (item.dataset.loctype === selType) item.style.fontWeight = '500';
+      });
+      const renderChips = () => {
+        const chips = document.getElementById('jobLocCityChips');
+        (_getJobById(id)?.locationCities || []).forEach((city, i) => {
+          const chip = document.createElement('span');
+          chip.className = 'job-loc-city-chip';
+          const label = document.createElement('span');
+          label.textContent = city;
+          chip.appendChild(label);
+          const rm = document.createElement('button');
+          rm.type = 'button';
+          rm.className = 'job-loc-city-chip-remove';
+          rm.textContent = '×';
+          rm.title = 'Remove this location';
+          rm.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const cur = (_getJobById(id)?.locationCities || []).filter((_, ci) => ci !== i);
+            _updateJob(id, { locationType: selType, locationCities: cur });
+            chips.innerHTML = '';
+            renderChips();
+          });
+          chip.appendChild(rm);
+          chips.appendChild(chip);
+        });
+      };
+      if (selType === 'hybrid' || selType === 'onsite') {
+        document.getElementById('jobLocCitiesWrap').style.display = 'block';
+        renderChips();
+      }
       dd.querySelectorAll('[data-loctype]').forEach(item => {
         item.addEventListener('click', (ev) => {
           ev.stopPropagation();
@@ -330,17 +366,31 @@ document.addEventListener('click', (e) => {
           dd.querySelectorAll('[data-loctype]').forEach(i => i.style.fontWeight = '');
           item.style.fontWeight = '500';
           if (selType === 'remote') {
-            _updateJob(id, { locationType:'remote', locationCity:'' });
+            _updateJob(id, { locationType:'remote', locationCities:[] });
             _closeJobDropdown();
           } else {
-            const wrap = document.getElementById('jobLocCityWrap');
+            _updateJob(id, { locationType: selType });
+            const wrap = document.getElementById('jobLocCitiesWrap');
             wrap.style.display = 'block';
+            const chips = document.getElementById('jobLocCityChips');
+            chips.innerHTML = '';
+            renderChips();
             const ci = document.getElementById('jobLocCityInput');
-            ci.value = job?.locationCity || '';
+            ci.value = '';
             ci.focus();
             ci.onclick = ev2 => ev2.stopPropagation();
             ci.onkeydown = ev2 => {
-              if (ev2.key === 'Enter') { _updateJob(id, { locationType:selType, locationCity:ci.value.trim() }); _closeJobDropdown(); }
+              if (ev2.key === 'Enter') {
+                const val = ci.value.trim();
+                if (!val) return;
+                const cur = _getJobById(id)?.locationCities || [];
+                if (!cur.includes(val)) {
+                  _updateJob(id, { locationType: selType, locationCities: [...cur, val] });
+                  chips.innerHTML = '';
+                  renderChips();
+                }
+                ci.value = '';
+              }
               if (ev2.key === 'Escape') _closeJobDropdown();
             };
           }
@@ -378,7 +428,7 @@ document.addEventListener('keydown', (e) => {
   const name = e.target.value.trim();
   if (!name) return;
   const jobs = getJobs();
-  jobs.unshift({ id: _jobId(), company:name, role:'', platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCity:'' });
+  jobs.unshift({ id: _jobId(), company:name, role:'', platform:'', dateApplied:_todayStr(), status:'Applied', locationType:'', locationCities:[] });
   saveJobs(jobs);
   e.target.value = '';
   renderJobs();

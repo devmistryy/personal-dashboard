@@ -71,6 +71,10 @@
   .job-loc-city-input { width:100%; box-sizing:border-box; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:6px; color:var(--text-primary); font-size:13px; padding:6px 10px; margin-top:4px; outline:none; font-family:var(--font-body); }
   .job-loc-city-input:focus { border-color:rgba(255,255,255,0.28); }
   .job-loc-city-input::placeholder { color:var(--text-tertiary); }
+  .job-loc-city-chips { display:flex; flex-wrap:wrap; gap:5px; }
+  .job-loc-city-chip { display:flex; align-items:center; gap:4px; background:rgba(255,255,255,0.08); border-radius:6px; padding:3px 4px 3px 8px; font-size:12px; color:var(--text-primary); }
+  .job-loc-city-chip-remove { flex-shrink:0; background:none; border:none; cursor:pointer; color:var(--text-tertiary); font-size:13px; line-height:1; padding:2px 4px; border-radius:5px; }
+  .job-loc-city-chip-remove:hover { color:var(--danger); }
 
   /* ── Jobs tab layout: applications table (main) + job boards (side) ── */
   .jobs-split { display:grid; grid-template-columns: 1fr 240px; gap:20px; align-items:start; }
