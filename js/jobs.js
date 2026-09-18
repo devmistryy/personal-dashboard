@@ -625,12 +625,10 @@ async function renderJobMap() {
   // Remote applications use Toronto as a consistent visual anchor without
   // being assigned to a city or metro ranking.
   const remotePoint = map.projection([-79.3832, 43.6532]);
-  if (remotePoint) remotePoint[1] -= 80;
+  if (remotePoint) remotePoint[1] -= 100;
   if (remotePoint) {
     const remoteMarker = document.createElementNS(ns, 'g');
-    const remoteApplications = Math.max(1, remoteCount);
-    const maxMappedApplications = Math.max(1, ...entries.map(entry => entry.jobs.length));
-    const remoteRadius = 36 + Math.sqrt(remoteApplications / maxMappedApplications) * 44;
+    const remoteRadius = 58;
     remoteMarker.setAttribute('class', 'jobs-map-marker jobs-map-marker-remote');
     remoteMarker.setAttribute('transform', `translate(${remotePoint[0]},${remotePoint[1]})`);
     remoteMarker.setAttribute('tabindex', '0');
