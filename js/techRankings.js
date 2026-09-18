@@ -10,6 +10,7 @@ function setApplicationLocationRankings(entries) {
   const cityRows = techCities.map(city => ({
     id:`city:${city.id}`, name:city.name, kind:'core', jobs:[], jobIds:new Set(), places:[],
   }));
+  const otherRows = new Map();
   const metroById = new Map(techMetros.map((metro, index) => [metro.id, metroRows[index]]));
   const cityByName = new Map(techCities.map((city, index) => [city.name.toLowerCase(), cityRows[index]]));
   techCities.forEach((city, index) => {
@@ -17,20 +18,29 @@ function setApplicationLocationRankings(entries) {
       .forEach(alias => cityByName.set(alias.toLowerCase(), cityRows[index]));
   });
   entries.forEach(entry => {
-    if (!entry.point) return;
     const cityName = (typeof _jobMapCityName === 'function' ? _jobMapCityName(entry.label) : entry.label).toLowerCase();
     const majorCity = cityByName.get(cityName);
     const rankedMetro = typeof getTechMetroForLocation === 'function' ? getTechMetroForLocation(cityName) : null;
-    const metroRow = majorCity ? majorCity : metroById.get(rankedMetro?.id);
-    if (!metroRow) return;
+    let metroRow = majorCity ? majorCity : metroById.get(rankedMetro?.id);
+    if (!metroRow) {
+      const otherKey = cityName || entry.label.toLowerCase();
+      metroRow = otherRows.get(otherKey);
+      if (!metroRow) {
+        metroRow = {
+          id:`other:${otherKey}`, name:`Out-of-pocket city: ${entry.label}`, kind:'other',
+          jobs:[], jobIds:new Set(), places:[],
+        };
+        otherRows.set(otherKey, metroRow);
+      }
+    }
     entry.jobs.forEach(job => {
       if (metroRow.jobIds.has(job.id)) return;
       metroRow.jobIds.add(job.id);
       metroRow.jobs.push(job);
     });
-    metroRow.places.push({ label:entry.label, kind:majorCity ? 'core' : 'metro' });
+    metroRow.places.push({ label:entry.label, kind:majorCity ? 'core' : rankedMetro ? 'metro' : 'other' });
   });
-  _applicationLocationRows = [...metroRows, ...cityRows].map(row => ({
+  _applicationLocationRows = [...metroRows, ...cityRows, ...otherRows.values()].map(row => ({
     ...row,
     places:row.places.sort((a, b) => a.label.localeCompare(b.label)),
   })).sort((a, b) => b.jobs.length - a.jobs.length || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
@@ -57,7 +67,7 @@ function renderTechRankings() {
     position.className = 'tech-rank-position';
     const number = document.createElement('span');
     number.className = 'tech-rank-number';
-    number.textContent = `#${rank}`;
+    number.textContent = `${rank}`;
     number.setAttribute('aria-hidden', 'true');
     position.appendChild(number);
     if (isApplications) {
@@ -86,7 +96,12 @@ function renderTechRankings() {
     } else if (isMetro) {
       const detail = document.createElement('span');
       detail.className = 'tech-rank-detail';
-      const areas = row.includedAreas || techCities.filter(city => city.metroId === row.id).map(city => city.name);
+      const majorCityNames = new Set(techCities
+        .filter(city => city.metroId === row.id)
+        .flatMap(city => [city.name, ...(TECH_CITY_APPLICATION_ALIASES[city.name] || [])])
+        .map(name => name.toLowerCase()));
+      const areas = (row.includedAreas || techCities.filter(city => city.metroId === row.id).map(city => city.name))
+        .filter(area => !majorCityNames.has(area.toLowerCase()));
       detail.textContent = areas.join(' · ');
       content.appendChild(detail);
     }
