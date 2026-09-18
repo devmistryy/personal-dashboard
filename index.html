@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="css/main.css?v=14">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=43">
-<link rel="stylesheet" href="css/jobs.css?v=9">
+<link rel="stylesheet" href="css/jobs.css?v=27">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -244,6 +244,43 @@
 
   <!-- Tab: Jobs -->
   <div class="tab-panel" id="tab-jobs">
+    <div class="jobs-location-layout">
+      <div class="section jobs-map-section">
+        <div class="section-title">Application Map</div>
+        <div class="card jobs-map-card">
+          <div class="jobs-map-header">
+            <div class="jobs-map-header-left">
+              <div class="jobs-map-legend jobs-map-header-legend" aria-label="Map marker types">
+                <span><i class="jobs-map-key jobs-map-key-core"></i>Major City</span>
+                <span><i class="jobs-map-key jobs-map-key-metro"></i>Metro Area</span>
+              </div>
+              <span class="jobs-map-header-summary" id="jobsMapSummary">Locations across the US</span>
+            </div>
+            <span id="jobsMapRemote"></span>
+          </div>
+          <div class="jobs-map-frame" id="jobsMapFrame">
+            <svg id="jobsMap" viewBox="0 0 960 610" role="img" aria-label="Map of US job application locations"></svg>
+            <div class="jobs-map-message" id="jobsMapMessage">Loading map…</div>
+            <div class="jobs-map-tooltip" id="jobsMapTooltip" hidden></div>
+          </div>
+          <div class="jobs-map-footer" id="jobsMapFooter"></div>
+        </div>
+      </div>
+      <div class="section tech-rank-section" aria-labelledby="techRankHeading">
+        <div class="section-title" id="techRankHeading">Tech Location Rankings</div>
+        <div class="card tech-rank-card">
+          <div class="tech-rank-toolbar">
+            <div class="tech-rank-toggle" role="group" aria-label="Ranking type">
+              <button type="button" class="tech-rank-mode" data-tech-mode="applications" aria-pressed="false" aria-controls="techRankingList">Applications</button>
+              <button type="button" class="tech-rank-mode active" data-tech-mode="metro" aria-pressed="true" aria-controls="techRankingList">Metro</button>
+              <button type="button" class="tech-rank-mode" data-tech-mode="city" aria-pressed="false" aria-controls="techRankingList">City</button>
+            </div>
+            <span class="tech-rank-count" id="techRankingCount" aria-live="polite"></span>
+          </div>
+          <ol class="tech-rank-list" id="techRankingList"></ol>
+        </div>
+      </div>
+    </div>
     <div class="jobs-split">
       <div class="section jobs-col-main">
         <div class="section-title">Job Applications</div>
@@ -286,6 +323,7 @@
             <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
           </div>
         </div>
+
       </div>
 
       <div class="section jobs-col-side">
@@ -719,12 +757,16 @@
 <script src="js/todo.js?v=25"></script>
 <script src="js/habits.js?v=38"></script>
 <script src="js/reactiveHabits.js?v=1"></script>
-<script src="js/jobs.js?v=13"></script>
+<script src="vendor/d3.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script src="js/jobs.js?v=37"></script>
+<script src="js/techRankingData.js?v=3"></script>
+<script src="js/techRankings.js?v=8"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=34"></script>
+<script src="js/main.js?v=38"></script>
 </body>
 </html>

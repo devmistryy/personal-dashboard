@@ -70,6 +70,7 @@ function _fmtJobDate(ds) {
 
 function renderJobs() {
   const jobs = [...getJobs()];
+  renderJobMap();
   if (_jobSort === 'date') {
     jobs.sort((a,b) => (b.dateApplied||'').localeCompare(a.dateApplied||''));
   } else {
@@ -123,6 +124,453 @@ function renderJobs() {
     </tr>`;
   }).join('');
   tbody.querySelectorAll('.job-platform-logo').forEach(img => { img.onerror = () => img.remove(); });
+}
+
+const JOB_MAP_STATES = {
+  AL:'Alabama', AK:'Alaska', AZ:'Arizona', AR:'Arkansas', CA:'California', CO:'Colorado',
+  CT:'Connecticut', DE:'Delaware', FL:'Florida', GA:'Georgia', HI:'Hawaii', ID:'Idaho',
+  IL:'Illinois', IN:'Indiana', IA:'Iowa', KS:'Kansas', KY:'Kentucky', LA:'Louisiana',
+  ME:'Maine', MD:'Maryland', MA:'Massachusetts', MI:'Michigan', MN:'Minnesota', MS:'Mississippi',
+  MO:'Missouri', MT:'Montana', NE:'Nebraska', NV:'Nevada', NH:'New Hampshire', NJ:'New Jersey',
+  NM:'New Mexico', NY:'New York', NC:'North Carolina', ND:'North Dakota', OH:'Ohio',
+  OK:'Oklahoma', OR:'Oregon', PA:'Pennsylvania', RI:'Rhode Island', SC:'South Carolina',
+  SD:'South Dakota', TN:'Tennessee', TX:'Texas', UT:'Utah', VT:'Vermont', VA:'Virginia',
+  WA:'Washington', WV:'West Virginia', WI:'Wisconsin', WY:'Wyoming', DC:'District of Columbia'
+};
+const _jobMapGeocodes = new Map();
+const JOB_MAP_KNOWN_CITIES = {
+  'new york city': [-74.0060, 40.7128],
+  'new york': [-74.0060, 40.7128],
+  'manhattan': [-73.9712, 40.7831],
+  'brooklyn': [-73.9442, 40.6782],
+  'queens': [-73.7949, 40.7282],
+  'bronx': [-73.8648, 40.8448],
+  'the bronx': [-73.8648, 40.8448],
+  'staten island': [-74.1502, 40.5795],
+  'washington, dc': [-77.0365, 38.8951],
+  'st. louis': [-90.1994, 38.6270],
+  'tysons': [-77.2270, 38.9187],
+  'st. paul': [-93.0900, 44.9537],
+};
+const JOB_MAP_GEOCODE_CACHE_KEY = 'job_map_geocodes_v1';
+const _jobMapSavedGeocodes = (() => {
+  try { return JSON.parse(localStorage.getItem(JOB_MAP_GEOCODE_CACHE_KEY) || '{}'); }
+  catch { return {}; }
+})();
+const _jobMapGeocodeLanes = Array.from({ length:6 }, () => Promise.resolve());
+let _jobMapNextGeocodeLane = 0;
+let _jobMapGeometry = null;
+let _jobMapLoad = null;
+let _jobMapRenderId = 0;
+let _jobMapPanelResizeObserver = null;
+// Switch to 'numbered' to restore the previous marker layout.
+const JOB_MAP_MARKER_MODE = 'minimal';
+
+function _syncJobLocationPanelHeight() {
+  const mapCard = document.querySelector('.jobs-map-card');
+  const rankCard = document.querySelector('.jobs-location-layout .tech-rank-card');
+  if (!mapCard || !rankCard) return;
+  if (window.matchMedia('(max-width:900px)').matches) {
+    rankCard.style.height = '';
+    return;
+  }
+  rankCard.style.height = `${Math.ceil(mapCard.getBoundingClientRect().height)}px`;
+}
+
+function _watchJobLocationPanelHeight() {
+  const mapCard = document.querySelector('.jobs-map-card');
+  if (!mapCard || _jobMapPanelResizeObserver) return;
+  _jobMapPanelResizeObserver = new ResizeObserver(_syncJobLocationPanelHeight);
+  _jobMapPanelResizeObserver.observe(mapCard);
+  window.addEventListener('resize', _syncJobLocationPanelHeight);
+  _syncJobLocationPanelHeight();
+}
+
+function _jobMapStateName(text) {
+  const trimmed = text.trim();
+  return JOB_MAP_STATES[trimmed.toUpperCase()] ||
+    Object.values(JOB_MAP_STATES).find(name => name.toLowerCase() === trimmed.toLowerCase()) || '';
+}
+
+function _jobMapGeocode(label) {
+  const key = label.toLowerCase().trim();
+  if (_jobMapGeocodes.has(key)) return _jobMapGeocodes.get(key);
+  if (JOB_MAP_KNOWN_CITIES[key]) {
+    const known = Promise.resolve({ coordinate:JOB_MAP_KNOWN_CITIES[key], city:label });
+    _jobMapGeocodes.set(key, known);
+    return known;
+  }
+  if (_jobMapSavedGeocodes[key]) {
+    const saved = Promise.resolve(_jobMapSavedGeocodes[key]);
+    _jobMapGeocodes.set(key, saved);
+    return saved;
+  }
+  const parts = label.split(',').map(s => s.trim()).filter(Boolean);
+  const city = parts[0];
+  const state = parts.length > 1 ? _jobMapStateName(parts[1]) : '';
+  const params = new URLSearchParams({ name: city, count: '20', countryCode: 'US', language: 'en' });
+  const lane = _jobMapNextGeocodeLane++ % _jobMapGeocodeLanes.length;
+  const pending = _jobMapGeocodeLanes[lane].then(async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch('https://geocoding-api.open-meteo.com/v1/search?' + params);
+        if (!response.ok) throw new Error('Geocoding unavailable');
+        const data = await response.json();
+        const match = (data.results || []).find(place => place.name.toLowerCase() === city.toLowerCase() &&
+          (!state || (place.admin1 || '').toLowerCase() === state.toLowerCase()));
+        if (!match) return null;
+        const result = { coordinate:[match.longitude, match.latitude], city:match.name };
+        _jobMapSavedGeocodes[key] = result;
+        try { localStorage.setItem(JOB_MAP_GEOCODE_CACHE_KEY, JSON.stringify(_jobMapSavedGeocodes)); }
+        catch { /* Cache is optional. */ }
+        return result;
+      } catch {
+        if (attempt === 2) return null;
+        await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+    return null;
+  });
+  _jobMapGeocodeLanes[lane] = pending;
+  _jobMapGeocodes.set(key, pending);
+  return pending;
+}
+
+function _loadJobMap() {
+  if (_jobMapLoad) return _jobMapLoad;
+  const loadJson = url => fetch(url).then(response => {
+    if (!response.ok) throw new Error('Map unavailable');
+    return response.json();
+  });
+  _jobMapLoad = Promise.all([
+    loadJson('vendor/us-states-10m.json'),
+    loadJson('vendor/us-metros-2025.json?v=2')
+  ]).then(([atlas, metros]) => {
+      const states = topojson.feature(atlas, atlas.objects.states).features
+        .filter(state => !['72', '78'].includes(String(state.id)));
+      const collection = { type:'FeatureCollection', features:states };
+      const projection = d3.geoAlbersUsa().fitExtent([[28, 24], [932, 586]], collection);
+      _jobMapGeometry = { collection, projection, metros };
+      return _jobMapGeometry;
+    }).catch(() => null);
+  return _jobMapLoad;
+}
+
+function _jobMapMetro(metros, coordinate) {
+  const contains = metro => coordinate[0] >= metro.bbox[0] && coordinate[0] <= metro.bbox[2] &&
+    coordinate[1] >= metro.bbox[1] && coordinate[1] <= metro.bbox[3] &&
+    d3.geoContains(metro.geometry, coordinate);
+  const orangeCounty = metros.find(metro => metro.id === 'OC');
+  if (contains(orangeCounty)) return orangeCounty;
+  return metros.find(metro => metro.id !== 'OC' && contains(metro)) || null;
+}
+
+const JOB_MAP_RANKED_METRO_IDS = {
+  nyc:'35620', 'san-francisco':'41860', 'san-jose':'41940', seattle:'42660', austin:'12420',
+  'dc-nova':'47900', 'dallas-fort-worth':'19100', boston:'14460', 'los-angeles':'31080',
+  'orange-county':'OC', chicago:'16980', 'raleigh-durham':'39580', philadelphia:'37980',
+  'san-diego':'41740', 'denver-boulder':'19740', phoenix:'38060', 'salt-lake-city':'41620',
+  baltimore:'12580', charlotte:'16740', nashville:'34980', pittsburgh:'38300',
+  'south-florida':'33100', 'minneapolis-st-paul':'33460', portland:'38900', detroit:'19820',
+  orlando:'36740', tampa:'45300', 'kansas-city':'28140', columbus:'18140', 'st-louis':'41180',
+  jacksonville:'27260', 'san-antonio':'41700', sacramento:'40900', indianapolis:'26900',
+  huntsville:'26620', cincinnati:'17140', richmond:'40060', hartford:'25540',
+  'inland-empire':'40140', 'hampton-roads':'47260', milwaukee:'33340',
+  'colorado-springs':'17820', albany:'10580', omaha:'36540', providence:'39300', boise:'14260',
+  dayton:'19340', rochester:'40380', 'des-moines':'19780', 'las-vegas':'29820', honolulu:'46520',
+};
+
+function _jobMapMetroDisplayName(metro) {
+  if (typeof techMetros === 'undefined') return `${metro.name} metro area`;
+  const rankedMetroId = Object.keys(JOB_MAP_RANKED_METRO_IDS).find(id =>
+    JOB_MAP_RANKED_METRO_IDS[id] === metro.id);
+  const rankedMetro = techMetros.find(item => item.id === rankedMetroId);
+  return rankedMetro ? rankedMetro.name : `${metro.name} metro area`;
+}
+
+function _jobMapRankedMetro(metros, label) {
+  if (typeof techMetros === 'undefined') return null;
+  const cityName = _jobMapCityName(label).toLowerCase();
+  const rankedCity = typeof techCities === 'undefined' ? null : techCities.find(city =>
+    city.name.toLowerCase() === cityName ||
+    (typeof TECH_CITY_APPLICATION_ALIASES !== 'undefined' &&
+      (TECH_CITY_APPLICATION_ALIASES[city.name] || []).some(alias => alias.toLowerCase() === cityName)));
+  const rankedMetro = rankedCity
+    ? techMetros.find(metro => metro.id === rankedCity.metroId)
+    : techMetros.find(metro => (metro.includedAreas || []).some(area => area.toLowerCase() === cityName));
+  return rankedMetro ? metros.find(metro => metro.id === JOB_MAP_RANKED_METRO_IDS[rankedMetro.id]) || null : null;
+}
+
+function _jobMapCityName(label) {
+  const value = String(label).trim();
+  if (value.toLowerCase() === 'washington, dc') return value;
+  const parts = value.split(',').map(part => part.trim()).filter(Boolean);
+  return parts.length > 1 && _jobMapStateName(parts.at(-1)) ? parts.slice(0, -1).join(', ') : value;
+}
+
+function _jobMapIsCore(entry) {
+  // Blue markers are reserved for ranked cities with a defined major-city core.
+  if (!entry.metro || ['OC', '40140'].includes(entry.metro.id)) return false;
+  const rankedCities = typeof techCities === 'undefined' ? [] : techCities;
+  const cityName = _jobMapCityName(entry.label).toLowerCase();
+  return rankedCities.some(city => city.name.toLowerCase() === cityName ||
+    (typeof TECH_CITY_APPLICATION_ALIASES !== 'undefined' &&
+      (TECH_CITY_APPLICATION_ALIASES[city.name] || []).some(alias => alias.toLowerCase() === cityName)));
+}
+
+function _jobMapMarkers(entries) {
+  const groups = new Map();
+  entries.filter(entry => entry.point).forEach(entry => {
+    const key = entry.metro ? `metro:${entry.metro.id}` : `other:${entry.label.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, {
+      label:entry.metro ? _jobMapMetroDisplayName(entry.metro) : entry.label,
+      metro:entry.metro, kind:entry.metro ? 'metro' : 'other', places:[], jobs:[], jobIds:new Set(),
+      corePlaces:[], coreJobs:[], coreJobIds:new Set(), totalX:0, totalY:0, weight:0,
+      coreX:0, coreY:0, coreWeight:0,
+    });
+    const group = groups.get(key);
+    group.places.push(entry);
+    const weight = entry.jobs.length;
+    group.totalX += entry.point[0] * weight;
+    group.totalY += entry.point[1] * weight;
+    group.weight += weight;
+    entry.jobs.forEach(job => {
+      if (group.jobIds.has(job.id)) return;
+      group.jobIds.add(job.id);
+      group.jobs.push(job);
+    });
+    if (entry.kind === 'core') {
+      group.corePlaces.push(entry);
+      group.coreX += entry.point[0] * weight;
+      group.coreY += entry.point[1] * weight;
+      group.coreWeight += weight;
+      entry.jobs.forEach(job => {
+        if (group.coreJobIds.has(job.id)) return;
+        group.coreJobIds.add(job.id);
+        group.coreJobs.push(job);
+      });
+    }
+  });
+  const grouped = [...groups.values()];
+  const maxMetroApplications = Math.max(...grouped.map(group => group.jobs.length), 1);
+  const maxCityApplications = Math.max(...grouped.map(group => group.coreJobs.length), 1);
+  return grouped.map(group => {
+    group.point = group.coreWeight
+      ? [group.coreX / group.coreWeight, group.coreY / group.coreWeight]
+      : [group.totalX / group.weight, group.totalY / group.weight];
+    group.radius = JOB_MAP_MARKER_MODE === 'numbered'
+      ? Math.min(28, 8 + Math.sqrt(group.jobs.length) * 3)
+      : 10 + Math.sqrt(group.jobs.length / maxMetroApplications) * 18;
+    group.cityRadius = group.coreJobs.length
+      ? (JOB_MAP_MARKER_MODE === 'numbered'
+        ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, String(group.coreJobs.length).length - 1) * 3, 3 + Math.sqrt(group.coreJobs.length) * 3))
+        : Math.min(group.radius - 5, 4 + Math.sqrt(group.coreJobs.length / maxCityApplications) * 8))
+      : 0;
+    if (group.coreJobs.length) group.kind = 'composite';
+    return group;
+  });
+}
+
+function _jobMapSpreadMarkers(entries) {
+  const mapped = entries.filter(entry => entry.point);
+  const isPinned = entry => entry.metro?.id === '35620'; // Keep NYC at its verified anchor.
+  mapped.forEach(entry => { entry.displayPoint = [...entry.point]; });
+  for (let pass = 0; pass < 24; pass++) {
+    let moved = false;
+    for (let i = 0; i < mapped.length; i++) {
+      for (let j = i + 1; j < mapped.length; j++) {
+        const a = mapped[i], b = mapped[j];
+        if (isPinned(a) && isPinned(b)) continue;
+        let dx = b.displayPoint[0] - a.displayPoint[0];
+        let dy = b.displayPoint[1] - a.displayPoint[1];
+        let distance = Math.hypot(dx, dy);
+        const minimum = a.radius + b.radius + 8;
+        if (distance >= minimum) continue;
+        if (distance < 0.01) { dx = 1; dy = 0; distance = 1; }
+        const push = (minimum - distance) / 2;
+        const aPush = isPinned(a) ? 0 : isPinned(b) ? push * 2 : push;
+        const bPush = isPinned(b) ? 0 : isPinned(a) ? push * 2 : push;
+        a.displayPoint[0] -= dx / distance * aPush;
+        a.displayPoint[1] -= dy / distance * aPush;
+        b.displayPoint[0] += dx / distance * bPush;
+        b.displayPoint[1] += dy / distance * bPush;
+        moved = true;
+      }
+    }
+    mapped.filter(entry => !isPinned(entry)).forEach(entry => {
+      entry.displayPoint[0] += (entry.point[0] - entry.displayPoint[0]) * 0.08;
+      entry.displayPoint[1] += (entry.point[1] - entry.displayPoint[1]) * 0.08;
+      if (entry.kind === 'composite') {
+        const dx = entry.displayPoint[0] - entry.point[0];
+        const dy = entry.displayPoint[1] - entry.point[1];
+        const distance = Math.hypot(dx, dy);
+        if (distance > 22) {
+          entry.displayPoint[0] = entry.point[0] + dx / distance * 22;
+          entry.displayPoint[1] = entry.point[1] + dy / distance * 22;
+        }
+      }
+      entry.displayPoint[0] = Math.max(entry.radius + 4, Math.min(956 - entry.radius, entry.displayPoint[0]));
+      entry.displayPoint[1] = Math.max(entry.radius + 4, Math.min(606 - entry.radius, entry.displayPoint[1]));
+    });
+    if (!moved) break;
+  }
+}
+
+function _renderJobMetroList(entries) {
+  if (typeof setApplicationLocationRankings === 'function') setApplicationLocationRankings(entries);
+}
+
+async function renderJobMap() {
+  const svg = document.getElementById('jobsMap');
+  if (!svg) return;
+  _watchJobLocationPanelHeight();
+  const renderId = ++_jobMapRenderId;
+  const jobs = getJobs();
+  const remoteCount = jobs.filter(job => job.locationType === 'remote').length;
+  const locations = new Map();
+  jobs.forEach(job => {
+    if (job.locationType === 'remote') return;
+    (job.locationCities || []).forEach(city => {
+      const label = String(city).trim();
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (!locations.has(key)) locations.set(key, { label, jobs:[] });
+      locations.get(key).jobs.push(job);
+    });
+  });
+  document.getElementById('jobsMapRemote').textContent = remoteCount ? `${remoteCount} remote` : '';
+  const message = document.getElementById('jobsMapMessage');
+  const summary = document.getElementById('jobsMapSummary');
+  const footer = document.getElementById('jobsMapFooter');
+  message.hidden = false;
+  message.textContent = 'Loading map…';
+  footer.textContent = '';
+  if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
+    message.textContent = 'Map library unavailable. Check your connection.';
+    return;
+  }
+  const map = await _loadJobMap();
+  if (renderId !== _jobMapRenderId) return;
+  if (!map) { message.textContent = 'Map unavailable. Check your connection.'; return; }
+
+  const ns = 'http://www.w3.org/2000/svg';
+  svg.replaceChildren();
+  const path = d3.geoPath(map.projection);
+  map.collection.features.forEach(feature => {
+    const state = document.createElementNS(ns, 'path');
+    state.setAttribute('class', 'jobs-map-land');
+    state.setAttribute('d', path(feature) || '');
+    svg.appendChild(state);
+  });
+  const entries = await Promise.all([...locations.values()].map(async entry =>
+    ({ ...entry, place:await _jobMapGeocode(entry.label) })));
+  if (renderId !== _jobMapRenderId) return;
+  const unmapped = [];
+  const mappedJobs = new Set();
+  entries.forEach(entry => {
+    const point = entry.place && map.projection(entry.place.coordinate);
+    if (!point) { unmapped.push(entry.label); return; }
+    entry.point = point;
+    entry.metro = _jobMapRankedMetro(map.metros, entry.label) || _jobMapMetro(map.metros, entry.place.coordinate);
+    entry.kind = entry.metro
+      ? (_jobMapIsCore(entry) ? 'core' : 'metro')
+      : 'other';
+    entry.jobs.forEach(job => mappedJobs.add(job.id));
+  });
+  const markers = _jobMapMarkers(entries);
+  _jobMapSpreadMarkers(markers);
+  markers.forEach(entry => {
+    const point = entry.displayPoint;
+    if (Math.hypot(point[0] - entry.point[0], point[1] - entry.point[1]) > 3) {
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('class', 'jobs-map-leader');
+      line.setAttribute('x1', entry.point[0]);
+      line.setAttribute('y1', entry.point[1]);
+      line.setAttribute('x2', point[0]);
+      line.setAttribute('y2', point[1]);
+      svg.insertBefore(line, svg.querySelector('.jobs-map-marker'));
+    }
+    const marker = document.createElementNS(ns, 'g');
+    marker.setAttribute('class', `jobs-map-marker jobs-map-marker-${entry.kind} jobs-map-marker-${JOB_MAP_MARKER_MODE}`);
+    marker.setAttribute('transform', `translate(${point[0]},${point[1]})`);
+    marker.setAttribute('tabindex', '0');
+    marker.setAttribute('role', 'button');
+    const cityCount = entry.coreJobs.length;
+    marker.setAttribute('aria-label', `${entry.label}: ${entry.jobs.length} metro application${entry.jobs.length === 1 ? '' : 's'}${cityCount ? `, including ${cityCount} in the major city` : ''}`);
+    const outer = document.createElementNS(ns, 'circle');
+    outer.setAttribute('r', entry.radius);
+    marker.appendChild(outer);
+    if (entry.cityRadius) {
+      const cityOffset = JOB_MAP_MARKER_MODE === 'numbered'
+        ? Math.max(0, entry.radius - entry.cityRadius - 2)
+        : 0;
+      const inner = document.createElementNS(ns, 'circle');
+      inner.setAttribute('r', entry.cityRadius);
+      inner.setAttribute('cx', -cityOffset);
+      inner.setAttribute('cy', cityOffset);
+      marker.appendChild(inner);
+      if (JOB_MAP_MARKER_MODE === 'numbered') {
+        const cityCount = document.createElementNS(ns, 'text');
+        cityCount.setAttribute('class', 'jobs-map-city-count');
+        cityCount.setAttribute('x', -cityOffset);
+        cityCount.setAttribute('y', cityOffset);
+        cityCount.textContent = entry.coreJobs.length;
+        marker.appendChild(cityCount);
+        const metroCount = document.createElementNS(ns, 'text');
+        metroCount.setAttribute('class', 'jobs-map-metro-count');
+        metroCount.setAttribute('x', entry.radius * 0.42);
+        metroCount.setAttribute('y', -entry.radius * 0.42);
+        metroCount.textContent = entry.jobs.length;
+        marker.appendChild(metroCount);
+      }
+    }
+    if (JOB_MAP_MARKER_MODE === 'numbered' && !entry.cityRadius && entry.jobs.length > 1) {
+      const count = document.createElementNS(ns, 'text');
+      count.textContent = entry.jobs.length;
+      marker.appendChild(count);
+    }
+    const tooltip = document.getElementById('jobsMapTooltip');
+    const show = () => {
+      tooltip.replaceChildren();
+      const title = document.createElement('strong');
+      title.textContent = entry.label;
+      tooltip.appendChild(title);
+      const metro = document.createElement('div');
+      metro.className = 'jobs-map-tooltip-metro';
+      metro.textContent = `${entry.jobs.length} application${entry.jobs.length === 1 ? '' : 's'} · ${entry.kind === 'other' ? 'Outside a metro area' : 'Metro area'}${entry.coreJobs.length ? ` · ${entry.coreJobs.length} in major city` : ''}`;
+      tooltip.appendChild(metro);
+      const names = document.createElement('div');
+      names.textContent = entry.places.map(place => place.label).join(', ');
+      tooltip.appendChild(names);
+      tooltip.hidden = false;
+      const frame = document.getElementById('jobsMapFrame').getBoundingClientRect();
+      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, point[0] * frame.width / 960 + 12)) + 'px';
+      tooltip.style.top = Math.max(8, point[1] * frame.height / 610 - tooltip.offsetHeight - 8) + 'px';
+    };
+    const hide = () => { tooltip.hidden = true; };
+    marker.addEventListener('mouseenter', show);
+    marker.addEventListener('mouseleave', hide);
+    marker.addEventListener('focus', show);
+    marker.addEventListener('blur', hide);
+    const open = () => document.querySelector(`.job-row[data-id="${CSS.escape(entry.jobs[0].id)}"]`)?.scrollIntoView({ behavior:'smooth', block:'center' });
+    marker.addEventListener('click', open);
+    marker.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } });
+    svg.appendChild(marker);
+  });
+  _renderJobMetroList(entries);
+  const mappedCount = mappedJobs.size;
+  summary.textContent = `${mappedCount} mapped application${mappedCount === 1 ? '' : 's'} · ${markers.length} map marker${markers.length === 1 ? '' : 's'}`;
+  message.hidden = true;
+  if (!entries.length) {
+    message.hidden = false;
+    message.textContent = jobs.length ? 'Add a city to an on-site or hybrid application to see it here.' : 'Add a job application to start mapping locations.';
+  }
+  if (unmapped.length) {
+    footer.className = 'jobs-map-footer jobs-map-unmapped';
+    footer.textContent = `Could not place: ${unmapped.join(', ')}. Use City, ST in the location field.`;
+  } else {
+    footer.className = 'jobs-map-footer';
+  }
 }
 
 function _getJobById(id) { return getJobs().find(j => j.id === id); }
@@ -326,7 +774,7 @@ document.addEventListener('click', (e) => {
         <div class="job-dd-item" data-loctype="onsite">On-site</div>
         <div id="jobLocCitiesWrap" style="display:none;padding:4px 8px 6px;">
           <div id="jobLocCityChips" class="job-loc-city-chips"></div>
-          <input class="job-loc-city-input" id="jobLocCityInput" placeholder="Add a city, press Enter">
+          <input class="job-loc-city-input" id="jobLocCityInput" placeholder="City, ST (e.g. Irvine, CA)">
         </div>`;
       dd.querySelectorAll('[data-loctype]').forEach(item => {
         if (item.dataset.loctype === selType) item.style.fontWeight = '500';

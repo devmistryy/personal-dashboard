@@ -47,6 +47,39 @@ function _loadLocal() {
   _saveLocal();
 }
 
+function _seedLocalCityCoverageFromUrl() {
+  const url = new URL(location.href);
+  if (url.searchParams.get('seedCityCoverage') !== '1') return;
+  url.searchParams.delete('seedCityCoverage');
+  history.replaceState(null, '', url);
+
+  const jobs = (MEM['jobs:list'] || []).filter(job =>
+    !job.sampleCityCoverage && !/\(Sample \d+\)$/.test(job.company));
+  const regions = new Set(['Silicon Valley', 'Orange County', 'Research Triangle Park', 'Oʻahu']);
+  const cities = [...new Set([
+    ...techCities.map(city => city.name),
+    ...techMetros.flatMap(metro => metro.includedAreas || []),
+  ])].filter(city => !regions.has(city));
+  const covered = new Set(jobs.flatMap(job => job.locationType === 'remote'
+    ? [] : (job.locationCities || [])).map(city => city.toLowerCase()));
+  const roles = ['Software Engineer', 'Frontend Engineer', 'Backend Engineer', 'Full Stack Engineer',
+    'Data Engineer', 'Product Manager', 'UX Designer', 'DevOps Engineer'];
+  cities.forEach((city, i) => {
+    if (covered.has(city.toLowerCase())) return;
+    const date = new Date();
+    date.setDate(date.getDate() - (i % 45));
+    const dateApplied = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')].join('-');
+    jobs.push({
+      id: _jobId(), company: `Sample Job - ${city}`, sampleCityCoverage: true,
+      role: roles[i % roles.length], platform: 'Company Site',
+      dateApplied, status: 'Applied', locationType: 'onsite', locationCities: [city],
+    });
+  });
+  MEM['jobs:list'] = jobs;
+  _saveLocal();
+}
+
 // One-time in-place rename of the pre-2026-09 "goal" storage keys to "task", for
 // local (test@local) accounts whose whole MEM blob lives in localStorage. Real
 // accounts re-fetch from Supabase each load, so they need nothing here.
@@ -1118,9 +1151,10 @@ window.resetLocalData = function () {
 };
 
 function _enterApp() {
+  if (LOCAL_MODE) _seedLocalCityCoverageFromUrl();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
   _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
   tick(true); // refresh the task ticker immediately with the loaded data
