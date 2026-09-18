@@ -53,7 +53,7 @@
   .job-location-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
   .job-location-display:hover { color:var(--text-primary); }
   .job-empty { color:var(--text-tertiary); font-size:13px; padding:24px 14px; text-align:center; }
-  .job-add-row { display:flex; align-items:center; gap:8px; padding:11px 14px; border-top:1px solid rgba(255,255,255,0.05); }
+  .job-add-row { display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.05); }
   .job-add-plus { font-size:14px; color:var(--text-tertiary); flex-shrink:0; }
   .job-add-input { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-size:13px; font-family:var(--font-body); }
   .job-add-input::placeholder { color:var(--text-tertiary); }
@@ -87,10 +87,10 @@
   .jobs-location-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,360px); gap:20px; align-items:start; }
   .jobs-map-section, .tech-rank-section { margin-top:0; }
   .jobs-map-card { padding:0; overflow:hidden; }
-  .jobs-map-header, .jobs-map-footer { display:flex; align-items:center; gap:12px; padding:11px 14px; color:var(--text-tertiary); font-size:12px; }
-  .jobs-map-header { border-bottom:1px solid rgba(255,255,255,0.06); justify-content:space-between; }
-  .jobs-map-header-left { display:flex; align-items:center; gap:16px; min-width:0; }
-  .jobs-map-header-summary { color:var(--text-secondary); white-space:nowrap; }
+  .jobs-map-header, .jobs-map-footer { display:flex; align-items:center; gap:10px 16px; padding:11px 14px; color:var(--text-tertiary); font-size:12px; }
+  .jobs-map-header { border-bottom:1px solid rgba(255,255,255,0.06); justify-content:space-between; align-items:center; flex-wrap:wrap; }
+  .jobs-map-header-left { display:flex; align-items:center; gap:8px 14px; min-width:0; flex:1 1 560px; flex-wrap:wrap; }
+  .jobs-map-header-summary { color:var(--text-secondary); white-space:nowrap; flex:0 1 auto; order:initial; align-self:center; margin-left:auto; }
   .jobs-map-footer { border-top:1px solid rgba(255,255,255,0.06); flex-wrap:wrap; }
   .jobs-map-footer:empty { display:none; }
   .jobs-map-frame { position:relative; background:#10191d; overflow:hidden; }
@@ -98,14 +98,19 @@
   .jobs-map-land { fill:#26353a; stroke:#536368; stroke-width:0.8; vector-effect:non-scaling-stroke; }
   .jobs-map-leader { stroke:rgba(255,255,255,0.5); stroke-width:1; stroke-dasharray:2 2; }
   .jobs-map-marker { cursor:pointer; outline:none; }
-  .jobs-map-marker circle:first-child { fill:rgba(74,158,255,0.18); stroke:#68b3ff; stroke-width:2; }
-  .jobs-map-marker circle:nth-child(2) { fill:#4a9eff; }
+  .jobs-map-marker circle:first-child { fill:rgba(63,143,232,0.18); stroke:#5a9de8; stroke-width:2; }
+  .jobs-map-marker circle:nth-child(2) { fill:#3f8fe8; }
   .jobs-map-marker-metro circle:first-child { fill:rgba(59,202,168,0.2); stroke:#59d6ba; }
 .jobs-map-marker-metro circle:nth-child(2) { fill:#3bcaa8; }
 .jobs-map-marker-composite circle:first-child { fill:rgba(59,202,168,0.2); stroke:#59d6ba; }
-.jobs-map-marker-composite circle:nth-child(2) { fill:#4a9eff; stroke:none; }
-  .jobs-map-marker-other circle:first-child { fill:rgba(225,186,99,0.2); stroke:#e1ba63; }
+.jobs-map-marker-composite circle:nth-child(2) { fill:#3f8fe8; stroke:none; }
+.jobs-map-marker-other circle:first-child { fill:rgba(225,186,99,0.2); stroke:#e1ba63; }
   .jobs-map-marker-other circle:nth-child(2) { fill:#e1ba63; }
+.jobs-map-marker-remote circle:first-child { fill:color-mix(in srgb, var(--tech-applications-color) 14%, transparent); stroke:var(--tech-applications-color); stroke-width:2; stroke-dasharray:3 2; }
+.jobs-map-marker-remote .jobs-map-remote-title, .jobs-map-marker-remote .jobs-map-remote-count { fill:#fff; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+.jobs-map-marker-remote .jobs-map-remote-title { font:700 14px var(--font-sans); }
+.jobs-map-marker-remote .jobs-map-remote-count-bg { fill:color-mix(in srgb, var(--tech-applications-color) 20%, transparent); stroke:var(--tech-applications-color); stroke-width:1; pointer-events:none; }
+.jobs-map-marker-remote .jobs-map-remote-count { font:700 12px var(--font-mono); }
 .jobs-map-marker text { fill:#fff; text-anchor:middle; dominant-baseline:central; font:700 12px var(--font-mono); pointer-events:none; }
 .jobs-map-marker .jobs-map-city-count { fill:#000; font-size:10px; }
 .jobs-map-marker .jobs-map-metro-count { fill:#fff; font-size:10px; }
@@ -114,11 +119,46 @@
   .jobs-map-message[hidden], .jobs-map-tooltip[hidden] { display:none; }
   .jobs-map-tooltip { position:absolute; z-index:2; max-width:min(230px,70%); padding:8px 10px; background:#1c2428; border:1px solid rgba(255,255,255,0.18); border-radius:6px; color:var(--text-primary); font-size:12px; line-height:1.5; box-shadow:0 8px 24px rgba(0,0,0,0.35); pointer-events:none; }
   .jobs-map-tooltip-metro { color:var(--text-tertiary); margin:2px 0 5px; }
+  .jobs-map-tooltip-counts { display:flex; flex-direction:column; gap:3px; margin:6px 0 7px; }
+  .jobs-map-tooltip-count { display:flex; align-items:center; justify-content:space-between; gap:18px; font-size:11px; }
+  .jobs-map-tooltip-count strong { color:var(--text-primary); font:700 11px var(--font-mono); white-space:nowrap; }
+  .jobs-map-tooltip-count-number { font-style:normal; }
+  .jobs-map-tooltip-count-city span { color:var(--tech-city-color); }
+  .jobs-map-tooltip-count-metro span { color:var(--tech-metro-color); }
   .jobs-map-legend { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; padding:9px 14px; border-top:1px solid rgba(255,255,255,0.06); color:var(--text-tertiary); font-size:11px; }
   .jobs-map-header-legend { flex:none; flex-wrap:nowrap; gap:12px; padding:0; border:0; font-size:10px; }
   .jobs-map-header-legend span { color:var(--text-tertiary); font-weight:600; }
+  .jobs-map-header-legend span:first-child { color:#3f8fe8; }
+  .jobs-map-header-legend span:nth-child(2) { color:#3bcaa8; }
+  .jobs-map-header-legend .jobs-map-key { width:10px; height:10px; border:1px solid; }
+  .jobs-map-header-legend .jobs-map-key-core { border-color:#5a9de8; }
+  .jobs-map-header-legend .jobs-map-key-metro { width:12px; height:12px; border-color:#59d6ba; background:rgba(59,202,168,0.2); }
+  .jobs-map-remote-summary { flex:none; align-self:flex-start; margin-top:0; padding:4px 9px; border:1px solid rgba(255,255,255,0.14); border-radius:6px; color:var(--text-secondary); font:600 10px var(--font-mono); white-space:nowrap; }
+  .jobs-map-city-scale, .jobs-map-metro-scale { display:flex; flex-direction:column; gap:3px; padding:5px 8px 4px; border:0; border-radius:999px; background:rgba(255,255,255,0.035); color:var(--text-tertiary); font-size:9px; white-space:nowrap; }
+  .jobs-map-scale-ramp, .jobs-map-scale-labels { display:grid; grid-template-columns:repeat(5, minmax(22px, 1fr)); gap:0; }
+  .jobs-map-scale-ramp { position:relative; overflow:hidden; border-radius:999px; height:7px; }
+  .jobs-map-scale-group { display:flex; align-items:center; gap:8px; }
+  .jobs-map-scale-group > small { color:var(--text-tertiary); font-size:13px; font-weight:600; white-space:nowrap; }
+  .jobs-map-scale-group-city > small { color:var(--tech-city-color); }
+  .jobs-map-scale-group-metro > small { color:var(--tech-metro-color); }
+  .jobs-map-metro-scale .jobs-map-scale-ramp::after { content:''; position:absolute; inset:0; opacity:1; border:1px solid transparent; border-radius:inherit; background:linear-gradient(90deg,#fff 0 20%,#12a968 20% 40%,#22c7c3 40% 60%,#0666d6 60% 80%,#8b5cf6 80% 100%) border-box; -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+  .jobs-map-metro-scale .jobs-map-scale-ramp { border:0; }
+  .jobs-map-scale-labels { text-align:center; line-height:1; }
+  .jobs-map-scale-labels b { font-size:9px; font-weight:600; }
+  .jobs-map-city-scale-key { width:auto; height:7px; border-radius:0; }
+  .jobs-map-city-scale-1 { background:rgba(255,255,255,0.3); }
+  .jobs-map-city-scale-2 { background:#12a968; }
+  .jobs-map-city-scale-3 { background:#22c7c3; }
+  .jobs-map-city-scale-4 { background:#0666d6; }
+  .jobs-map-city-scale-5 { background:#8b5cf6; }
+  .jobs-map-metro-scale-key { width:auto; height:7px; border:0; border-radius:0; }
+  .jobs-map-metro-scale-1 { background:transparent; }
+  .jobs-map-metro-scale-2 { background:rgba(18,169,104,0.35); }
+  .jobs-map-metro-scale-3 { background:rgba(34,199,195,0.35); }
+  .jobs-map-metro-scale-4 { background:rgba(6,102,214,0.35); }
+  .jobs-map-metro-scale-5 { background:rgba(139,92,246,0.35); }
   .jobs-map-legend span, .jobs-metro-place { display:inline-flex; align-items:center; gap:6px; }
-  .jobs-map-key { display:inline-block; width:8px; height:8px; border-radius:50%; flex:none; background:#4a9eff; }
+  .jobs-map-key { display:inline-block; width:8px; height:8px; border-radius:50%; flex:none; background:#3f8fe8; }
   .jobs-map-key-metro { background:#3bcaa8; }
   .jobs-map-key-other { background:#e1ba63; }
   .jobs-metro-list { max-height:240px; overflow-y:auto; border-top:1px solid rgba(255,255,255,0.06); }
@@ -134,34 +174,40 @@
   @media (max-width:520px) { .jobs-metro-group { flex-direction:column; gap:5px; } .jobs-metro-heading { flex-basis:auto; } }
   .jobs-map-unmapped { color:var(--warning); }
 
-  /* ── Fixed tech location opportunity rankings ── */
+/* ── Fixed tech location opportunity rankings ── */
+  :root { --tech-city-color:#ef4444; --tech-metro-color:#f97316; --tech-applications-color:#a16207; }
   .tech-rank-card { padding:0; overflow:hidden; }
   .tech-rank-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.06); }
-  .tech-rank-toggle { display:inline-flex; gap:2px; padding:3px; border:1px solid rgba(255,255,255,0.1); border-radius:7px; background:rgba(255,255,255,0.035); }
-  .tech-rank-mode { min-width:64px; padding:5px 10px; border:0; border-radius:5px; background:transparent; color:var(--text-tertiary); font:600 12px var(--font-body); cursor:pointer; }
+  .tech-rank-toggle { display:inline-flex; width:auto; gap:2px; margin-right:auto; padding:3px; border:1px solid rgba(255,255,255,0.1); border-radius:7px; background:rgba(255,255,255,0.035); }
+  .tech-rank-mode { min-width:0; width:auto; padding:5px 10px; border:0; border-radius:5px; background:transparent; color:var(--text-tertiary); font:600 12px var(--font-body); cursor:pointer; }
   .tech-rank-mode:hover { color:var(--text-primary); }
   .tech-rank-mode.active { background:rgba(255,255,255,0.12); color:var(--text-primary); }
-  .tech-rank-mode[data-tech-mode="metro"] { background:transparent; color:#8be8d1; }
-  .tech-rank-mode[data-tech-mode="city"] { background:transparent; color:#a5d0ff; }
-  .tech-rank-mode[data-tech-mode="applications"] { background:transparent; color:#f2c77a; }
-  .tech-rank-mode[data-tech-mode="metro"].active { background:rgba(59,202,168,0.32); color:#8be8d1; }
-  .tech-rank-mode[data-tech-mode="city"].active { background:rgba(74,158,255,0.32); color:#a5d0ff; }
-  .tech-rank-mode[data-tech-mode="applications"].active { background:rgba(229,174,88,0.32); color:#f2c77a; }
-  .tech-rank-mode:focus-visible { outline:2px solid #4a9eff; outline-offset:2px; }
-  .tech-rank-count { color:var(--text-tertiary); font:11px var(--font-mono); }
+  .tech-rank-mode[data-tech-mode="metro"] { background:transparent; color:var(--tech-metro-color); }
+  .tech-rank-mode[data-tech-mode="city"] { background:transparent; color:var(--tech-city-color); }
+  .tech-rank-mode[data-tech-mode="applications"] { background:transparent; color:var(--tech-applications-color); }
+  .tech-rank-mode[data-tech-mode="metro"].active { background:color-mix(in srgb, var(--tech-metro-color) 22%, transparent); color:var(--tech-metro-color); }
+  .tech-rank-mode[data-tech-mode="city"].active { background:color-mix(in srgb, var(--tech-city-color) 22%, transparent); color:var(--tech-city-color); }
+  .tech-rank-mode[data-tech-mode="applications"].active { background:color-mix(in srgb, var(--tech-applications-color) 22%, transparent); color:var(--tech-applications-color); }
+  .tech-rank-mode:focus-visible { outline:2px solid #3f8fe8; outline-offset:2px; }
+  .tech-rank-count { margin-left:auto; color:var(--text-tertiary); font:11px var(--font-mono); }
   .tech-rank-list { list-style:none; margin:0; padding:0; }
   .jobs-location-layout .tech-rank-card { display:flex; flex-direction:column; max-height:900px; }
   .jobs-location-layout .tech-rank-list { overflow-y:auto; }
-  .tech-rank-row { display:flex; align-items:flex-start; gap:14px; min-width:0; padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.045); }
+  .tech-rank-row { display:flex; align-items:center; gap:14px; min-width:0; padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.045); }
   .tech-rank-row:last-child { border-bottom:0; }
   .tech-rank-row:hover { background:rgba(255,255,255,0.025); }
-  .tech-rank-position { flex:0 0 36px; display:flex; flex-direction:column; align-items:center; gap:5px; padding-top:1px; }
-  .tech-rank-number { color:var(--text-tertiary); font:700 16px var(--font-mono); font-variant-numeric:tabular-nums; }
-  .tech-rank-type-key { width:7px; height:7px; }
+  .tech-rank-position { flex:0 0 36px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .tech-rank-number { color:var(--text-primary); font:700 18px var(--font-mono); font-variant-numeric:tabular-nums; }
+  .tech-rank-application-position { width:32px; height:32px; flex-basis:32px; justify-content:center; border:2px solid; border-radius:50%; box-sizing:border-box; }
+  .tech-rank-application-position-core { background:color-mix(in srgb, var(--tech-city-color) 14%, transparent); border-color:var(--tech-city-color); }
+  .tech-rank-application-position-metro { background:color-mix(in srgb, var(--tech-metro-color) 14%, transparent); border-color:var(--tech-metro-color); }
+  .tech-rank-application-position-other { background:color-mix(in srgb, var(--tech-applications-color) 14%, transparent); border-color:var(--tech-applications-color); }
+  .tech-rank-application-position .tech-rank-number { color:var(--text-primary); }
+  .tech-rank-neutral-position { width:32px; height:32px; flex-basis:32px; justify-content:center; border:1px solid rgba(255,255,255,0.18); border-radius:50%; box-sizing:border-box; }
   .tech-rank-content { display:flex; flex-direction:column; gap:3px; min-width:0; }
   .tech-rank-name { color:var(--text-primary); font-size:14px; font-weight:600; line-height:1.3; overflow-wrap:anywhere; }
   .tech-rank-detail { color:var(--text-tertiary); font-size:11.5px; line-height:1.45; overflow-wrap:anywhere; }
-  .tech-rank-application-count { display:inline-flex; align-items:baseline; gap:4px; flex:none; margin-left:auto; padding-top:1px; color:var(--text-tertiary); font:11px var(--font-mono); white-space:nowrap; }
+  .tech-rank-application-count { display:inline-flex; align-items:baseline; gap:4px; flex:none; margin-left:auto; color:var(--text-tertiary); font:11px var(--font-mono); white-space:nowrap; }
   .tech-rank-application-count strong { color:var(--text-secondary); font:700 16px var(--font-mono); }
 
   @media (max-width:900px) {

@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="css/main.css?v=14">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=43">
-<link rel="stylesheet" href="css/jobs.css?v=36">
+<link rel="stylesheet" href="css/jobs.css?v=86">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -250,13 +250,22 @@
         <div class="card jobs-map-card">
           <div class="jobs-map-header">
             <div class="jobs-map-header-left">
-              <div class="jobs-map-legend jobs-map-header-legend" aria-label="Map marker types">
-                <span><i class="jobs-map-key jobs-map-key-core"></i>Major City</span>
-                <span><i class="jobs-map-key jobs-map-key-metro"></i>Metro Area</span>
+              <div class="jobs-map-scale-group jobs-map-scale-group-city">
+                <small>City</small>
+                <div class="jobs-map-city-scale" aria-label="City applications color scale">
+                <div class="jobs-map-scale-ramp" aria-hidden="true"><i class="jobs-map-city-scale-key jobs-map-city-scale-1"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-2"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-3"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-4"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-5"></i></div>
+                <div class="jobs-map-scale-labels"><b id="jobsMapCityScale1">1</b><b id="jobsMapCityScale2">2–3</b><b id="jobsMapCityScale3">4–6</b><b id="jobsMapCityScale4">7–9</b><b id="jobsMapCityScale5">10+</b></div>
+                </div>
+              </div>
+              <div class="jobs-map-scale-group jobs-map-scale-group-metro">
+                <small>Metro</small>
+                <div class="jobs-map-metro-scale" aria-label="Metro applications color scale">
+                <div class="jobs-map-scale-ramp" aria-hidden="true"><i class="jobs-map-metro-scale-key jobs-map-metro-scale-1"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-2"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-3"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-4"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-5"></i></div>
+                <div class="jobs-map-scale-labels"><b id="jobsMapMetroScale1">1</b><b id="jobsMapMetroScale2">2–3</b><b id="jobsMapMetroScale3">4–6</b><b id="jobsMapMetroScale4">7–9</b><b id="jobsMapMetroScale5">10+</b></div>
+                </div>
               </div>
               <span class="jobs-map-header-summary" id="jobsMapSummary">Locations across the US</span>
             </div>
-            <span id="jobsMapRemote"></span>
           </div>
           <div class="jobs-map-frame" id="jobsMapFrame">
             <svg id="jobsMap" viewBox="0 0 960 610" role="img" aria-label="Map of US job application locations"></svg>
@@ -300,6 +309,10 @@
               </div>
             </div>
           </div>
+          <div class="job-add-row">
+            <span class="job-add-plus">+</span>
+            <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
+          </div>
           <div class="job-table-wrap">
             <table class="job-table">
               <colgroup>
@@ -317,10 +330,6 @@
               </thead>
               <tbody id="jobTableBody"></tbody>
             </table>
-          </div>
-          <div class="job-add-row">
-            <span class="job-add-plus">+</span>
-            <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
           </div>
         </div>
 
@@ -759,14 +768,14 @@
 <script src="js/reactiveHabits.js?v=1"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
-<script src="js/jobs.js?v=38"></script>
+<script src="js/jobs.js?v=81"></script>
 <script src="js/techRankingData.js?v=5"></script>
-<script src="js/techRankings.js?v=12"></script>
+<script src="js/techRankings.js?v=18"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=38"></script>
+<script src="js/main.js?v=39"></script>
 </body>
 </html>

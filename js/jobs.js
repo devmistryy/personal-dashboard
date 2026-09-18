@@ -163,8 +163,10 @@ let _jobMapGeometry = null;
 let _jobMapLoad = null;
 let _jobMapRenderId = 0;
 let _jobMapPanelResizeObserver = null;
-// Switch to 'numbered' to restore the previous marker layout.
-const JOB_MAP_MARKER_MODE = 'minimal';
+// 'minimal' preserves application-scaled sizing as the backup; 'color' is the current experiment.
+const JOB_MAP_MARKER_MODE = 'color';
+let _jobMapCityBands = [1, 2, 4, 7];
+let _jobMapMetroBands = [1, 2, 4, 7];
 
 function _syncJobLocationPanelHeight() {
   const mapCard = document.querySelector('.jobs-map-card');
@@ -362,9 +364,49 @@ function _jobMapMarkers(entries) {
         ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, String(group.coreJobs.length).length - 1) * 3, 3 + Math.sqrt(group.coreJobs.length) * 3))
         : Math.min(group.radius - 5, 4 + Math.sqrt(group.coreJobs.length / maxCityApplications) * 8))
       : 0;
+    group.cityColorApps = group.coreJobs.length;
+    group.metroColorApps = Math.max(0, group.jobs.length - group.coreJobs.length);
     if (group.coreJobs.length) group.kind = 'composite';
     return group;
   });
+}
+
+function _jobMapColorBands(maxApps) {
+  if (maxApps < 5) return [1, 3, 4, 5];
+  const turquoiseStart = Math.max(3, Math.ceil(maxApps / 3) + 1);
+  const blueStart = Math.max(turquoiseStart + 1, Math.floor(maxApps * 2 / 3) + 1);
+  const purpleStart = Math.max(blueStart + 1, maxApps);
+  return [1, turquoiseStart, blueStart, purpleStart];
+}
+
+function _jobMapCityColor(apps) {
+  if (apps >= _jobMapCityBands[3]) return '#8b5cf6';
+  if (apps >= _jobMapCityBands[2]) return '#0666d6';
+  if (apps >= _jobMapCityBands[1]) return '#22c7c3';
+  if (apps >= 2) return '#12a968';
+  return '#ffffff';
+}
+
+function _jobMapMetroColor(apps) {
+  if (apps >= _jobMapMetroBands[3]) return '#8b5cf6';
+  if (apps >= _jobMapMetroBands[2]) return '#0666d6';
+  if (apps >= _jobMapMetroBands[1]) return '#22c7c3';
+  if (apps >= 2) return '#12a968';
+  return '#ffffff';
+}
+
+function _jobMapUpdateColorLegend(cityBands, metroBands) {
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  set('jobsMapCityScale1', '1');
+  set('jobsMapCityScale2', `2–${cityBands[1] - 1}`);
+  set('jobsMapCityScale3', `${cityBands[1]}–${cityBands[2] - 1}`);
+  set('jobsMapCityScale4', `${cityBands[2]}–${cityBands[3] - 1}`);
+  set('jobsMapCityScale5', `${cityBands[3]}+`);
+  set('jobsMapMetroScale1', '1');
+  set('jobsMapMetroScale2', `2–${metroBands[1] - 1}`);
+  set('jobsMapMetroScale3', `${metroBands[1]}–${metroBands[2] - 1}`);
+  set('jobsMapMetroScale4', `${metroBands[2]}–${metroBands[3] - 1}`);
+  set('jobsMapMetroScale5', `${metroBands[3]}+`);
 }
 
 function _jobMapSpreadMarkers(entries) {
@@ -422,10 +464,13 @@ async function renderJobMap() {
   _watchJobLocationPanelHeight();
   const renderId = ++_jobMapRenderId;
   const jobs = getJobs();
-  const remoteCount = jobs.filter(job => job.locationType === 'remote').length;
+  const remoteCount = jobs.filter(job => String(job.locationType || '').toLowerCase() === 'remote').length;
   const locations = new Map();
   jobs.forEach(job => {
-    if (job.locationType === 'remote') return;
+    const locationType = String(job.locationType || '').toLowerCase();
+    // Hybrid applications are map-eligible when they have one or more cities,
+    // just like on-site applications. Only fully remote jobs stay off-map.
+    if (locationType === 'remote') return;
     (job.locationCities || []).forEach(city => {
       const label = String(city).trim();
       if (!label) return;
@@ -434,7 +479,6 @@ async function renderJobMap() {
       locations.get(key).jobs.push(job);
     });
   });
-  document.getElementById('jobsMapRemote').textContent = remoteCount ? `${remoteCount} remote` : '';
   const message = document.getElementById('jobsMapMessage');
   const summary = document.getElementById('jobsMapSummary');
   const footer = document.getElementById('jobsMapFooter');
@@ -474,6 +518,9 @@ async function renderJobMap() {
     entry.jobs.forEach(job => mappedJobs.add(job.id));
   });
   const markers = _jobMapMarkers(entries);
+  _jobMapCityBands = _jobMapColorBands(Math.max(1, ...markers.map(entry => entry.cityColorApps)));
+  _jobMapMetroBands = _jobMapColorBands(Math.max(1, ...markers.map(entry => entry.metroColorApps)));
+  _jobMapUpdateColorLegend(_jobMapCityBands, _jobMapMetroBands);
   _jobMapSpreadMarkers(markers);
   markers.forEach(entry => {
     const point = entry.displayPoint;
@@ -495,6 +542,13 @@ async function renderJobMap() {
     marker.setAttribute('aria-label', `${entry.label}: ${entry.jobs.length} metro application${entry.jobs.length === 1 ? '' : 's'}${cityCount ? `, including ${cityCount} in the major city` : ''}`);
     const outer = document.createElementNS(ns, 'circle');
     outer.setAttribute('r', entry.radius);
+    if (JOB_MAP_MARKER_MODE === 'color' && entry.metro) {
+      const metroColor = _jobMapMetroColor(entry.metroColorApps);
+      outer.style.stroke = metroColor;
+      outer.style.fill = metroColor;
+      outer.style.fillOpacity = metroColor === '#ffffff' ? '0.1' : '0.2';
+      if (metroColor === '#ffffff') outer.style.strokeOpacity = '0.8';
+    }
     marker.appendChild(outer);
     if (entry.cityRadius) {
       const cityOffset = JOB_MAP_MARKER_MODE === 'numbered'
@@ -504,6 +558,11 @@ async function renderJobMap() {
       inner.setAttribute('r', entry.cityRadius);
       inner.setAttribute('cx', -cityOffset);
       inner.setAttribute('cy', cityOffset);
+      if (JOB_MAP_MARKER_MODE === 'color') {
+        const cityColor = _jobMapCityColor(entry.cityColorApps);
+        inner.style.fill = cityColor;
+        inner.style.fillOpacity = cityColor === '#ffffff' ? '0.3' : '1';
+      }
       marker.appendChild(inner);
       if (JOB_MAP_MARKER_MODE === 'numbered') {
         const cityCount = document.createElementNS(ns, 'text');
@@ -531,13 +590,23 @@ async function renderJobMap() {
       const title = document.createElement('strong');
       title.textContent = entry.label;
       tooltip.appendChild(title);
-      const metro = document.createElement('div');
-      metro.className = 'jobs-map-tooltip-metro';
-      metro.textContent = `${entry.jobs.length} application${entry.jobs.length === 1 ? '' : 's'} · ${entry.kind === 'other' ? 'Outside a metro area' : 'Metro area'}${entry.coreJobs.length ? ` · ${entry.coreJobs.length} in major city` : ''}`;
-      tooltip.appendChild(metro);
-      const names = document.createElement('div');
-      names.textContent = entry.places.map(place => place.label).join(', ');
-      tooltip.appendChild(names);
+      const counts = document.createElement('div');
+      counts.className = 'jobs-map-tooltip-counts';
+      if (entry.coreJobs.length) {
+        const cityRow = document.createElement('div');
+        cityRow.className = 'jobs-map-tooltip-count jobs-map-tooltip-count-city';
+        cityRow.innerHTML = `<span>Major City</span><strong><em class="jobs-map-tooltip-count-number">${entry.coreJobs.length}</em> APPS</strong>`;
+        cityRow.querySelector('.jobs-map-tooltip-count-number').style.color = _jobMapCityColor(entry.cityColorApps);
+        counts.appendChild(cityRow);
+      }
+      if (entry.kind !== 'other') {
+        const metroRow = document.createElement('div');
+        metroRow.className = 'jobs-map-tooltip-count jobs-map-tooltip-count-metro';
+        metroRow.innerHTML = `<span>Metro Area</span><strong><em class="jobs-map-tooltip-count-number">${entry.jobs.length - entry.coreJobs.length}</em> APPS</strong>`;
+        metroRow.querySelector('.jobs-map-tooltip-count-number').style.color = _jobMapMetroColor(entry.metroColorApps);
+        counts.appendChild(metroRow);
+      }
+      tooltip.appendChild(counts);
       tooltip.hidden = false;
       const frame = document.getElementById('jobsMapFrame').getBoundingClientRect();
       tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, point[0] * frame.width / 960 + 12)) + 'px';
@@ -553,9 +622,69 @@ async function renderJobMap() {
     marker.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } });
     svg.appendChild(marker);
   });
+  // Remote applications use Toronto as a consistent visual anchor without
+  // being assigned to a city or metro ranking.
+  const remotePoint = map.projection([-79.3832, 43.6532]);
+  if (remotePoint) remotePoint[1] -= 80;
+  if (remotePoint) {
+    const remoteMarker = document.createElementNS(ns, 'g');
+    const remoteApplications = Math.max(1, remoteCount);
+    const maxMappedApplications = Math.max(1, ...entries.map(entry => entry.jobs.length));
+    const remoteRadius = 36 + Math.sqrt(remoteApplications / maxMappedApplications) * 44;
+    remoteMarker.setAttribute('class', 'jobs-map-marker jobs-map-marker-remote');
+    remoteMarker.setAttribute('transform', `translate(${remotePoint[0]},${remotePoint[1]})`);
+    remoteMarker.setAttribute('tabindex', '0');
+    remoteMarker.setAttribute('role', 'button');
+    remoteMarker.setAttribute('aria-label', `Remote: ${remoteCount} application${remoteCount === 1 ? '' : 's'}`);
+    const remoteCircle = document.createElementNS(ns, 'circle');
+    remoteCircle.setAttribute('r', remoteRadius);
+    remoteMarker.appendChild(remoteCircle);
+    const remoteTitle = document.createElementNS(ns, 'text');
+    remoteTitle.setAttribute('class', 'jobs-map-remote-title');
+    remoteTitle.setAttribute('x', '0');
+    remoteTitle.setAttribute('y', '-3');
+    remoteTitle.textContent = 'Remote';
+    remoteMarker.appendChild(remoteTitle);
+    const remoteCountBackground = document.createElementNS(ns, 'rect');
+    remoteCountBackground.setAttribute('class', 'jobs-map-remote-count-bg');
+    remoteCountBackground.setAttribute('x', '-27');
+    remoteCountBackground.setAttribute('y', '7');
+    remoteCountBackground.setAttribute('width', '54');
+    remoteCountBackground.setAttribute('height', '17');
+    remoteCountBackground.setAttribute('rx', '8.5');
+    remoteMarker.appendChild(remoteCountBackground);
+    const remoteCountLabel = document.createElementNS(ns, 'text');
+    remoteCountLabel.setAttribute('class', 'jobs-map-remote-count');
+    remoteCountLabel.setAttribute('x', '0');
+    remoteCountLabel.setAttribute('y', '15');
+    remoteCountLabel.textContent = `${remoteCount} Apps`;
+    remoteMarker.appendChild(remoteCountLabel);
+    const showRemote = () => {
+      const tooltip = document.getElementById('jobsMapTooltip');
+      tooltip.replaceChildren();
+      const title = document.createElement('strong');
+      title.textContent = 'Remote';
+      tooltip.appendChild(title);
+      const detail = document.createElement('div');
+      detail.className = 'jobs-map-tooltip-metro';
+      detail.textContent = `${remoteCount} application${remoteCount === 1 ? '' : 's'}`;
+      tooltip.appendChild(detail);
+      tooltip.hidden = false;
+      const frame = document.getElementById('jobsMapFrame').getBoundingClientRect();
+      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, remotePoint[0] * frame.width / 960 + 12)) + 'px';
+      tooltip.style.top = Math.max(8, remotePoint[1] * frame.height / 610 - tooltip.offsetHeight - 8) + 'px';
+    };
+    const hideRemote = () => { document.getElementById('jobsMapTooltip').hidden = true; };
+    remoteMarker.addEventListener('mouseenter', showRemote);
+    remoteMarker.addEventListener('mouseleave', hideRemote);
+    remoteMarker.addEventListener('focus', showRemote);
+    remoteMarker.addEventListener('blur', hideRemote);
+    svg.appendChild(remoteMarker);
+  }
   _renderJobMetroList(entries);
   const mappedCount = mappedJobs.size;
-  summary.textContent = `${mappedCount} mapped application${mappedCount === 1 ? '' : 's'} · ${markers.length} map marker${markers.length === 1 ? '' : 's'}`;
+  const mapMarkerCount = markers.length + 1;
+  summary.textContent = `${mappedCount} mapped application${mappedCount === 1 ? '' : 's'} · ${mapMarkerCount} map marker${mapMarkerCount === 1 ? '' : 's'}`;
   message.hidden = true;
   if (!entries.length) {
     message.hidden = false;

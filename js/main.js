@@ -80,6 +80,56 @@ function _seedLocalCityCoverageFromUrl() {
   _saveLocal();
 }
 
+function _seedLocalRealisticJobsFromUrl() {
+  const url = new URL(location.href);
+  if (url.searchParams.get('seedRealisticJobs') !== '1') return;
+  url.searchParams.delete('seedRealisticJobs');
+  history.replaceState(null, '', url);
+
+  const jobs = (MEM['jobs:list'] || []).filter(job =>
+    !job.sampleCityCoverage && !/^Sample (?:Job|Application)/.test(job.company || '') && !/\(Sample \d+\)$/.test(job.company || ''));
+  const roles = ['Software Engineer', 'Frontend Engineer', 'Backend Engineer', 'Full Stack Engineer',
+    'Data Engineer', 'Product Manager', 'UX Designer', 'DevOps Engineer'];
+  const platforms = ['LinkedIn', 'Company Site', 'Indeed'];
+  const seeded = [];
+  const used = new Set();
+  const addLocation = (city, count, metroRank) => {
+    const key = city.toLowerCase();
+    if (used.has(key)) return;
+    used.add(key);
+    for (let i = 0; i < count; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - ((seeded.length * 3 + i * 7 + metroRank) % 150));
+      seeded.push({
+        id: _jobId(), company: `Sample Application ${seeded.length + 1}`, sampleCityCoverage: true,
+        role: roles[seeded.length % roles.length], platform: platforms[seeded.length % platforms.length],
+        dateApplied: [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-'),
+        status: ['Applied', 'Applied', 'Phone Screen', 'Rejected'][seeded.length % 4],
+        locationType: 'onsite', locationCities: [city],
+      });
+    }
+  };
+
+  techCities.forEach(city => {
+    const rank = city.cityTechRank;
+    const count = rank <= 3 ? [10, 8, 7][rank - 1]
+      : rank <= 7 ? 6
+      : rank <= 10 ? 5
+      : rank <= 15 ? 4
+      : rank <= 25 ? 2 : 1;
+    addLocation(city.name, count, rank);
+  });
+  techMetros.forEach(metro => {
+    const coreNames = new Set(techCities.filter(city => city.metroId === metro.id)
+      .flatMap(city => [city.name, ...(TECH_CITY_APPLICATION_ALIASES[city.name] || [])])
+      .map(name => name.toLowerCase()));
+    (metro.includedAreas || []).filter(area => !coreNames.has(area.toLowerCase()))
+      .forEach(area => addLocation(area, metro.metroTechRank <= 12 ? 2 : 1, metro.metroTechRank));
+  });
+  MEM['jobs:list'] = [...jobs, ...seeded];
+  _saveLocal();
+}
+
 // One-time in-place rename of the pre-2026-09 "goal" storage keys to "task", for
 // local (test@local) accounts whose whole MEM blob lives in localStorage. Real
 // accounts re-fetch from Supabase each load, so they need nothing here.
@@ -1152,6 +1202,7 @@ window.resetLocalData = function () {
 
 function _enterApp() {
   if (LOCAL_MODE) _seedLocalCityCoverageFromUrl();
+  if (LOCAL_MODE) _seedLocalRealisticJobsFromUrl();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
   checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
