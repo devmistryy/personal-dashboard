@@ -16,7 +16,7 @@ const techMetros = [
   { id:'dc-nova', name:'DC / Northern Virginia', metroTechRank:6, includedAreas:['Washington, DC','Arlington','Alexandria','Tysons','McLean','Reston','Herndon','Bethesda'] },
   { id:'dallas-fort-worth', name:'Dallas–Fort Worth', metroTechRank:7, includedAreas:['Dallas','Fort Worth','Plano','Frisco','Irving','Richardson'] },
   { id:'boston', name:'Boston Metro', metroTechRank:8, includedAreas:['Boston','Cambridge','Somerville','Waltham'] },
-  { id:'los-angeles', name:'Los Angeles Metro', metroTechRank:9, includedAreas:['Los Angeles','Santa Monica','Culver City','El Segundo'] },
+  { id:'los-angeles', name:'Los Angeles Metro', metroTechRank:9, includedAreas:['Los Angeles','Long Beach','Santa Monica','Culver City','El Segundo'] },
   { id:'orange-county', name:'Orange County Metro', metroTechRank:10, includedAreas:['Irvine','Costa Mesa','Newport Beach'] },
   { id:'chicago', name:'Chicago Metro', metroTechRank:11, includedAreas:['Chicago','Evanston','Naperville'] },
   { id:'raleigh-durham', name:'Raleigh–Durham / Research Triangle', metroTechRank:12, includedAreas:['Raleigh','Durham','Research Triangle Park','Chapel Hill','Cary'] },
@@ -115,3 +115,11 @@ const techCities = [
   { id:'las-vegas', name:'Las Vegas', cityTechRank:50, metroId:'las-vegas' },
   { id:'honolulu', name:'Honolulu', cityTechRank:51, metroId:'honolulu' }
 ];
+
+function getTechMetroForLocation(location) {
+  const cityName = String(location).trim().toLowerCase();
+  const majorCity = techCities.find(city => city.name.toLowerCase() === cityName ||
+    (TECH_CITY_APPLICATION_ALIASES[city.name] || []).some(alias => alias.toLowerCase() === cityName));
+  if (majorCity) return techMetros.find(metro => metro.id === majorCity.metroId) || null;
+  return techMetros.find(metro => (metro.includedAreas || []).some(area => area.toLowerCase() === cityName)) || null;
+}

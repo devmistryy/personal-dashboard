@@ -16,15 +16,12 @@ function setApplicationLocationRankings(entries) {
     (typeof TECH_CITY_APPLICATION_ALIASES === 'undefined' ? [] : TECH_CITY_APPLICATION_ALIASES[city.name] || [])
       .forEach(alias => cityByName.set(alias.toLowerCase(), cityRows[index]));
   });
-  const metroByArea = new Map();
-  techMetros.forEach(metro => (metro.includedAreas || []).forEach(area => metroByArea.set(area.toLowerCase(), metro.id)));
   entries.forEach(entry => {
     if (!entry.point) return;
     const cityName = (typeof _jobMapCityName === 'function' ? _jobMapCityName(entry.label) : entry.label).toLowerCase();
     const majorCity = cityByName.get(cityName);
-    const metroRow = majorCity
-      ? majorCity
-      : metroById.get(metroByArea.get(cityName));
+    const rankedMetro = typeof getTechMetroForLocation === 'function' ? getTechMetroForLocation(cityName) : null;
+    const metroRow = majorCity ? majorCity : metroById.get(rankedMetro?.id);
     if (!metroRow) return;
     entry.jobs.forEach(job => {
       if (metroRow.jobIds.has(job.id)) return;

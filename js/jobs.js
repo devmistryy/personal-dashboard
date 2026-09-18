@@ -291,12 +291,8 @@ function _jobMapMetroDisplayName(metro) {
 function _jobMapRankedMetro(metros, label) {
   if (typeof techMetros === 'undefined') return null;
   const cityName = _jobMapCityName(label).toLowerCase();
-  const rankedCity = typeof techCities === 'undefined' ? null : techCities.find(city =>
-    city.name.toLowerCase() === cityName ||
-    (typeof TECH_CITY_APPLICATION_ALIASES !== 'undefined' &&
-      (TECH_CITY_APPLICATION_ALIASES[city.name] || []).some(alias => alias.toLowerCase() === cityName)));
-  const rankedMetro = rankedCity
-    ? techMetros.find(metro => metro.id === rankedCity.metroId)
+  const rankedMetro = typeof getTechMetroForLocation === 'function'
+    ? getTechMetroForLocation(cityName)
     : techMetros.find(metro => (metro.includedAreas || []).some(area => area.toLowerCase() === cityName));
   return rankedMetro ? metros.find(metro => metro.id === JOB_MAP_RANKED_METRO_IDS[rankedMetro.id]) || null : null;
 }
