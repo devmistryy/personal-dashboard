@@ -768,7 +768,16 @@
     font-variant-numeric: tabular-nums;
   }
   .hcal-day.full .hcal-day-num { font-weight: 700; } /* colour set inline to match the 100% ring */
-  .hcal-day.today .hcal-ring-track { stroke: rgba(255,255,255,0.38); }
+  /* Today marker: a halo just outside the completion ring, so it stays visible
+     no matter what colour or fill state that ring is in (including 100% green). */
+  .hcal-day.today::after {
+    content: '';
+    position: absolute;
+    inset: 4%;
+    border-radius: 50%;
+    border: 1.5px solid #4A9EFF; /* same blue as the day-ring at the top of the page */
+    pointer-events: none;
+  }
   .hcal-day.today .hcal-day-num { color: var(--text-primary); font-weight: 700; }
   .hcal-day.future .hcal-ring { display: none; }
   .hcal-day.future .hcal-day-num { color: rgba(255,255,255,0.12); }

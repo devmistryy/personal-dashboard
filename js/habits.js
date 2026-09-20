@@ -839,10 +839,6 @@ function renderHabitOverviewCalendar() {
 
     const hasVoid  = voidCount > 0 && !isFuture;
     const isFull   = pct >= 100 && counted.length > 0;
-    // Void outranks every other state: a day carrying one is neither scored nor
-    // failed, so it takes the slate treatment ahead of full-green or missed-red.
-    const numColor = hasVoid ? _HCAL_VOID
-      : isFull ? _hcalRingColor(100) : isMissed ? _HCAL_MISSED : null;
 
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
@@ -875,9 +871,32 @@ function renderHabitOverviewCalendar() {
            stroke-dasharray="${C} ${C}"></circle>`
       : '';
 
+    // Void outranks every other state: a day carrying one is neither scored nor
+    // failed, so it takes the slate treatment ahead of full-green or missed-red.
+    // Today is the one exception on top of that: its blue halo already marks it
+    // out, so its number stays plain white rather than taking any of these.
+    const numColor = isToday ? null : hasVoid ? _HCAL_VOID
+      : isFull ? _hcalRingColor(100) : isMissed ? _HCAL_MISSED : null;
+
+    // The circle's interior is filled with whatever colour the ring itself is
+    // drawn in above — same branches as `fill` — at any %, not just the 0/100
+    // extremes, so the day reads as "how far along" even before you look at the
+    // arc. A day with no arc yet (e.g. today before anything's checked off)
+    // gets no fill, matching its neutral ring.
+    const bgFill = hasVoid
+      ? (arcPct > 0
+        ? `<circle class="hcal-ring-bg" cx="18" cy="18" r="13" fill="${_HCAL_VOID}" fill-opacity="0.28"></circle>`
+        : '')
+      : doneCount > 0
+      ? `<circle class="hcal-ring-bg" cx="18" cy="18" r="13" fill="${_hcalRingColor(pct)}" fill-opacity="0.28"></circle>`
+      : isMissed
+      ? `<circle class="hcal-ring-bg" cx="18" cy="18" r="13" fill="${_HCAL_MISSED}" fill-opacity="0.28"></circle>`
+      : '';
+
     const dayAttrs = isFuture ? '' : ` data-date="${ds}" role="button" tabindex="0"`;
     html += `<div class="${cls}${isFuture ? '' : ' is-clickable'}"${dayAttrs} title="${titleTxt}">
       <svg class="hcal-ring${hasVoid ? ' has-void' : ''}" viewBox="0 0 36 36">
+        ${bgFill}
         <circle class="hcal-ring-track" cx="18" cy="18" r="${R}"></circle>
         ${fill}
         ${hasVoid ? _HCAL_SLASH_SVG : ''}
