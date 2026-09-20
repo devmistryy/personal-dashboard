@@ -53,6 +53,7 @@
   .job-location-display { cursor:pointer; color:var(--text-secondary); font-size:13px; }
   .job-location-display:hover { color:var(--text-primary); }
   .job-empty { color:var(--text-tertiary); font-size:13px; padding:24px 14px; text-align:center; }
+  .job-add-cell { padding:0; }
   .job-add-row { display:flex; align-items:center; gap:8px; padding:11px 14px; border-bottom:1px solid rgba(255,255,255,0.05); }
   .job-add-plus { font-size:14px; color:var(--text-tertiary); flex-shrink:0; }
   .job-add-input { flex:1; background:transparent; border:none; outline:none; color:var(--text-primary); font-size:13px; font-family:var(--font-body); }
@@ -98,12 +99,12 @@
   .jobs-map-land { fill:#26353a; stroke:#536368; stroke-width:0.8; vector-effect:non-scaling-stroke; }
   .jobs-map-leader { stroke:rgba(255,255,255,0.5); stroke-width:1; stroke-dasharray:2 2; }
   .jobs-map-marker { cursor:pointer; outline:none; }
-  .jobs-map-marker circle:first-child { fill:rgba(63,143,232,0.18); stroke:#5a9de8; stroke-width:2; }
-  .jobs-map-marker circle:nth-child(2) { fill:#3f8fe8; }
-  .jobs-map-marker-metro circle:first-child { fill:rgba(59,202,168,0.2); stroke:#59d6ba; }
-.jobs-map-marker-metro circle:nth-child(2) { fill:#3bcaa8; }
-.jobs-map-marker-composite circle:first-child { fill:rgba(59,202,168,0.2); stroke:#59d6ba; }
-.jobs-map-marker-composite circle:nth-child(2) { fill:#3f8fe8; stroke:none; }
+  .jobs-map-marker circle:first-child { fill:color-mix(in srgb, var(--tech-city-color) 18%, transparent); stroke:var(--tech-city-color); stroke-width:2; }
+  .jobs-map-marker circle:nth-child(2) { fill:var(--tech-city-color); }
+  .jobs-map-marker-metro circle:first-child { fill:color-mix(in srgb, var(--tech-metro-color) 20%, transparent); stroke:var(--tech-metro-color); }
+.jobs-map-marker-metro circle:nth-child(2) { fill:var(--tech-metro-color); }
+.jobs-map-marker-composite circle:first-child { fill:color-mix(in srgb, var(--tech-metro-color) 20%, transparent); stroke:var(--tech-metro-color); }
+.jobs-map-marker-composite circle:nth-child(2) { fill:var(--tech-city-color); stroke:none; }
 .jobs-map-marker-other circle:first-child { fill:rgba(225,186,99,0.2); stroke:#e1ba63; }
   .jobs-map-marker-other circle:nth-child(2) { fill:#e1ba63; }
 .jobs-map-marker-remote circle:first-child { fill:color-mix(in srgb, var(--tech-applications-color) 14%, transparent); stroke:var(--tech-applications-color); stroke-width:2; stroke-dasharray:3 2; }
@@ -128,11 +129,11 @@
   .jobs-map-legend { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; padding:9px 14px; border-top:1px solid rgba(255,255,255,0.06); color:var(--text-tertiary); font-size:11px; }
   .jobs-map-header-legend { flex:none; flex-wrap:nowrap; gap:12px; padding:0; border:0; font-size:10px; }
   .jobs-map-header-legend span { color:var(--text-tertiary); font-weight:600; }
-  .jobs-map-header-legend span:first-child { color:#3f8fe8; }
-  .jobs-map-header-legend span:nth-child(2) { color:#3bcaa8; }
+  .jobs-map-header-legend span:first-child { color:var(--tech-city-color); }
+  .jobs-map-header-legend span:nth-child(2) { color:var(--tech-metro-color); }
   .jobs-map-header-legend .jobs-map-key { width:10px; height:10px; border:1px solid; }
-  .jobs-map-header-legend .jobs-map-key-core { border-color:#5a9de8; }
-  .jobs-map-header-legend .jobs-map-key-metro { width:12px; height:12px; border-color:#59d6ba; background:rgba(59,202,168,0.2); }
+  .jobs-map-header-legend .jobs-map-key-core { border-color:var(--tech-city-color); }
+  .jobs-map-header-legend .jobs-map-key-metro { width:12px; height:12px; border-color:var(--tech-metro-color); background:color-mix(in srgb, var(--tech-metro-color) 20%, transparent); }
   .jobs-map-remote-summary { flex:none; align-self:flex-start; margin-top:0; padding:4px 9px; border:1px solid rgba(255,255,255,0.14); border-radius:6px; color:var(--text-secondary); font:600 10px var(--font-mono); white-space:nowrap; }
   .jobs-map-city-scale, .jobs-map-metro-scale { display:flex; flex-direction:column; gap:3px; padding:5px 8px 4px; border:0; border-radius:999px; background:rgba(255,255,255,0.035); color:var(--text-tertiary); font-size:9px; white-space:nowrap; }
   .jobs-map-scale-ramp, .jobs-map-scale-labels { display:grid; grid-template-columns:repeat(5, minmax(22px, 1fr)); gap:0; }
@@ -158,8 +159,8 @@
   .jobs-map-metro-scale-4 { background:rgba(6,102,214,0.35); }
   .jobs-map-metro-scale-5 { background:rgba(139,92,246,0.35); }
   .jobs-map-legend span, .jobs-metro-place { display:inline-flex; align-items:center; gap:6px; }
-  .jobs-map-key { display:inline-block; width:8px; height:8px; border-radius:50%; flex:none; background:#3f8fe8; }
-  .jobs-map-key-metro { background:#3bcaa8; }
+  .jobs-map-key { display:inline-block; width:8px; height:8px; border-radius:50%; flex:none; background:var(--tech-city-color); }
+  .jobs-map-key-metro { background:var(--tech-metro-color); }
   .jobs-map-key-other { background:#e1ba63; }
   .jobs-metro-list { max-height:240px; overflow-y:auto; border-top:1px solid rgba(255,255,255,0.06); }
   .jobs-metro-list:empty { display:none; }
@@ -175,7 +176,7 @@
   .jobs-map-unmapped { color:var(--warning); }
 
 /* ── Fixed tech location opportunity rankings ── */
-  :root { --tech-city-color:#ef4444; --tech-metro-color:#f97316; --tech-applications-color:#a16207; }
+  :root { --tech-city-color:#dc2626; --tech-metro-color:#f59e0b; --tech-applications-color:#a16207; }
   .tech-rank-card { padding:0; overflow:hidden; }
   .tech-rank-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.06); }
   .tech-rank-toggle { display:inline-flex; width:auto; gap:2px; margin-right:auto; padding:3px; border:1px solid rgba(255,255,255,0.1); border-radius:7px; background:rgba(255,255,255,0.035); }

@@ -16,6 +16,7 @@ const JOB_PLATFORM_STYLE = {
   'Company Site': { bg:'rgba(255,255,255,0.10)', color:'rgba(255,255,255,0.75)' },
 };
 const JOB_PLATFORM_FALLBACK_STYLE = { bg:'rgba(255,255,255,0.08)', color:'var(--text-secondary)' };
+const JOB_MAP_VIEWBOX = { x:0, y:8, width:960, height:588 };
 
 let _jobSort = 'date';
 
@@ -609,8 +610,8 @@ async function renderJobMap() {
       tooltip.appendChild(counts);
       tooltip.hidden = false;
       const frame = document.getElementById('jobsMapFrame').getBoundingClientRect();
-      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, point[0] * frame.width / 960 + 12)) + 'px';
-      tooltip.style.top = Math.max(8, point[1] * frame.height / 610 - tooltip.offsetHeight - 8) + 'px';
+      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, (point[0] - JOB_MAP_VIEWBOX.x) * frame.width / JOB_MAP_VIEWBOX.width + 12)) + 'px';
+      tooltip.style.top = Math.max(8, (point[1] - JOB_MAP_VIEWBOX.y) * frame.height / JOB_MAP_VIEWBOX.height - tooltip.offsetHeight - 8) + 'px';
     };
     const hide = () => { tooltip.hidden = true; };
     marker.addEventListener('mouseenter', show);
@@ -669,8 +670,8 @@ async function renderJobMap() {
       tooltip.appendChild(detail);
       tooltip.hidden = false;
       const frame = document.getElementById('jobsMapFrame').getBoundingClientRect();
-      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, remotePoint[0] * frame.width / 960 + 12)) + 'px';
-      tooltip.style.top = Math.max(8, remotePoint[1] * frame.height / 610 - tooltip.offsetHeight - 8) + 'px';
+      tooltip.style.left = Math.min(frame.width - tooltip.offsetWidth - 8, Math.max(8, (remotePoint[0] - JOB_MAP_VIEWBOX.x) * frame.width / JOB_MAP_VIEWBOX.width + 12)) + 'px';
+      tooltip.style.top = Math.max(8, (remotePoint[1] - JOB_MAP_VIEWBOX.y) * frame.height / JOB_MAP_VIEWBOX.height - tooltip.offsetHeight - 8) + 'px';
     };
     const hideRemote = () => { document.getElementById('jobsMapTooltip').hidden = true; };
     remoteMarker.addEventListener('mouseenter', showRemote);

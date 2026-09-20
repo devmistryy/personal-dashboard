@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="css/main.css?v=14">
 <link rel="stylesheet" href="css/todo.css?v=26">
 <link rel="stylesheet" href="css/habits.css?v=43">
-<link rel="stylesheet" href="css/jobs.css?v=86">
+<link rel="stylesheet" href="css/jobs.css?v=88">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -268,7 +268,7 @@
             </div>
           </div>
           <div class="jobs-map-frame" id="jobsMapFrame">
-            <svg id="jobsMap" viewBox="0 0 960 610" role="img" aria-label="Map of US job application locations"></svg>
+            <svg id="jobsMap" viewBox="0 8 960 588" role="img" aria-label="Map of US job application locations"></svg>
             <div class="jobs-map-message" id="jobsMapMessage">Loading map…</div>
             <div class="jobs-map-tooltip" id="jobsMapTooltip" hidden></div>
           </div>
@@ -309,10 +309,6 @@
               </div>
             </div>
           </div>
-          <div class="job-add-row">
-            <span class="job-add-plus">+</span>
-            <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
-          </div>
           <div class="job-table-wrap">
             <table class="job-table">
               <colgroup>
@@ -328,6 +324,16 @@
                   <th><span class="th-inner"><i class="ti ti-map-pin" aria-hidden="true"></i>Location</span></th>
                 </tr>
               </thead>
+              <tbody class="job-add-tbody">
+                <tr>
+                  <td colspan="6" class="job-add-cell">
+                    <div class="job-add-row">
+                      <span class="job-add-plus">+</span>
+                      <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
               <tbody id="jobTableBody"></tbody>
             </table>
           </div>
@@ -768,7 +774,7 @@
 <script src="js/reactiveHabits.js?v=1"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
-<script src="js/jobs.js?v=83"></script>
+<script src="js/jobs.js?v=84"></script>
 <script src="js/techRankingData.js?v=5"></script>
 <script src="js/techRankings.js?v=18"></script>
 <script src="js/areas.js?v=9"></script>
