@@ -17,9 +17,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=14">
+<link rel="stylesheet" href="css/main.css?v=25">
 <link rel="stylesheet" href="css/todo.css?v=26">
-<link rel="stylesheet" href="css/habits.css?v=43">
+<link rel="stylesheet" href="css/habits.css?v=53">
 <link rel="stylesheet" href="css/jobs.css?v=88">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
@@ -28,16 +28,63 @@
 <link rel="stylesheet" href="css/whoop.css?v=1">
 </head>
 <body>
-<div class="page-wrap">
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <span class="sidebar-title">My Dashboard</span>
+      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
+      </button>
+    </div>
+
+    <!-- Tab Bar -->
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-btn active" data-tab="tasks" title="To Do">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10"/></svg>
+        <span class="tab-btn-label">To Do</span>
+      </button>
+      <button class="tab-btn" data-tab="habits" title="Habits">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span class="tab-btn-label">Habits</span>
+      </button>
+      <button class="tab-btn" data-tab="jobs" title="Jobs">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span class="tab-btn-label">Jobs</span>
+      </button>
+      <button class="tab-btn" data-tab="areas" title="Areas">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span class="tab-btn-label">Areas</span>
+      </button>
+      <button class="tab-btn" data-tab="diet" title="Diet">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><path d="M7 2v8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V2M9 12v10M17 2c-1.6 0-3 1.8-3 4.5S15.4 11 17 11V2v20"/></svg>
+        <span class="tab-btn-label">Diet</span>
+      </button>
+      <button class="tab-btn" data-tab="mobility" title="Mobility">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 8M12 12l3 8M8 11h8"/></svg>
+        <span class="tab-btn-label">Mobility</span>
+      </button>
+      <button class="tab-btn" data-tab="whoop" title="WHOOP">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><path d="M4 12h4l2-8 4 16 2-8h4"/></svg>
+        <span class="tab-btn-label">WHOOP</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button id="signOutBtn" class="tab-btn sidebar-signout" style="display:none;" title="Sign out">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span class="tab-btn-label">Sign out</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+  <div class="page-wrap">
 
   <!-- Shown by _syncFailed() when a write to Supabase is rejected: the change is
        in memory only and a reload will silently revert it. Click to dismiss. -->
   <div id="syncErrorBanner" class="sync-error-banner" role="status" hidden></div>
-
-  <div class="dash-header">
-    <h1 class="dash-title">My Dashboard</h1>
-    <button id="signOutBtn" class="btn-signout" style="display:none;">Sign out</button>
-  </div>
 
   <!-- Task Ticker -->
   <div class="ticker-row">
@@ -54,52 +101,54 @@
     </div>
   </div>
 
-  <!-- Day Ring -->
-  <div class="card" style="padding:0; margin-bottom:18px;">
-    <div class="day-ring-wrap">
-      <div class="day-ring-svg-wrap">
-        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <filter id="ring-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="2.5" result="blur"/>
-              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <!-- Track -->
-          <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
-          <!-- Fill -->
-          <circle id="ringFill" cx="60" cy="60" r="52"
-            fill="none"
-            stroke="#4A9EFF"
-            stroke-width="8"
-            stroke-linecap="round"
-            filter="url(#ring-glow)"
-            transform="rotate(-90 60 60)"
-            style="transition: stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.7s cubic-bezier(0.22,1,0.36,1);"/>
-        </svg>
-        <div class="day-ring-overlay">
-          <div class="day-ring-pct" id="ringPct">—</div>
-          <div class="day-ring-phase" id="ringPhase">SLEEPING</div>
-          <div class="day-ring-clock" id="ringClock">—</div>
+  <!-- Day Ring + Quote of the Day -->
+  <div class="day-ring-row">
+    <div class="card day-ring-card">
+      <div class="weather-badge" id="weatherBadge" hidden>
+        <span id="weatherIcon">☀️</span>
+        <span id="weatherTemp">—°</span>
+        <span class="weather-sun" id="weatherSun" hidden></span>
+      </div>
+      <div class="day-ring-wrap">
+        <div class="day-ring-svg-wrap">
+          <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <filter id="ring-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2.5" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <!-- Track -->
+            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
+            <!-- Fill -->
+            <circle id="ringFill" cx="60" cy="60" r="52"
+              fill="none"
+              stroke="#4A9EFF"
+              stroke-width="8"
+              stroke-linecap="round"
+              filter="url(#ring-glow)"
+              transform="rotate(-90 60 60)"
+              style="transition: stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.7s cubic-bezier(0.22,1,0.36,1);"/>
+          </svg>
+          <div class="day-ring-overlay">
+            <div class="day-ring-pct" id="ringPct">—</div>
+            <div class="day-ring-phase" id="ringPhase">SLEEPING</div>
+            <div class="day-ring-clock" id="ringClock">—</div>
+          </div>
+        </div>
+        <div class="day-ring-info">
+          <div class="day-ring-status" id="ringStatus">Loading…</div>
+          <div class="day-ring-remain" id="ringRemain"></div>
+          <div class="day-ring-hours" id="ringHours">8:00 AM – 12:00 AM</div>
         </div>
       </div>
-      <div class="day-ring-info">
-        <div class="day-ring-status" id="ringStatus">Loading…</div>
-        <div class="day-ring-remain" id="ringRemain"></div>
-        <div class="day-ring-hours" id="ringHours">8:00 AM – 12:00 AM</div>
-      </div>
     </div>
-  </div>
 
-  <!-- Tab Bar -->
-  <div class="tab-bar">
-    <button class="tab-btn active" data-tab="tasks">To Do</button>
-    <button class="tab-btn" data-tab="habits">Habits</button>
-    <button class="tab-btn" data-tab="jobs">Jobs</button>
-    <button class="tab-btn" data-tab="areas">Areas &amp; Goals</button>
-    <button class="tab-btn" data-tab="diet">Diet</button>
-    <button class="tab-btn" data-tab="mobility">Mobility</button>
-    <button class="tab-btn" data-tab="whoop">WHOOP</button>
+    <div class="card quote-card">
+      <div class="quote-eyebrow">Quote of the Day</div>
+      <div class="quote-text" id="quoteText">—</div>
+      <div class="quote-author" id="quoteAuthor"></div>
+    </div>
   </div>
 
   <!-- Tab: Tasks -->
@@ -166,76 +215,80 @@
   <!-- Tab: Habits -->
   <div class="tab-panel" id="tab-habits">
     <div class="section">
-      <div class="section-title">Habit Calendar</div>
-      <div class="card">
-        <div class="habit-cal-split">
-          <div class="hcal">
-            <div class="hcal-nav">
-              <button class="hcal-nav-btn" id="hcalPrev">←</button>
-              <div class="hcal-month-header" id="hcalMonthHeader"></div>
-              <button class="hcal-nav-btn" id="hcalNext">→</button>
+      <div class="habit-cal-split">
+        <div class="habit-cal-left">
+          <div class="section-title">Habit Calendar</div>
+          <div class="card">
+            <div class="hcal">
+              <div class="hcal-nav">
+                <button class="hcal-nav-btn" id="hcalPrev">←</button>
+                <div class="hcal-month-header" id="hcalMonthHeader"></div>
+                <button class="hcal-nav-btn" id="hcalNext">→</button>
+              </div>
+              <div class="hcal-grid" id="hcalGrid"></div>
             </div>
-            <div class="hcal-grid" id="hcalGrid"></div>
           </div>
 
-          <div class="rh-panel">
-            <div class="rh-panel-head">
-              <div class="section-title" style="margin-bottom:0;">Reactive Habits</div>
-              <span id="rhViewAllLink" class="mono rh-view-all">View all &#8594;</span>
+          <div class="card">
+            <div class="rh-panel">
+              <div class="rh-panel-head">
+                <div class="section-title" style="margin-bottom:0;">Reactive Habits</div>
+                <span id="rhViewAllLink" class="mono rh-view-all">View all &#8594;</span>
+              </div>
+              <ul id="reactiveHabitList" class="rh-list"></ul>
+              <div id="reactiveHabitEmpty" class="empty-state" style="display:none;">No reactive habits yet — add one below.</div>
+              <div class="habit-add-form">
+                <div class="habit-add-row">
+                  <input type="text" class="task-input" id="rhNameInput" placeholder="Add a reactive habit…" style="flex:1;">
+                  <button class="btn-add" id="rhAddBtn">+ Add</button>
+                </div>
+                <div class="habit-date-wrap">
+                  <span class="habit-date-label">Cue type:</span>
+                  <div id="rhCueBtns" style="display:flex;gap:8px;"></div>
+                </div>
+              </div>
             </div>
-            <ul id="reactiveHabitList" class="rh-list"></ul>
-            <div id="reactiveHabitEmpty" class="empty-state" style="display:none;">No reactive habits yet — add one below.</div>
+          </div>
+        </div>
+
+        <div class="habit-cal-right">
+          <div class="section-title">Habit Tracker</div>
+          <div class="card" id="habitCard">
+            <div class="habit-sort-bar">
+              <span class="habit-sort-label">Sort By:</span>
+              <button class="habit-sort-btn active" data-sort="custom">Custom</button>
+              <button class="habit-sort-btn" data-sort="az">A–Z</button>
+              <button class="habit-sort-btn" data-sort="area">Area</button>
+              <button class="habit-sort-btn" data-sort="newest">Newest</button>
+              <button class="habit-sort-btn" data-sort="oldest">Oldest</button>
+              <div class="habit-flame-legend">
+                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(248,197,50)"></span>1–4</span>
+                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,135,51)"></span>5–13</span>
+                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,70,68)"></span>14–29</span>
+                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(57,150,253)"></span>30+</span>
+              </div>
+            </div>
+            <ul id="habitList" class="habit-list"></ul>
+            <div id="habitEmpty" class="empty-state">No habits yet — add one below.</div>
+
+            <!-- Archived section -->
+            <div class="archived-toggle" id="archivedToggle" style="display:none;">
+              <span class="archived-toggle-arrow">▶</span>
+              <span id="archivedToggleLabel">Completed habits</span>
+            </div>
+            <ul id="archivedList" class="archived-list habit-list"></ul>
+
+            <!-- Add form -->
             <div class="habit-add-form">
               <div class="habit-add-row">
-                <input type="text" class="task-input" id="rhNameInput" placeholder="Add a reactive habit…" style="flex:1;">
-                <button class="btn-add" id="rhAddBtn">+ Add</button>
+                <input type="text" class="task-input" id="habitInput" placeholder="Add a habit…" style="flex:1;">
+                <button class="btn-add" id="habitAddBtn">+ Add</button>
               </div>
               <div class="habit-date-wrap">
-                <span class="habit-date-label">Cue type:</span>
-                <div id="rhCueBtns" style="display:flex;gap:8px;"></div>
+                <span class="habit-date-label">End date (leave blank for ongoing):</span>
+                <input type="date" class="habit-date-input" id="habitEndDate">
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Habit Tracker</div>
-      <div class="card" id="habitCard">
-        <div class="habit-sort-bar">
-          <span class="habit-sort-label">Sort By:</span>
-          <button class="habit-sort-btn active" data-sort="custom">Custom</button>
-          <button class="habit-sort-btn" data-sort="az">A–Z</button>
-          <button class="habit-sort-btn" data-sort="area">Area</button>
-          <button class="habit-sort-btn" data-sort="newest">Newest</button>
-          <button class="habit-sort-btn" data-sort="oldest">Oldest</button>
-          <div class="habit-flame-legend">
-            <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(248,197,50)"></span>1–4</span>
-            <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,135,51)"></span>5–13</span>
-            <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,70,68)"></span>14–29</span>
-            <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(57,150,253)"></span>30+</span>
-          </div>
-        </div>
-        <ul id="habitList" class="habit-list"></ul>
-        <div id="habitEmpty" class="empty-state">No habits yet — add one below.</div>
-
-        <!-- Archived section -->
-        <div class="archived-toggle" id="archivedToggle" style="display:none;">
-          <span class="archived-toggle-arrow">▶</span>
-          <span id="archivedToggleLabel">Completed habits</span>
-        </div>
-        <ul id="archivedList" class="archived-list habit-list"></ul>
-
-        <!-- Add form -->
-        <div class="habit-add-form">
-          <div class="habit-add-row">
-            <input type="text" class="task-input" id="habitInput" placeholder="Add a habit…" style="flex:1;">
-            <button class="btn-add" id="habitAddBtn">+ Add</button>
-          </div>
-          <div class="habit-date-wrap">
-            <span class="habit-date-label">End date (leave blank for ongoing):</span>
-            <input type="date" class="habit-date-input" id="habitEndDate">
           </div>
         </div>
       </div>
@@ -574,6 +627,8 @@
     </div>
   </div>
 
+  </div>
+  </main>
 </div>
 
 <!-- Job status/platform/location dropdown -->
@@ -770,7 +825,7 @@
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
 <script src="js/todo.js?v=25"></script>
-<script src="js/habits.js?v=38"></script>
+<script src="js/habits.js?v=40"></script>
 <script src="js/reactiveHabits.js?v=1"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
@@ -782,6 +837,6 @@
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=39"></script>
+<script src="js/main.js?v=45"></script>
 </body>
 </html>

@@ -33,8 +33,6 @@
     transition: background 0.2s;
   }
   .habit-row:hover { background: rgba(255,255,255,0.055); }
-  .habit-row:hover .habit-delete,
-  .habit-row:hover .habit-archive-btn,
   .habit-row:hover .habit-restart-btn,
   .habit-row:hover .habit-drag-handle { opacity: 1; }
   .habit-row.drag-over { border-top: 2px solid rgba(255,255,255,0.35); }
@@ -179,6 +177,8 @@
     color: var(--text-tertiary);
     min-width: 32px;
     flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 4px;
   }
 
   .habit-flame-badge {
@@ -188,18 +188,18 @@
     flex-shrink: 0;
   }
   .habit-flame-img { display: block; object-fit: contain; }
-  .habit-flame-badge--row .habit-flame-img { width: 12px; height: 16px; }
+  .habit-flame-badge--row .habit-flame-img { width: 16px; height: 21px; }
   /* Stands in for the flame image on a never-started habit — same width as
      the icon it replaces, so the dash lines up in the flame's own column. */
   .habit-flame-badge--row .habit-flame-placeholder {
-    display: block; width: 12px; text-align: center; color: var(--text-tertiary);
+    display: block; width: 16px; text-align: center; color: var(--text-tertiary);
   }
   .habit-flame-badge--stat .habit-flame-img { width: 22px; height: 30px; }
   .habit-flame-badge--ember .habit-flame-img { opacity: 0.85; }
   /* The icy-skull art is a taller/narrower canvas (~0.61 aspect) than the
      flame art (~0.72), so it needs its own width at each size rather than
      inheriting the flame boxes above. */
-  .habit-flame-badge--dormant.habit-flame-badge--row .habit-flame-img { width: 13px; height: 21px; transform: translateY(3px); }
+  .habit-flame-badge--dormant.habit-flame-badge--row .habit-flame-img { width: 17px; height: 27px; transform: translateY(3px); }
   .habit-flame-badge--dormant.habit-flame-badge--stat .habit-flame-img { width: 23px; height: 39px; transform: translateY(4px); }
   .habit-flame-num {
     font-family: var(--font-mono);
@@ -212,11 +212,8 @@
      its visual weight sits noticeably below the image box's geometric centre —
      nudge the number down to match where the flame actually "reads" as centred,
      rather than the flame's raw bounding-box middle. */
-  /* Always reserved, even when empty (ember/dormant render no digits) — so the
-     icon itself never shifts left/right depending on whether a number follows
-     it; only the reserved slot's content changes. */
   .habit-flame-badge--row .habit-flame-num {
-    font-size: 13px; width: 22px; flex-shrink: 0; text-align: left; transform: translateY(2px);
+    font-size: 17px; flex-shrink: 0; text-align: left; transform: translateY(2px);
   }
   .habit-flame-badge--stat .habit-flame-num {
     font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
@@ -238,26 +235,6 @@
     flex-shrink: 0; line-height: 1;
   }
   .habit-restart-btn:hover { color: var(--success); }
-
-  .habit-archive-btn {
-    background: none; border: none;
-    cursor: pointer; color: var(--text-tertiary);
-    font-size: 14px; padding: 2px 4px;
-    border-radius: 6px; opacity: 0;
-    transition: opacity 0.2s, color 0.2s;
-    flex-shrink: 0; line-height: 1;
-  }
-  .habit-archive-btn:hover { color: var(--success); }
-
-  .habit-delete {
-    background: none; border: none;
-    cursor: pointer; color: var(--text-tertiary);
-    font-size: 16px; padding: 2px 4px;
-    border-radius: 6px; opacity: 0;
-    transition: opacity 0.2s, color 0.2s;
-    flex-shrink: 0; line-height: 1;
-  }
-  .habit-delete:hover { color: var(--danger); }
 
   /* Add-habit form with optional end-date */
   .habit-add-form {
@@ -678,16 +655,16 @@
   }
 
   /* ── Habits-tab overview calendar (ring per day) ──
-     No max-width: this lives in the left (3fr) track of .habit-cal-split and
-     should fill it, not re-center at its old fixed width inside the new,
-     wider column. */
-  .hcal { width: 100%; }
+     Capped so the day circles stay compact instead of stretching to fill
+     the whole (now much wider) 3fr track — a full-width grid made each
+     circle huge and pushed the Habit Tracker section below the fold. */
+  .hcal { width: 100%; max-width: 540px; }
   .hcal-nav {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
   }
   .hcal-nav-btn {
     background: rgba(255,255,255,0.06);
@@ -720,15 +697,15 @@
   .hcal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
+    gap: 7px;
   }
   .hcal-day-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-tertiary);
     text-align: center;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     padding-bottom: 4px;
   }
@@ -762,7 +739,7 @@
     position: relative;
     z-index: 1;
     font-family: var(--font-mono);
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
@@ -785,13 +762,17 @@
   .hcal-day.none-sched .hcal-day-num { color: rgba(255,255,255,0.22); }
   .hcal-empty { aspect-ratio: 1; pointer-events: none; }
 
-  /* ── Habit Calendar + Reactive Habits split ── */
+  /* ── Habit Calendar (+ Reactive Habits below it) + Habit Tracker split ──
+     Left column caps out at the calendar's own max-width (460px + card
+     padding) since it never needs more; the tracker gets the rest. */
   .habit-cal-split {
     display: grid;
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: minmax(320px, 584px) 1fr;
     gap: 28px;
     align-items: start;
   }
+  .habit-cal-left { display: flex; flex-direction: column; }
+  .habit-cal-right { min-width: 0; }
   @media (max-width: 900px) {
     .habit-cal-split { grid-template-columns: 1fr; }
   }
@@ -1360,8 +1341,6 @@
        "Day N · ongoing" tag stop wrapping into a broken-looking box. */
     .habit-row { gap: 8px; padding: 10px 12px; }
     .habit-row .habit-drag-handle { display: none; }
-    .habit-row .habit-archive-btn { display: none; }
-    .habit-row .habit-delete { opacity: 0.4; }
     .habit-meta { flex-wrap: wrap; row-gap: 3px; }
     .habit-meta-tag { white-space: nowrap; }
     .habit-name { overflow-wrap: break-word; word-break: normal; }

@@ -583,22 +583,6 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
   }
   li.appendChild(streakEl);
 
-  if (!isArchived) {
-    // Archive button
-    const archBtn = document.createElement('button');
-    archBtn.className = 'habit-archive-btn';
-    archBtn.textContent = '✓';
-    archBtn.title = 'Mark as complete (archive without deleting)';
-    archBtn.addEventListener('click', () => {
-      if (!confirm(`Archive "${habit.name}"? It will be stored in Completed habits.`)) return;
-      habit.archived   = true;
-      habit.archivedAt = today;
-      saveHabits(allHabits);
-      renderHabits();
-    });
-    li.appendChild(archBtn);
-  }
-
   if (isArchived) {
     // Restart button — the counterpart to the archive check on active rows
     const restartBtn = document.createElement('button');
@@ -608,17 +592,6 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     restartBtn.addEventListener('click', () => _restartHabit(habit, allHabits));
     li.appendChild(restartBtn);
   }
-
-  // Delete
-  const del = document.createElement('button');
-  del.className = 'habit-delete';
-  del.textContent = '×';
-  del.title = 'Delete permanently';
-  del.addEventListener('click', () => {
-    if (!confirm(`Permanently delete "${habit.name}"?`)) return;
-    _deleteHabit(habit, allHabits);
-  });
-  li.appendChild(del);
 
   return li;
 }

@@ -305,6 +305,170 @@ const todayKey    = () => 'tasks:' + getActiveDateString();
 const tomorrowKey = () => 'tasks:' + getTomorrowDateString();
 
 
+// ── Quote of the Day ──
+// Picks one quote per active day (same 6am boundary as the rest of the app,
+// via getActiveDateString) so it's stable all day and changes tomorrow.
+const QUOTES = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln" },
+  { text: "Small daily improvements are the key to staggering long-term results.", author: "James Clear" },
+  { text: "You do not rise to the level of your goals. You fall to the level of your systems.", author: "James Clear" },
+  { text: "Well done is better than well said.", author: "Benjamin Franklin" },
+  { text: "The way to get started is to quit talking and begin doing.", author: "Walt Disney" },
+  { text: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Don't watch the clock; do what it does. Keep going.", author: "Sam Levenson" },
+  { text: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
+  { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
+  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
+  { text: "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.", author: "Stephen King" },
+  { text: "The future depends on what you do today.", author: "Mahatma Gandhi" },
+  { text: "A year from now you may wish you had started today.", author: "Karen Lamb" },
+  { text: "Do the hard jobs first. The easy jobs will take care of themselves.", author: "Dale Carnegie" },
+  { text: "Action is the foundational key to all success.", author: "Pablo Picasso" },
+  { text: "What we do every day matters more than what we do once in a while.", author: "Gretchen Rubin" },
+  { text: "The pain of discipline weighs ounces, the pain of regret weighs tons.", author: "Jim Rohn" },
+  { text: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" },
+  { text: "Either you run the day, or the day runs you.", author: "Jim Rohn" },
+  { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
+  { text: "Have the courage to follow your heart and intuition.", author: "Steve Jobs" },
+  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+  { text: "Energy and persistence conquer all things.", author: "Benjamin Franklin" },
+  { text: "Slow is smooth, and smooth is fast.", author: "Navy SEAL saying" },
+  { text: "You can't build a reputation on what you're going to do.", author: "Henry Ford" },
+  { text: "It's not that I'm so smart, it's just that I stay with problems longer.", author: "Albert Einstein" },
+  { text: "Progress, not perfection.", author: "Unknown" },
+  { text: "Nothing is particularly hard if you divide it into small jobs.", author: "Henry Ford" },
+  { text: "Until you value yourself, you won't value your time.", author: "M. Scott Peck" },
+  { text: "The best way to predict the future is to create it.", author: "Peter Drucker" },
+  { text: "Set your goals high, and don't stop till you get there.", author: "Bo Jackson" },
+  { text: "Every accomplishment starts with the decision to try.", author: "John F. Kennedy" },
+  { text: "Perfection is not attainable, but if we chase perfection we can catch excellence.", author: "Vince Lombardi" },
+  { text: "Quality is not an act, it is a habit.", author: "Aristotle" },
+  { text: "What gets measured gets managed.", author: "Peter Drucker" },
+  { text: "The best time to plant a tree was 20 years ago. The second best time is now.", author: "Chinese Proverb" },
+  { text: "Consistency is what transforms average into excellence.", author: "Unknown" },
+];
+
+function _quoteIndexForDate(dateStr) {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  }
+  return hash % QUOTES.length;
+}
+
+function renderQuoteOfDay() {
+  const textEl = document.getElementById('quoteText');
+  const authorEl = document.getElementById('quoteAuthor');
+  if (!textEl || !authorEl) return;
+  const quote = QUOTES[_quoteIndexForDate(getActiveDateString())];
+  textEl.textContent = quote.text;
+  authorEl.textContent = quote.author;
+}
+
+
+// ── Weather ──
+// Uses the browser's geolocation + Open-Meteo (free, no API key) to show the
+// current temperature. Cached in localStorage so a reload shows the last
+// known reading instantly while a fresh one loads in the background.
+const WEATHER_CACHE_KEY = 'dashboard_weather_cache_v2'; // v2: added sunrise/sunset
+const WEATHER_MAX_AGE_MS = 30 * 60 * 1000;
+
+function _weatherIconFor(code) {
+  if (code === 0) return '☀️';
+  if (code <= 2) return '🌤️';
+  if (code === 3) return '☁️';
+  if (code === 45 || code === 48) return '🌫️';
+  if (code >= 51 && code <= 57) return '🌦️';
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return '🌧️';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return '🌨️';
+  if (code >= 95) return '⛈️';
+  return '🌡️';
+}
+
+// Given today's and tomorrow's sunrise/sunset (as Open-Meteo local ISO
+// strings, no timezone suffix — already wall-clock time via timezone=auto),
+// picks whichever of the four is next after now.
+function _nextSunEvent(sunrises, sunsets) {
+  const now = new Date();
+  const candidates = [
+    { label: 'Sunrise', icon: '🌅', at: new Date(sunrises[0]) },
+    { label: 'Sunset',  icon: '🌇', at: new Date(sunsets[0]) },
+    { label: 'Sunrise', icon: '🌅', at: new Date(sunrises[1]) },
+  ];
+  return candidates.find(c => c.at > now) || candidates[candidates.length - 1];
+}
+
+function _applyWeather(tempF, code, sunEvent) {
+  const badge = document.getElementById('weatherBadge');
+  if (!badge) return;
+  document.getElementById('weatherIcon').textContent = _weatherIconFor(code);
+  document.getElementById('weatherTemp').textContent = Math.round(tempF) + '°';
+  const sunEl = document.getElementById('weatherSun');
+  if (sunEl) {
+    if (sunEvent) {
+      sunEl.hidden = false;
+      sunEl.replaceChildren(
+        Object.assign(document.createElement('span'), { className: 'weather-sun-icon', textContent: sunEvent.icon }),
+        document.createTextNode(' ' + fmtClock(sunEvent.at))
+      );
+    } else {
+      sunEl.hidden = true;
+    }
+  }
+  badge.hidden = false;
+}
+
+// Falls back here when geolocation is denied/unavailable, so the badge
+// still shows something instead of staying hidden.
+const WEATHER_FALLBACK_LAT = 33.7879;
+const WEATHER_FALLBACK_LON = -117.8531; // Orange, CA
+
+async function _fetchWeatherFor(latitude, longitude) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
+      `&current_weather=true&temperature_unit=fahrenheit` +
+      `&daily=sunrise,sunset&forecast_days=2&timezone=auto`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const temp = data.current_weather.temperature;
+    const code = data.current_weather.weathercode;
+    const sunEvent = _nextSunEvent(data.daily.sunrise, data.daily.sunset);
+    _applyWeather(temp, code, sunEvent);
+    try {
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
+        temp, code, ts: Date.now(),
+        sunrise: data.daily.sunrise, sunset: data.daily.sunset,
+      }));
+    } catch (e) {}
+  } catch (e) { console.error('[weather] fetch failed:', e); }
+}
+
+function loadWeather() {
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null'); } catch (e) {}
+  if (cached) {
+    const sunEvent = cached.sunrise ? _nextSunEvent(cached.sunrise, cached.sunset) : null;
+    _applyWeather(cached.temp, cached.code, sunEvent);
+    if (Date.now() - cached.ts < WEATHER_MAX_AGE_MS) return;
+  }
+
+  if (!navigator.geolocation) {
+    _fetchWeatherFor(WEATHER_FALLBACK_LAT, WEATHER_FALLBACK_LON);
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => _fetchWeatherFor(pos.coords.latitude, pos.coords.longitude),
+    (err) => {
+      console.error('[weather] geolocation failed, falling back to Orange, CA:', err);
+      _fetchWeatherFor(WEATHER_FALLBACK_LAT, WEATHER_FALLBACK_LON);
+    },
+    { maximumAge: WEATHER_MAX_AGE_MS, timeout: 10000 }
+  );
+}
+
+
 // ── Ticker ──
 let tickerItems = [];
 let cycleIdx = 0;
@@ -1167,14 +1331,30 @@ async function loadFromSupabase() {
 
 
 // ── Tab switching ──
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('#tabBar .tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#tabBar .tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
   });
 });
+
+// ── Sidebar collapse toggle ──
+// Persists across reloads (UI-only preference, not synced data).
+const SIDEBAR_COLLAPSED_KEY = 'dashboard_sidebar_collapsed';
+(function initSidebarToggle() {
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('sidebarToggle');
+  if (!sidebar || !toggleBtn) return;
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch (e) {}
+  sidebar.classList.toggle('collapsed', collapsed);
+  toggleBtn.addEventListener('click', () => {
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed ? '1' : '0'); } catch (e) {}
+  });
+})();
 
 // ── Re-check the "active day" when returning to an already-open tab ──
 // The app otherwise only rolls the date over on a full page load / sign-in.
@@ -1185,7 +1365,7 @@ document.addEventListener('visibilitychange', () => {
   if (now === _lastActiveDate) return;
   _lastActiveDate = now;
   checkStreak(); rollover(); applySundayReset();
-  loadToday(); loadUpcoming(); renderStreak(); tick(true);
+  loadToday(); loadUpcoming(); renderStreak(); tick(true); renderQuoteOfDay();
 });
 
 // Console helpers for the local test account:
@@ -1313,6 +1493,11 @@ renderStreak();
 
 updateDayBar();
 setInterval(updateDayBar, 60 * 1000);
+
+renderQuoteOfDay();
+
+loadWeather();
+setInterval(loadWeather, WEATHER_MAX_AGE_MS);
 
 startTicker();
 renderAreas();
