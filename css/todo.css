@@ -118,25 +118,6 @@
     text-transform: uppercase;
   }
 
-  /* Segmented bar */
-  .tm-bar {
-    display: flex;
-    gap: 7.5px;
-    height: 6px;
-    margin-bottom: 16px;
-  }
-  .tm-bar:empty { display: none; }
-  .tm-bar-seg {
-    flex: 1;
-    border-radius: 3px;
-    background: rgba(255,255,255,0.08);
-    transition: background 0.4s, box-shadow 0.4s;
-  }
-  .tm-bar-seg-done {
-    background: var(--success);
-    box-shadow: 0 0 6px rgba(107,227,164,0.40);
-  }
-
   /* Task list */
   .task-list {
     list-style: none;
@@ -154,22 +135,30 @@
   .task-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    margin-bottom: 6px;
-    background: rgba(255,255,255,0.035);
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.06);
+    gap: 10px;
+    padding: 8px 10px 8px 8px;
+    margin-bottom: 2px;
+    border-radius: 9px;
+    border: 1px solid transparent;
     transition: background 0.2s;
     position: relative;
   }
-  .task-priority-high { box-shadow: inset 3px 0 0 0 #E24B4A; }
-  .task-priority-med  { box-shadow: inset 3px 0 0 0 #EF9F27; }
-  .task-priority-low  { box-shadow: inset 3px 0 0 0 #52C97A; }
+  /* Only High gets a stripe — Medium is the default and Low needs no alarm. */
+  .task-row.is-hi::before {
+    content: ''; position: absolute; left: 0; top: 9px; bottom: 9px;
+    width: 2px; border-radius: 2px; background: #E24B4A;
+  }
+  /* Upcoming + History rows keep the card look */
+  .task-history-list .task-row,
+  .sunday-reset-row {
+    background: rgba(255,255,255,0.035);
+    border-color: rgba(255,255,255,0.06);
+    margin-bottom: 6px;
+  }
   .task-priority-btn {
     position: absolute; left: 0; top: 0; bottom: 0; width: 18px;
     background: transparent; border: none; cursor: pointer; padding: 0;
-    border-radius: 12px 0 0 12px; z-index: 1;
+    border-radius: 9px 0 0 9px; z-index: 1;
   }
   .task-area-pill {
     font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px;
@@ -181,6 +170,10 @@
     background: transparent; color: rgba(255,255,255,0.22);
     border: 1px dashed rgba(255,255,255,0.15);
   }
+  /* An unset "+ area" only shows while the row is hovered/focused */
+  .task-row .task-area-pill.is-empty { opacity: 0; }
+  .task-row:hover .task-area-pill.is-empty,
+  .task-row:focus-within .task-area-pill.is-empty { opacity: 1; }
   .task-area-wrap { position: relative; flex-shrink: 0; }
   .task-area-dd {
     position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
@@ -209,10 +202,11 @@
   }
   .task-area-dd-new input::placeholder { color: rgba(255,255,255,0.3); }
 
-  .task-row:hover { background: rgba(255,255,255,0.055); }
+  .task-row:hover { background: rgba(255,255,255,0.045); }
 
   .task-row:hover .task-drag-handle,
-  .task-row:hover .task-delete { opacity: 1; }
+  .task-row:hover .task-actions,
+  .task-row:focus-within .task-actions { opacity: 1; }
 
   .task-drag-handle {
     font-size: 14px;
@@ -228,8 +222,8 @@
 
   /* Custom checkbox */
   .task-cb-wrap {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
     position: relative;
   }
@@ -245,9 +239,9 @@
   }
 
   .task-cb-box {
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
     border: 1.5px solid rgba(255,255,255,0.18);
     background: rgba(255,255,255,0.04);
     position: absolute;
@@ -259,8 +253,8 @@
   .task-cb-box::after {
     content: '';
     position: absolute;
-    top: 4px;
-    left: 7px;
+    top: 3px;
+    left: 6.5px;
     width: 5px;
     height: 9px;
     border-right: 2px solid #050506;
@@ -281,7 +275,7 @@
 
   .task-text {
     flex: 1;
-    font-size: 13.5px;
+    font-size: 14.5px;
     color: var(--text-primary);
     outline: none;
     word-break: break-word;
@@ -294,38 +288,136 @@
     padding: 2px 4px;
   }
 
-  /* Task name + its source tag share the row's flexible space so the tag sits
-     right after the name, not out by the area pill. When the name + tags don't
-     fit (narrow rows, long names, an overdue tag AND a "sunday reset" tag), the
-     tags wrap onto the next line instead of squeezing the name to one character
-     per line. */
+  /* Name + its tags on one line (tags sit right after the name, wrapping under
+     it when there isn't room), with the step chips underneath. */
   .task-main {
     flex: 1;
     min-width: 0;
     display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .task-line {
+    display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: 2px 8px;
+    min-width: 0;
   }
-  .task-main > .task-text {
+  .task-line > .task-text {
     flex: 0 1 auto;
     /* Don't let flex shrink the name below its longest word — that's what
-       produced one-character-per-line rows. Long names wrap at spaces; a
-       single over-long word hard-breaks rather than overflowing. */
+       produced one-character-per-line rows. */
     min-width: auto;
     overflow-wrap: break-word;
     word-break: normal;
   }
 
-  /* "sunday reset" source tag, sits just right of the task name */
-  .task-source-tag {
-    font-size: 10.5px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    color: rgba(255,255,255,0.3);
+  /* Sunday Reset tasks: violet badge + violet checkbox, matching the header
+     button and modal title so they read as one feature. */
+  .task-sr-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; line-height: 18px;
+    color: #B69CFF;
+    background: rgba(182,156,255,0.12);
+    border: 1px solid rgba(182,156,255,0.32);
+    border-radius: 999px;
+    padding: 0 8px 0 6px;
     white-space: nowrap;
-    flex-shrink: 0;
+    align-self: center;
   }
+  .task-sr-badge svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .task-row.is-sr .task-cb-box { border-color: rgba(182,156,255,0.6); }
+  .task-row.is-sr .task-cb-wrap input:checked + .task-cb-box {
+    background: #B69CFF; border-color: #B69CFF; box-shadow: 0 0 12px rgba(182,156,255,0.4);
+  }
+  .sr-accent { color: #B69CFF !important; border-color: rgba(182,156,255,0.35) !important; }
+  .sr-accent:hover { border-color: #B69CFF !important; background: rgba(182,156,255,0.08) !important; }
+  .sr-accent-title { color: #B69CFF; }
+
+  .task-due-tag {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 4px; padding: 0 5px; line-height: 16px;
+    white-space: nowrap; align-self: center;
+  }
+  .task-due-tag.is-urgent { color: var(--danger); border-color: rgba(255,107,107,0.4); }
+  .task-steps-count {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+    white-space: nowrap;
+  }
+
+  /* Steps — tickable chips under the name */
+  .task-steps { display: flex; flex-wrap: wrap; gap: 5px; }
+  .task-step {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-body); font-size: 12px; color: var(--text-secondary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 999px;
+    padding: 1px 9px 1px 7px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .task-step::before {
+    content: ''; width: 9px; height: 9px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.25); flex-shrink: 0;
+  }
+  .task-step:hover:not(:disabled) { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .task-step.is-done { color: var(--text-tertiary); text-decoration: line-through; }
+  .task-step.is-done::before { background: var(--success); border-color: var(--success); }
+  .task-row.is-sr .task-step.is-done::before { background: #B69CFF; border-color: #B69CFF; }
+  .task-step:disabled { cursor: default; }
+
+  /* Right side: hover actions · area pill · estimate */
+  .task-side { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .task-actions { display: flex; gap: 1px; opacity: 0; transition: opacity 0.15s; }
+  .task-action {
+    width: 26px; height: 26px; border-radius: 6px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-tertiary); font-size: 14px; line-height: 1;
+    display: grid; place-items: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .task-action:hover { background: rgba(255,255,255,0.07); color: var(--text-primary); }
+  .task-action.is-on { color: var(--warning); }
+  .task-action.task-delete { font-size: 16px; }
+  .task-action.task-delete:hover { color: var(--danger); }
+  .task-pri-dot { width: 8px; height: 8px; border-radius: 50%; display: block; }
+  .task-pri-dot.pri-high { background: #E24B4A; }
+  .task-pri-dot.pri-medium { background: #EF9F27; }
+  .task-pri-dot.pri-low { background: #52C97A; }
+  .task-est {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--text-tertiary);
+    min-width: 30px; text-align: right; white-space: nowrap;
+  }
+  .task-row.is-new { animation: task-new 1.4s ease-out; }
+  @keyframes task-new { from { background: rgba(107,227,164,0.14); } to { background: transparent; } }
+
+  /* ── Grouped Today list ── */
+  .task-groups { display: flex; flex-direction: column; gap: 16px; }
+  .task-group-head { display: flex; align-items: center; gap: 9px; padding: 0 4px 6px; }
+  .task-group-head h3 {
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .task-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .task-group-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+  .task-group-rule { flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+  .task-group-hint {
+    font-size: 12.5px; color: var(--text-tertiary);
+    border: 1px dashed rgba(255,255,255,0.1); border-radius: 9px;
+    padding: 9px 12px;
+  }
+  .task-done-group summary {
+    cursor: pointer; list-style: none;
+    font-size: 12.5px; color: var(--text-tertiary); padding: 2px 4px 6px;
+  }
+  .task-done-group summary::-webkit-details-marker { display: none; }
+  .task-done-group summary::before { content: '▸  '; }
+  .task-done-group[open] summary::before { content: '▾  '; }
 
   /* Overdue (carried-over) task — amber tag only, row background unchanged */
   .task-overdue-tag {
@@ -345,19 +437,17 @@
     font-size: 16px;
     padding: 2px 4px;
     border-radius: 6px;
-    opacity: 0;
     transition: opacity 0.2s, color 0.2s;
     flex-shrink: 0;
     line-height: 1;
   }
+  .sunday-reset-row .task-delete { opacity: 0; }
+  .sunday-reset-row:hover .task-delete { opacity: 1; }
 
   .task-delete:hover { color: var(--danger); }
 
   /* Done row */
-  .task-row.is-done {
-    opacity: 0.45;
-    background: rgba(107,227,164,0.04);
-  }
+  .task-row.is-done { opacity: 0.5; }
   .task-row.is-done .task-text {
     text-decoration: line-through;
     text-decoration-color: rgba(255,255,255,0.4);
@@ -499,6 +589,103 @@
     background: rgba(255,255,255,0.03);
   }
 
+  /* ── + Add task button (Today header) ── */
+  .add-task-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-body); font-size: 12px; font-weight: 700;
+    padding: 7px 12px 7px 14px; border-radius: 999px; border: none;
+    background: linear-gradient(180deg, #FFFFFF 0%, #E8E5DD 100%);
+    color: #0A0A0B; cursor: pointer; flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    transition: transform 0.15s;
+  }
+  .add-task-btn:hover { transform: translateY(-1px); }
+  .add-task-btn kbd,
+  .add-task-card kbd {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    border: 1px solid rgba(0,0,0,0.2); border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 4px; color: #55534e;
+  }
+  .add-task-card kbd { border-color: rgba(255,255,255,0.15); color: var(--text-secondary); }
+
+  /* ── Add task modal ── */
+  .add-task-card { width: 560px; display: flex; flex-direction: column; gap: 14px; }
+  .add-task-card .sr-modal-title { margin: 0; }
+  .at-hint { font-size: 12px; color: var(--text-tertiary); margin: -8px 0 0; }
+  .at-hint code {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+    background: rgba(255,255,255,0.06); border-radius: 4px; padding: 0 4px;
+  }
+  .at-name {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px; padding: 5px 5px 5px 14px;
+  }
+  .at-name:focus-within { border-color: rgba(255,255,255,0.35); }
+  .at-name input {
+    flex: 1; min-width: 0; background: none; border: none; outline: none;
+    color: var(--text-primary); font-family: var(--font-body); font-size: 16px; padding: 7px 0;
+  }
+  .at-name input::placeholder { color: var(--text-tertiary); }
+  .at-polish { padding: 7px 12px; font-size: 12px; }
+  .at-tokens { display: flex; flex-wrap: wrap; gap: 6px; }
+  .at-tokens:empty { display: none; }
+  .at-token {
+    font-family: var(--font-mono); font-size: 11.5px; border-radius: 6px; padding: 2px 8px;
+    background: rgba(255,255,255,0.06); color: var(--text-secondary);
+  }
+  .at-token-pri { color: var(--danger); background: rgba(255,107,107,0.1); }
+  .at-token-area { color: #4A9EFF; background: rgba(74,158,255,0.1); }
+  .at-token-day { color: var(--warning); background: rgba(242,192,99,0.1); }
+  .at-token-focus { color: var(--success); background: rgba(107,227,164,0.1); }
+  .at-token-miss { color: var(--text-tertiary); text-decoration: line-through; }
+  .at-grid { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px 14px; align-items: center; }
+  .at-label { font-size: 12px; color: var(--text-tertiary); }
+  .at-label small { display: block; font-size: 10.5px; color: rgba(255,255,255,0.25); }
+  .at-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .at-seg {
+    display: inline-flex; flex-wrap: wrap; justify-self: start;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; overflow: hidden;
+  }
+  .at-seg button {
+    font-family: var(--font-body); font-size: 12px; padding: 5px 11px;
+    background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+  }
+  .at-seg button:hover { color: var(--text-primary); }
+  .at-seg button.on { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+  .at-date { padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
+  .at-date[hidden] { display: none; }
+  .at-areas { display: flex; flex-wrap: wrap; gap: 6px; }
+  .at-areas .task-area-pill { opacity: 0.5; border: 1px solid transparent; font-size: 11.5px; padding: 3px 10px; }
+  .at-areas .task-area-pill.is-empty { opacity: 1; }
+  .at-areas .task-area-pill.is-picked { opacity: 1; border-color: rgba(255,255,255,0.75); }
+  .at-areas .task-area-pill.is-empty.is-picked { color: var(--text-primary); border-style: solid; }
+  .at-none { font-size: 12px; color: var(--text-tertiary); }
+  .at-steps { padding: 7px 12px; font-size: 13px; border-radius: 8px; }
+  .at-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+  .at-check input { accent-color: var(--success); width: 15px; height: 15px; }
+  .at-check.is-disabled { color: var(--text-tertiary); cursor: not-allowed; }
+  .at-foot {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    border-top: 1px solid rgba(255,255,255,0.07); padding-top: 14px;
+  }
+  .at-keys { font-size: 11.5px; color: var(--text-tertiary); }
+  .at-status { flex: 1; font-size: 12px; color: var(--danger); text-align: right; }
+  .at-foot .btn-polish, .at-foot .btn-add { padding: 9px 16px; }
+  .btn-add:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ── Toast ── */
+  .app-toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    z-index: 400;
+    background: #1e1e22; border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-primary); font-size: 13px;
+    padding: 8px 16px; border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .app-toast[hidden] { display: none; }
+
   /* ── Sunday Reset ── */
   .tm-header-right {
     display: flex;
@@ -629,6 +816,200 @@
   }
   .task-history-list .task-row.is-done .task-history-mark { color: var(--success, #6BE3A4); }
 
+  /* ── Triage link, footer, Someday, batch suggestion ── */
+  .task-sort-spacer { flex: 1; }
+  .task-triage-link {
+    background: none; border: none; cursor: pointer; padding: 3px 2px;
+    font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--warning);
+  }
+  .task-triage-link:hover { text-decoration: underline; }
+
+  .task-foot { display: flex; align-items: flex-start; gap: 12px; }
+  .task-foot > .task-done-group { flex: 1; min-width: 0; }
+  .task-foot-note { flex: 1; font-size: 12.5px; color: var(--text-tertiary); padding: 2px 4px; }
+  .task-foot-someday {
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    font-family: var(--font-body); font-size: 12.5px; color: var(--text-tertiary); white-space: nowrap;
+  }
+  .task-foot-someday:hover { color: var(--text-primary); }
+  .someday-row { gap: 10px; }
+  .someday-back { padding: 4px 10px !important; font-size: 11.5px !important; }
+
+  .task-nudge {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    border: 1px dashed rgba(242,192,99,0.35);
+    background: rgba(242,192,99,0.05);
+    border-radius: 10px; padding: 10px 12px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .task-nudge b { color: var(--text-primary); font-weight: 600; }
+  .task-nudge-sp { flex: 1; }
+  .task-nudge-go, .task-nudge-ghost {
+    border: none; cursor: pointer; border-radius: 7px; padding: 6px 12px;
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 600;
+  }
+  .task-nudge-go { background: var(--warning); color: #1b1405; }
+  .task-nudge-ghost { background: none; color: var(--text-tertiary); }
+  .task-nudge-ghost:hover { color: var(--text-primary); }
+
+  /* ── Triage modal ── */
+  .triage-modal-card { width: 560px; }
+  .triage-count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--text-tertiary); margin-left: 8px; }
+  .triage-modal-card kbd, .triage-opt kbd {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary);
+    border: 1px solid rgba(255,255,255,0.15); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px;
+  }
+  .triage-dots { display: flex; gap: 5px; margin-bottom: 14px; }
+  .triage-dots i { width: 18px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.12); }
+  .triage-dots i.on { background: var(--warning); }
+  .triage-card {
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .triage-card h3 { font-size: 19px; font-weight: 650; color: var(--text-primary); }
+  .triage-facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+  .triage-facts b { color: #FF9D6B; font-weight: 500; }
+  .triage-hist { display: flex; gap: 3px; }
+  .triage-hist u { width: 10px; height: 10px; border-radius: 2px; background: rgba(255,157,107,0.18); }
+  .triage-hist u.x { background: rgba(255,157,107,0.75); }
+  .triage-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+  .triage-opt {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;
+    background: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+    padding: 10px; cursor: pointer; font-family: var(--font-body); color: var(--text-primary);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .triage-opt:hover { border-color: var(--text-secondary); background: rgba(255,255,255,0.03); }
+  .triage-opt kbd { margin-bottom: 4px; }
+  .triage-opt b { font-size: 13px; font-weight: 600; }
+  .triage-opt span { font-size: 11.5px; color: var(--text-tertiary); }
+  .triage-opt.is-drop b { color: var(--danger); }
+  .triage-follow { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .triage-follow .task-input { flex: 1; min-width: 180px; padding: 9px 12px; }
+  .triage-follow .btn-add, .triage-follow .btn-polish { padding: 9px 16px; }
+  .triage-done { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 0 4px; text-align: center; }
+  .triage-done b { font-size: 16px; color: var(--text-primary); }
+  .triage-done ul { list-style: none; font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); text-align: left; display: flex; flex-direction: column; gap: 3px; }
+
+  /* ── Sunday Reset editor ── */
+  #sundayResetModal .sr-modal-card { width: 580px; }
+  .sr-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
+  .sr-item {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .sr-item-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .sr-name {
+    background: none; border: none; border-bottom: 1px solid transparent; outline: none;
+    color: var(--text-primary); font-family: var(--font-body); font-size: 14.5px; padding: 3px 0; width: 100%;
+  }
+  .sr-name:hover { border-bottom-color: rgba(255,255,255,0.12); }
+  .sr-name:focus { border-bottom-color: #B69CFF; }
+  .sr-steps { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .sr-step {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 12px; color: var(--text-secondary);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 999px; padding: 1px 3px 1px 9px;
+  }
+  .sr-step button {
+    width: 16px; height: 16px; border-radius: 50%; border: none; background: none;
+    color: var(--text-tertiary); cursor: pointer; line-height: 14px; font-size: 13px;
+  }
+  .sr-step button:hover { color: var(--danger); background: rgba(255,107,107,0.1); }
+  .sr-addstep {
+    width: 80px; background: none; outline: none; font-family: var(--font-body); font-size: 12px;
+    color: var(--text-primary); border: 1px dashed rgba(255,255,255,0.18); border-radius: 999px; padding: 1px 9px;
+    transition: width 0.15s;
+  }
+  .sr-addstep:focus { width: 140px; border-color: #B69CFF; }
+  .sr-addstep::placeholder { color: var(--text-tertiary); }
+  .sr-item-side { display: flex; align-items: center; gap: 8px; padding-top: 3px; }
+  .sr-when { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+  .sr-when.is-next { color: #B69CFF; }
+  .sr-add { display: flex; gap: 8px; }
+  .sr-add .task-input { padding: 9px 12px; }
+  .sr-add .btn-add { padding: 9px 16px; }
+  .sr-setting {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.07);
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+
+  /* ── Mock A look ── flat solid panels, one-piece count, outline chips,
+     outline checkboxes. Later rules in this file on purpose: they restyle
+     the shared pieces above for the To Do tab only. */
+  #todayCard, #tomorrowCard {
+    background: #111214;
+    border: 1px solid rgba(255,255,255,0.07);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  #todayCard .tm-header { align-items: flex-end; margin-bottom: 18px; }
+  #todayCard .tm-eyebrow,
+  #tomorrowCard .tm-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 500; letter-spacing: 0.18em;
+    margin-bottom: 8px;
+  }
+  #todayCard .tm-progress-row { gap: 10px; }
+  #todayCard .tm-progress-num,
+  #todayCard .tm-progress-total {
+    font-family: var(--font-body);
+    font-size: 40px; font-weight: 650; letter-spacing: -0.02em; line-height: 1;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  #todayCard .tm-progress-row { gap: 0; }
+  #todayCard .tm-progress-label {
+    font-family: var(--font-mono);
+    font-size: 12px; font-weight: 500; letter-spacing: 0.08em;
+    margin-left: 12px;
+  }
+
+  #todayCard .sunday-reset-btn,
+  #tomorrowCard .sunday-reset-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 5px 12px;
+    font-size: 12.5px; font-weight: 500;
+    color: var(--text-secondary);
+  }
+  #todayCard .sunday-reset-btn:hover,
+  #tomorrowCard .sunday-reset-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); background: transparent; }
+  #todayCard .add-task-btn { padding: 6px 12px 6px 14px; font-size: 12.5px; box-shadow: none; }
+
+  #todayCard .tm-streak {
+    font-family: var(--font-mono); font-size: 12px;
+    padding: 5px 12px; border: none;
+    background: rgba(242,192,99,0.08); color: var(--warning);
+  }
+  #todayCard .tm-streak-label { font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text-tertiary); }
+  #todayCard .tm-streak-icon { font-size: 12px; }
+
+  /* Outline checkbox */
+  .task-cb-wrap { width: 18px; height: 18px; }
+  .task-cb-box {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid #4C4B47; background: transparent;
+  }
+  .task-cb-wrap:hover .task-cb-box { border-color: var(--text-secondary); }
+  .task-cb-box::after { top: 2px; left: 5.5px; }
+
+  /* Upcoming: day headings read like the Today group headings, flat rows */
+  #tomorrowCard .tm-header { align-items: center; }
+  .tm-tomorrow-count { margin-right: 4px; }
+  .upcoming-day {
+    justify-content: flex-start; gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.16em;
+    border-bottom: none; padding: 0 4px 6px; margin: 16px 0 2px;
+  }
+  .upcoming-day::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+  .upcoming-day-count { font-weight: 400; letter-spacing: 0; }
+
   /* ── Mobile ── keep this block last in this file ── */
   @media (max-width: 480px) {
     /* Stack the progress count above the action row; let the three buttons
@@ -636,9 +1017,12 @@
        fitting on one line at ~375px with a "· N" reset badge. */
     .tm-header { flex-direction: column; align-items: stretch; gap: 12px; }
     .tm-header-right {
-      flex-wrap: nowrap;
-      gap: 3px;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 6px;
     }
+    .add-task-btn kbd { display: none; }
+    .add-task-btn,
     .sunday-reset-btn,
     .tm-streak {
       flex: 1 1 auto;
@@ -661,24 +1045,28 @@
       justify-content: space-between;
     }
     #todayCard .tm-eyebrow { margin-bottom: 0; letter-spacing: 0.10em; }
-    #todayCard .tm-progress-row { margin-left: auto; gap: 0; }
-    #todayCard .tm-progress-num { font-size: 18px; }
-    #todayCard .tm-progress-label { margin-left: 6px; }
+    #todayCard .tm-progress-row { margin-left: auto; gap: 0; flex-wrap: wrap; min-width: 0; }
+    #todayCard .tm-progress-num,
+    #todayCard .tm-progress-total { font-size: 22px; }
+    #todayCard .tm-progress-label { margin-left: 8px; font-size: 11px; }
 
-    /* Task rows: give the name column room — the drag handle needs a pointer
-       to use, and the delete "×" needs to be visible without hover. */
-    .task-row { gap: 8px; padding: 11px 12px; }
+    /* Task rows: no hover on touch, so the actions stay visible (dimmed), and
+       the estimate gives up its space to the name. */
+    .task-row { gap: 8px; padding: 9px 8px; align-items: flex-start; }
     .task-row .task-drag-handle { display: none; }
-    .task-row .task-delete { opacity: 0.4; }
+    .task-row .task-actions { opacity: 0.55; }
+    /* Only star + delete on phones; priority is still the tap strip on the
+       left edge, and moving to tomorrow is a drag onto Upcoming. */
+    .task-row .task-action:not(.task-delete):not([title*="Focus"]) { display: none; }
+    .task-main { min-width: 0; }
+    .task-row .task-area-pill.is-empty { display: none; }
+    .task-est { display: none; }
+    .task-side { gap: 4px; }
+    .sunday-reset-row .task-delete { opacity: 0.4; }
 
-    /* The task name stays vertically centred on the checkbox. The "sunday
-       reset" tag drops out of the row's flex flow and hangs under the name,
-       and the row grows downward to make room — so the name never shifts. */
-    .task-row:has(.task-source-tag) { padding-bottom: 22px; }
-    .task-source-tag {
-      position: absolute;
-      left: 41px;
-      bottom: 9px;
-      line-height: 1;
-    }
+    .at-grid { grid-template-columns: 1fr; gap: 6px; }
+    .triage-opts { grid-template-columns: 1fr 1fr; }
+    .sr-item { grid-template-columns: 1fr; }
+    .sr-when { display: none; }
+    .at-label { margin-top: 6px; }
   }

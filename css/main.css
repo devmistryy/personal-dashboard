@@ -1,5 +1,5 @@
 /* Base + page shell: reset, :root tokens, background, cards, header,
-   section eyebrow, task ticker, day ring, tabs.
+   section eyebrow, day strip, tabs.
    Ends with the global mobile @media block — keep it last in this file
    and load main.css before the feature stylesheets. */
 
@@ -199,234 +199,45 @@
   .section-title-clickable { cursor: pointer; transition: color 0.15s; }
   .section-title-clickable:hover { color: var(--text-secondary); }
 
-  /* ── Task Ticker ── */
-  .ticker-row { margin-bottom: 18px; }
-
-  .task-ticker {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 12px;
-    border-radius: 12px;
-    background-image:
-      linear-gradient(180deg, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0.30) 100%),
-      repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .task-ticker::after {
-    content: '';
-    position: absolute;
+  /* ── Pinned header ── the day strip stays put while any tab scrolls.
+     Opaque so rows slide under it; the negative margin + padding pair lets
+     its background cover the page's top gutter once it's stuck. */
+  .top-pin {
+    position: sticky;
     top: 0;
-    left: -40%;
-    width: 30%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
-    animation: ticker-sweep 8s ease-in-out infinite;
-    pointer-events: none;
+    z-index: 50;
+    background: #050506;
+    margin-top: -24px;
+    padding-top: 24px;
   }
+  /* Once stuck, a thin 6px strip of page background (padding, inside the
+     sticky box) separates the card from content scrolling under it; the rest
+     of the spacing is margin, outside the box, so it doesn't pin. */
+  .top-pin { padding-bottom: 6px; margin-bottom: 12px; }
+  .top-pin .day-strip { margin-bottom: 0; }
 
-  @keyframes ticker-sweep {
-    0%   { left: -40%; }
-    100% { left: 110%; }
-  }
-
-  .task-ticker-led {
-    display: flex;
+  /* ── Day strip: ring · day info + sky tile · quote ── */
+  .day-strip {
+    background: #111214;
+    border: 1px solid rgba(255,255,255,0.07);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 1fr);
     align-items: center;
-    flex-shrink: 0;
-  }
-
-  .task-ticker-led-dot {
-    display: block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 8px rgba(107,227,164,0.7);
-    animation: led-pulse 1.6s ease-in-out infinite;
-  }
-
-  @keyframes led-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%       { opacity: 0.45; transform: scale(0.85); }
-  }
-
-  .task-ticker-label {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 800;
-    letter-spacing: 0.18em;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-  }
-
-  .task-ticker-stage {
-    flex: 1;
-    height: 22px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .task-ticker-row {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    display: flex;
-    align-items: center;
-    height: 22px;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
-    white-space: nowrap;
-  }
-
-  .task-ticker-status {
-    width: 18px;
-    flex-shrink: 0;
-    text-align: center;
-  }
-  .task-ticker-status[data-status="done"]    { color: var(--success); }
-  .task-ticker-status[data-status="pending"] { color: var(--text-tertiary); }
-  .task-ticker-status[data-status="empty"]   { color: var(--text-tertiary); }
-
-  .task-ticker-text {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .task-ticker-meta {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.04em;
-    color: var(--text-secondary);
-    background: rgba(255,255,255,0.04);
-    padding: 3px 8px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
-
-  @keyframes ticker-leave {
-    from { opacity: 1; transform: translateY(0); }
-    to   { opacity: 0; transform: translateY(-100%); }
-  }
-  @keyframes ticker-enter {
-    from { opacity: 0; transform: translateY(100%); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .task-ticker-row.is-leaving  { animation: ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards; }
-  .task-ticker-row.is-entering { animation: ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-
-  /* ── Day Ring + Quote of the Day ── */
-  .day-ring-row {
-    display: flex;
-    align-items: stretch;
-    gap: 14px;
-    flex-wrap: wrap;
+    gap: 22px;
+    padding: 16px 22px;
     margin-bottom: 18px;
   }
 
-  .day-ring-card {
-    padding: 0;
-    margin-bottom: 0;
-    flex: 1 1 380px;
-    position: relative;
-  }
-
-  .weather-badge[hidden] { display: none; }
-  .weather-badge {
-    position: absolute;
-    top: 10px;
-    right: 14px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 999px;
-    padding: 4px 10px;
-    line-height: 1;
-  }
-  #weatherIcon { font-size: 18px; }
-  .weather-sun-icon { font-size: 18px; }
-  .weather-sun[hidden] { display: none; }
-  .weather-sun {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: 600;
-    color: var(--text-tertiary);
-    padding-left: 8px;
-    border-left: 1px solid rgba(255,255,255,0.1);
-  }
-
-  .quote-card {
-    flex: 1 1 280px;
-    margin-bottom: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-  }
-
-  .quote-eyebrow {
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-  }
-
-  .quote-text {
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.45;
-    color: var(--text-primary);
-  }
-  .quote-text::before { content: '“'; }
-  .quote-text::after { content: '”'; }
-
-  .quote-author {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-  .quote-author:not(:empty)::before { content: '— '; }
-
-  .day-ring-wrap {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 20px;
-    flex-wrap: wrap;
-    padding: 10px 22px;
-  }
-
   .day-ring-svg-wrap {
-    width: 110px;
-    height: 110px;
+    width: 128px;
+    height: 128px;
     position: relative;
     flex-shrink: 0;
   }
-
-  .day-ring-svg-wrap svg {
-    width: 100%;
-    height: 100%;
-  }
+  .day-ring-svg-wrap svg { width: 100%; height: 100%; }
 
   .day-ring-overlay {
     position: absolute;
@@ -436,58 +247,166 @@
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    gap: 2px;
-  }
-
-  .day-ring-pct {
-    font-size: 26px;
-    font-weight: 800;
     font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.04em;
-    line-height: 1;
   }
-
-  .day-ring-phase {
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    font-weight: 800;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    margin-top: 3px;
-  }
-
-  .day-ring-clock {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    color: var(--text-tertiary);
-  }
-
-  .day-ring-info {
-    max-width: 280px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 10px;
-  }
-
-  .day-ring-status {
-    font-size: 15px;
+  .day-ring-phase,
+  .day-ring-ampm {
+    font-size: 10px;
     font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+  }
+  .day-ring-clock {
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
   }
 
-  .day-ring-remain {
+  .day-strip-mid {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-width: 0;
+  }
+  .day-ring-status {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .day-ring-range {
     font-family: var(--font-mono);
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
   }
+  .day-ring-range .dot,
+  .sky-text .dot { color: rgba(255,255,255,0.2); margin: 0 6px; }
+  #ringPlanned { white-space: nowrap; }
+  #ringPlanned.fits { color: var(--success); }
+  #ringPlanned.over { color: var(--danger); }
 
-  .day-ring-hours {
+  /* Sky tile — weather + sunset. Colour follows the time of day; the sun
+     rides a dotted arc from sunrise to sunset and is a moon at night. */
+  .sky-row[hidden] { display: none; }
+  .sky-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .sky {
+    --sky-top: #1d4f8f; --sky-bot: #6aa3d6; --sky-glow: rgba(255,214,120,0.55);
+    position: relative;
+    flex: 0 0 92px;
+    height: 30px;
+    border-radius: 7px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--sky-top), var(--sky-bot));
+    transition: background 0.8s;
+    isolation: isolate;
+  }
+  .sky[hidden] { display: none; }
+  .sky[data-phase="morning"] { --sky-top: #34507f; --sky-bot: #f1b27a; --sky-glow: rgba(255,190,120,0.6); }
+  .sky[data-phase="golden"]  { --sky-top: #3b2d6a; --sky-bot: #f28a4c; --sky-glow: rgba(255,150,80,0.7); }
+  .sky[data-phase="night"]   { --sky-top: #05070f; --sky-bot: #1a2140; --sky-glow: rgba(200,215,255,0.35); }
+  .sky[data-cond="cloudy"]::after,
+  .sky[data-cond="wet"]::after {
+    content: ''; position: absolute; inset: 0; z-index: 2;
+    background: rgba(120,128,140,0.35);
+  }
+  .sky[data-cond="wet"]::after { background: rgba(80,90,105,0.5); }
+  .sky-arc {
+    position: absolute; left: 6%; top: 3px;
+    width: 88%; height: calc(75% - 3px);
+    overflow: visible;
+  }
+  .sky-arc path {
+    fill: none; stroke: rgba(255,255,255,0.35); stroke-width: 1;
+    stroke-dasharray: 2 3; vector-effect: non-scaling-stroke;
+  }
+  .sky-orb {
+    position: absolute; z-index: 1;
+    width: 8px; height: 8px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: #FFE7A3;
+    box-shadow: 0 0 0 3px var(--sky-glow), 0 0 12px 4px var(--sky-glow);
+    transition: left 0.8s, top 0.8s;
+    animation: sky-pulse 3.2s ease-in-out infinite;
+  }
+  .sky[data-phase="night"] .sky-orb {
+    background: #E9EEFF;
+    box-shadow: inset -2px -1px 0 0 #b9c3e6, 0 0 8px 2px var(--sky-glow);
+    animation: none;
+  }
+  @keyframes sky-pulse { 50% { box-shadow: 0 0 0 5px var(--sky-glow), 0 0 16px 6px var(--sky-glow); } }
+  .sky-ground {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 25%; z-index: 3;
+    background: rgba(0,0,0,0.45);
+    border-top: 1px solid rgba(255,255,255,0.25);
+  }
+  .sky-stars {
+    position: absolute; inset: 0; opacity: 0; transition: opacity 0.8s;
+    background-image:
+      radial-gradient(1px 1px at 12% 20%, #fff, transparent),
+      radial-gradient(1px 1px at 30% 45%, #fff, transparent),
+      radial-gradient(1px 1px at 52% 14%, #fff, transparent),
+      radial-gradient(1px 1px at 68% 38%, #fff, transparent),
+      radial-gradient(1px 1px at 84% 18%, #fff, transparent);
+  }
+  .sky[data-phase="night"] .sky-stars { opacity: 0.85; animation: sky-twinkle 4s ease-in-out infinite; }
+  @keyframes sky-twinkle { 50% { opacity: 0.45; } }
+  .sky-text {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .sky-temp { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) { .sky-orb, .sky-stars { animation: none !important; } }
+
+  /* Quote column, centred, split from the day info by a hairline */
+  .quote-col {
+    margin: 0;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 8px;
+    padding: 4px 20px;
+    border-left: 1px solid rgba(255,255,255,0.07);
+  }
+  .quote-eyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .quote-text {
+    margin: 0;
+    max-width: 34ch;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-primary);
+    text-wrap: balance;
+  }
+  .quote-text::before { content: '“'; }
+  .quote-text::after { content: '”'; }
+  .quote-author {
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--text-tertiary);
+  }
+  .quote-author:not(:empty)::before { content: '— '; }
+
+  @media (max-width: 900px) {
+    .day-strip { grid-template-columns: auto minmax(0, 1fr); }
+    .quote-col {
+      grid-column: 1 / -1;
+      border-left: 0;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 0 0;
+    }
   }
 
 
@@ -539,7 +458,6 @@
     }
     .card { padding: 14px; }
     .section-title { margin-bottom: 8px; }
-    .ticker-row { margin-bottom: 8px; }
 
     /* Phones stay in the icon-only rail permanently — there isn't room for
        an inline expanded sidebar, so the toggle is hidden and labels never
@@ -553,14 +471,15 @@
     .tab-btn { justify-content: center; padding: 9px 0; gap: 0; }
     .tab-btn-label { display: none; }
 
-    .task-ticker { padding: 9px 12px; }
-    .task-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
-    .task-ticker-row { font-size: 12px; }
-    .task-ticker-meta { font-size: 10px; padding: 2px 7px; }
-    .day-ring-row { flex-direction: column; }
-    .day-ring-wrap { padding: 12px 14px; gap: 14px; }
-    .day-ring-svg-wrap { width: 90px; height: 90px; }
-    .day-ring-pct { font-size: 21px; }
-    .day-ring-status { font-size: 13px; }
+    .top-pin { position: static; margin-top: 0; padding-top: 0; }
+    .top-pin { padding-bottom: 0; margin-bottom: 12px; }
+    .day-strip { gap: 14px; padding: 14px; }
+    .day-ring-svg-wrap { width: 96px; height: 96px; }
+    .day-ring-clock { font-size: 21px; }
+    .day-ring-phase, .day-ring-ampm { font-size: 8.5px; }
+    .day-ring-status { font-size: 14px; }
+    .day-ring-range { font-size: 12px; }
+    .sky-row { flex-wrap: wrap; row-gap: 6px; }
+    .sky-text { white-space: normal; }
     .quote-text { font-size: 14px; }
   }

@@ -17,8 +17,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=25">
-<link rel="stylesheet" href="css/todo.css?v=26">
+<link rel="stylesheet" href="css/main.css?v=32">
+<link rel="stylesheet" href="css/todo.css?v=30">
 <link rel="stylesheet" href="css/habits.css?v=53">
 <link rel="stylesheet" href="css/jobs.css?v=88">
 <link rel="stylesheet" href="css/areas.css?v=2">
@@ -86,76 +86,57 @@
        in memory only and a reload will silently revert it. Click to dismiss. -->
   <div id="syncErrorBanner" class="sync-error-banner" role="status" hidden></div>
 
-  <!-- Task Ticker -->
-  <div class="ticker-row">
-    <div class="task-ticker" id="taskTicker" aria-live="polite" aria-atomic="true">
-      <div class="task-ticker-led"><span class="task-ticker-led-dot"></span></div>
-      <div class="task-ticker-label">TASKS</div>
-      <div class="task-ticker-stage" id="taskTickerStage">
-        <div class="task-ticker-row">
-          <span class="task-ticker-status" data-status="">—</span>
-          <span class="task-ticker-text">Loading…</span>
-        </div>
-      </div>
-      <div class="task-ticker-meta" id="taskTickerMeta">0/0</div>
-    </div>
-  </div>
-
-  <!-- Day Ring + Quote of the Day -->
-  <div class="day-ring-row">
-    <div class="card day-ring-card">
-      <div class="weather-badge" id="weatherBadge" hidden>
-        <span id="weatherIcon">☀️</span>
-        <span id="weatherTemp">—°</span>
-        <span class="weather-sun" id="weatherSun" hidden></span>
-      </div>
-      <div class="day-ring-wrap">
-        <div class="day-ring-svg-wrap">
-          <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <filter id="ring-glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="2.5" result="blur"/>
-                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-              </filter>
-            </defs>
-            <!-- Track -->
-            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8"/>
-            <!-- Fill -->
-            <circle id="ringFill" cx="60" cy="60" r="52"
-              fill="none"
-              stroke="#4A9EFF"
-              stroke-width="8"
-              stroke-linecap="round"
-              filter="url(#ring-glow)"
-              transform="rotate(-90 60 60)"
-              style="transition: stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.7s cubic-bezier(0.22,1,0.36,1);"/>
-          </svg>
-          <div class="day-ring-overlay">
-            <div class="day-ring-pct" id="ringPct">—</div>
-            <div class="day-ring-phase" id="ringPhase">SLEEPING</div>
-            <div class="day-ring-clock" id="ringClock">—</div>
-          </div>
-        </div>
-        <div class="day-ring-info">
-          <div class="day-ring-status" id="ringStatus">Loading…</div>
-          <div class="day-ring-remain" id="ringRemain"></div>
-          <div class="day-ring-hours" id="ringHours">8:00 AM – 12:00 AM</div>
-        </div>
+  <!-- Pinned header: day strip stays at the top of every tab while it scrolls -->
+  <div class="top-pin" id="topPin">
+  <!-- Day strip: day/task ring, day info + sky tile, quote of the day -->
+  <div class="card day-strip">
+    <div class="day-ring-svg-wrap" id="dayRing">
+      <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Outer: how much of the awake window has passed -->
+        <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="7"/>
+        <circle id="ringFill" cx="60" cy="60" r="54" fill="none" stroke="#4A9EFF" stroke-width="7"
+          stroke-linecap="round" transform="rotate(-90 60 60)"
+          style="transition: stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), stroke 0.7s cubic-bezier(0.22,1,0.36,1);"/>
+        <!-- Inner: share of today's tasks done -->
+        <circle cx="60" cy="60" r="43" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="7"/>
+        <circle id="ringTasks" cx="60" cy="60" r="43" fill="none" stroke="#6BE3A4" stroke-width="7"
+          stroke-linecap="round" transform="rotate(-90 60 60)"
+          style="transition: stroke-dashoffset 0.7s cubic-bezier(0.22,1,0.36,1), opacity 0.3s;"/>
+      </svg>
+      <div class="day-ring-overlay">
+        <div class="day-ring-phase" id="ringPhase">SLEEPING</div>
+        <div class="day-ring-clock" id="ringClock">—</div>
+        <div class="day-ring-ampm" id="ringAmPm"></div>
       </div>
     </div>
 
-    <div class="card quote-card">
+    <div class="day-strip-mid">
+      <div class="day-ring-status" id="ringStatus">Loading…</div>
+      <div class="day-ring-range">
+        <span id="ringHours">8:00 AM – 12:00 AM</span><span class="dot">·</span><span id="ringRemain"></span><span id="ringPlannedWrap" hidden><span class="dot">·</span><span id="ringPlanned"></span></span>
+      </div>
+      <div class="sky-row" id="weatherBadge" hidden>
+        <div class="sky" id="sky" data-phase="day" aria-hidden="true">
+          <svg class="sky-arc" viewBox="0 0 100 40" preserveAspectRatio="none"><path d="M0 40 Q50 -30 100 40"/></svg>
+          <div class="sky-stars"></div>
+          <div class="sky-orb" id="skyOrb"></div>
+          <div class="sky-ground"></div>
+        </div>
+        <div class="sky-text"><span class="sky-temp" id="weatherTemp">—°</span><span class="dot">·</span><span id="weatherSun"></span></div>
+      </div>
+    </div>
+
+    <figure class="quote-col">
       <div class="quote-eyebrow">Quote of the Day</div>
-      <div class="quote-text" id="quoteText">—</div>
-      <div class="quote-author" id="quoteAuthor"></div>
-    </div>
+      <blockquote class="quote-text" id="quoteText">—</blockquote>
+      <figcaption class="quote-author" id="quoteAuthor"></figcaption>
+    </figure>
+  </div>
   </div>
 
   <!-- Tab: Tasks -->
   <div class="tab-panel active" id="tab-tasks">
     <div class="section">
-      <div class="section-title">To Do List</div>
-
       <!-- TODAY card -->
       <div class="card" id="todayCard">
         <div class="tm-header">
@@ -168,25 +149,19 @@
             </div>
           </div>
           <div class="tm-header-right">
-            <button id="taskHistoryBtn" class="sunday-reset-btn">🕓 History</button>
-            <button id="sundayResetBtn" class="sunday-reset-btn">↻ Sunday Reset</button>
-            <div class="tm-streak" id="tmStreak">
+            <button id="addTaskBtn" class="add-task-btn" title="Add a task (N)">+ Add task <kbd>N</kbd></button>
+            <button id="taskHistoryBtn" class="sunday-reset-btn">History</button>
+            <button id="sundayResetBtn" class="sunday-reset-btn sr-accent">↻ Sunday Reset</button>
+            <div class="tm-streak" id="tmStreak" title="Days in a row you finished every Focus task (or every task, on days without Focus)">
               <span class="tm-streak-icon">⚡</span>
               <span class="tm-streak-num" id="tmStreakNum">0</span>
               <span class="tm-streak-label">day streak</span>
             </div>
           </div>
         </div>
-        <div class="tm-bar" id="tmBar"></div>
         <div class="task-sort-bar" id="todaySortBar"></div>
-        <ul id="taskList" class="task-list"></ul>
-        <div id="emptyState" class="empty-state">No tasks for today yet — add one below.</div>
-        <div class="task-input-wrap tm-input-wrap">
-          <input type="text" class="task-input" id="taskInput" placeholder="Add a task for today…">
-          <button class="btn-add" id="taskAddBtn">+ Add</button>
-          <button class="btn-polish" id="taskPolishBtn">✨ Polish</button>
-        </div>
-        <div class="polish-status" id="polishStatus"></div>
+        <div id="taskList" class="task-groups"></div>
+        <div id="emptyState" class="empty-state">No tasks for today yet — hit <strong>+ Add task</strong> or press N.</div>
       </div>
 
       <!-- UPCOMING card -->
@@ -196,18 +171,14 @@
             <div class="tm-eyebrow" id="tomorrowLabel">Upcoming</div>
             <div class="tm-tomorrow-sub">Tomorrow and beyond — each day unlocks at 6 AM.</div>
           </div>
-          <div class="tm-tomorrow-count" id="tmTomorrowCount">0 planned</div>
+          <div class="tm-header-right">
+            <span class="tm-tomorrow-count" id="tmTomorrowCount">0 planned</span>
+            <button id="addLaterBtn" class="sunday-reset-btn">+ Plan ahead</button>
+          </div>
         </div>
         <div class="task-sort-bar" id="upcomingSortBar"></div>
         <div id="upcomingList" class="upcoming-list"></div>
-        <div id="tomorrowEmptyState" class="empty-state">Nothing planned ahead yet.</div>
-        <div class="task-input-wrap tm-input-wrap">
-          <input type="date" class="task-date-input" id="plannerDateInput" aria-label="Task date">
-          <input type="text" class="task-input" id="tomorrowInput" placeholder="Add a task for tomorrow…">
-          <button class="btn-add" id="tomorrowAddBtn">+ Add</button>
-          <button class="btn-polish" id="tomorrowPolishBtn">✨ Polish</button>
-        </div>
-        <div class="polish-status" id="tomorrowStatus"></div>
+        <div id="tomorrowEmptyState" class="empty-state">Nothing planned ahead yet — use <strong>+ Plan ahead</strong>, or drag a task here.</div>
       </div>
     </div>
   </div>
@@ -764,8 +735,68 @@
 <div id="sundayResetModal" class="sr-modal">
   <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Sunday Reset">
     <button id="sundayResetClose" class="sr-modal-close" aria-label="Close">×</button>
-    <h2 class="sr-modal-title">Sunday Reset</h2>
+    <h2 class="sr-modal-title sr-accent-title">↻ Sunday Reset</h2>
     <div id="sundayResetBody"></div>
+  </div>
+</div>
+
+<div id="addTaskModal" class="sr-modal">
+  <form class="sr-modal-card add-task-card" id="addTaskForm" role="dialog" aria-modal="true" aria-labelledby="addTaskTitle" autocomplete="off">
+    <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="addTaskTitle">New task</h2>
+    <p class="at-hint">Shortcuts in the name: <code>!h</code> <code>#area</code> <code>~30m</code> <code>tmr</code> <code>*</code></p>
+    <div class="at-name">
+      <input id="atName" placeholder="What needs doing?" aria-label="Task name">
+      <button type="button" class="btn-polish at-polish" id="atPolish">✨ Polish</button>
+    </div>
+    <div class="at-tokens" id="atTokens"></div>
+    <div class="at-grid">
+      <span class="at-label">Day</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="day"><button type="button" data-v="today">Today</button><button type="button" data-v="tmr">Tomorrow</button><button type="button" data-v="pick">Pick date</button></div>
+        <input type="date" class="task-date-input at-date" id="atDate" aria-label="Day" hidden>
+      </div>
+      <span class="at-label">Due <small>optional</small></span>
+      <div class="at-row">
+        <div class="at-seg" data-f="due"><button type="button" data-v="">None</button><button type="button" data-v="fri" id="atDueFri">Fri</button><button type="button" data-v="week">Next week</button><button type="button" data-v="pick">Pick date</button></div>
+        <input type="date" class="task-date-input at-date" id="atDue" aria-label="Due date" hidden>
+      </div>
+      <span class="at-label">Priority</span>
+      <div class="at-seg" data-f="pri"><button type="button" data-v="High">High</button><button type="button" data-v="Medium">Medium</button><button type="button" data-v="Low">Low</button></div>
+      <span class="at-label">Area</span>
+      <div class="at-areas" id="atAreas"></div>
+      <span class="at-label">Estimate</span>
+      <div class="at-seg" data-f="est"><button type="button" data-v="0">None</button><button type="button" data-v="15">15m</button><button type="button" data-v="30">30m</button><button type="button" data-v="60">1h</button><button type="button" data-v="120">2h</button></div>
+      <span class="at-label">Steps</span>
+      <input id="atSteps" class="task-input at-steps" placeholder="Optional, comma separated: towel, pink salt" aria-label="Steps">
+      <span class="at-label">Focus</span>
+      <label class="at-check"><input type="checkbox" id="atFocus"> <span id="atFocusLabel">Add to Focus</span></label>
+    </div>
+    <div class="at-foot">
+      <span class="at-keys"><kbd>↵</kbd> add · <kbd>esc</kbd> cancel</span>
+      <span class="at-status" id="atStatus"></span>
+      <button type="button" class="btn-polish" data-close>Cancel</button>
+      <button type="submit" class="btn-add" id="atSubmit" disabled>Add task</button>
+    </div>
+  </form>
+</div>
+
+<div class="app-toast" id="appToast" role="status" hidden></div>
+
+<div id="triageModal" class="sr-modal">
+  <div class="sr-modal-card triage-modal-card" role="dialog" aria-modal="true" aria-labelledby="triageTitle">
+    <button id="triageClose" class="sr-modal-close" aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="triageTitle">Stale tasks <span class="triage-count" id="triageCount"></span></h2>
+    <p class="sunday-reset-intro">Carried over a week or more. Decide once, and it stops coming back. Keys <kbd>1</kbd>–<kbd>6</kbd> pick.</p>
+    <div id="triageBody"></div>
+  </div>
+</div>
+
+<div id="somedayModal" class="sr-modal">
+  <div class="sr-modal-card" role="dialog" aria-modal="true" aria-labelledby="somedayTitle">
+    <button id="somedayClose" class="sr-modal-close" aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="somedayTitle">Someday</h2>
+    <div id="somedayBody"></div>
   </div>
 </div>
 
@@ -824,7 +855,8 @@
 <!-- Application scripts - load order matters. Feature files (todo/habits/jobs/
      areas) only DECLARE functions and register listeners; main.js loads LAST and
      is the only file with bare top-level calls. Keep this order. -->
-<script src="js/todo.js?v=25"></script>
+<script src="js/todo.js?v=29"></script>
+<script src="js/todoPlan.js?v=4"></script>
 <script src="js/habits.js?v=40"></script>
 <script src="js/reactiveHabits.js?v=1"></script>
 <script src="vendor/d3.min.js"></script>
@@ -837,6 +869,6 @@
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=45"></script>
+<script src="js/main.js?v=49"></script>
 </body>
 </html>

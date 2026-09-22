@@ -1,5 +1,6 @@
-// To Do tab: rollover, streak, task rows, drag-reorder, inline edit,
-// quick-add + polish. Loaded before main.js.
+// To Do tab: rollover, streak, grouped task list (Focus / To do, or by
+// priority / area), task rows (steps, due dates, estimates), drag-reorder,
+// inline edit, the Add task modal + polish. Loaded before main.js.
 
 // The task currently being dragged (id + origin day-key), while a task-row
 // drag is in progress; null otherwise (including while a habit row, which
@@ -51,16 +52,6 @@ function _sameTask(g, x) {
 }
 
 // ── Upcoming (future-dated) tasks ──
-// The planner card creates tasks for tomorrow or later only. `plannerDate` is
-// the target date for new tasks; it lazily defaults to tomorrow and is never
-// allowed to point at today or the past.
-let plannerDate = null;
-function plannerTargetDate() {
-  const min = getTomorrowDateString();
-  if (!plannerDate || plannerDate < min) plannerDate = min;
-  return plannerDate;
-}
-
 // Dates strictly after the active day that currently hold tasks, ascending.
 function upcomingDateKeys() {
   const active = getActiveDateString();
@@ -134,12 +125,12 @@ function _flipTaskRows(listEl, doReload) {
   });
 }
 
-function paintTaskSortBar(el, count) {
+function paintTaskSortBar(el, count, label) {
   if (!el) return;
   el.hidden = !(count > 1);           // nothing to sort with 0–1 tasks
   if (el.hidden) { el.innerHTML = ''; return; }
   const mode = getTaskSort();
-  el.innerHTML = `<span class="task-sort-label">Sort</span>` +
+  el.innerHTML = `<span class="task-sort-label">${label || 'Sort'}</span>` +
     _TASK_SORT_MODES.map(([v, l]) =>
       `<button class="task-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('');
 }
@@ -415,7 +406,11 @@ function checkStreak() {
     if (startFrom && date <= startFrom) continue;
     const tasks = storeGet(k) || [];
     if (tasks.length === 0) continue;
-    if (tasks.every(g => g.done)) {
+    // A day counts when its Focus tasks are all done. Days where nothing was
+    // starred fall back to the old rule (every task done) — rollover keeps
+    // stale tasks on every list, so that rule alone could almost never pass.
+    const focus = tasks.filter(g => g.focus);
+    if ((focus.length ? focus : tasks).every(g => g.done)) {
       streak.count++;
     } else {
       streak.count = 0;
@@ -437,29 +432,26 @@ function renderTodayHeader() {
   const tasks = storeGet(todayKey()) || [];
   const total = tasks.length;
   const done  = tasks.filter(g => g.done).length;
+  const focus = tasks.filter(g => g.focus);
 
-  document.getElementById('todayLabel').textContent = `Today — ${formatDate(getActiveDateString())}`;
-  document.getElementById('tmProgressNum').textContent = done;
-  document.getElementById('tmProgressTotal').textContent = `/${total}`;
-
+  document.getElementById('todayLabel').textContent = formatDate(getActiveDateString());
   const labelEl = document.getElementById('tmProgressLabel');
-  if (total === 0) labelEl.textContent = 'no tasks yet';
-  else if (done === total) labelEl.textContent = 'all done — solid day';
-  else labelEl.textContent = 'complete';
-
-  const bar = document.getElementById('tmBar');
-  bar.innerHTML = '';
-  // Done segments first, so the filled part is one contiguous run on the left
-  // (matches the list, where completed tasks sink to the bottom).
-  for (let i = 0; i < total; i++) {
-    const seg = document.createElement('div');
-    seg.className = 'tm-bar-seg' + (i < done ? ' tm-bar-seg-done' : '');
-    bar.appendChild(seg);
+  if (focus.length) {
+    // Focus is the headline number; the full count rides along after it.
+    document.getElementById('tmProgressNum').textContent = focus.filter(g => g.done).length;
+    document.getElementById('tmProgressTotal').textContent = `/${focus.length}`;
+    labelEl.textContent = `focus done · ${done}/${total} total`;
+  } else {
+    document.getElementById('tmProgressNum').textContent = done;
+    document.getElementById('tmProgressTotal').textContent = `/${total}`;
+    if (total === 0) labelEl.textContent = 'no tasks yet';
+    else if (done === total) labelEl.textContent = 'all done — solid day';
+    else labelEl.textContent = 'complete';
   }
 
   const card = document.getElementById('todayCard');
-  if (total > 0 && done === total) card.classList.add('tm-all-done');
-  else card.classList.remove('tm-all-done');
+  card.classList.toggle('tm-all-done', total > 0 && done === total);
+  if (typeof renderDayStripTasks === 'function') renderDayStripTasks();
 }
 
 function renderStreak() {
@@ -477,45 +469,134 @@ function renderUpcomingCount() {
 }
 
 
+// ── Task extras: steps, due date, estimate ──
+// A task named like a checklist — "Hair (Nose, Ears, Neck)" or "Shopping Haul:
+// Towel, Pink Salt" — shows its list as tickable steps without being rewritten:
+// the name stays as typed (Sunday Reset matches its tasks by text), and step
+// ticks are stored in `g.steps` once you tick one.
+const _STEP_LIST_RES = [/^(.+?)\s*\(([^()]+)\)\s*$/, /^([^:]+):\s*(.+)$/];
+
+function _parseStepList(text) {
+  for (const re of _STEP_LIST_RES) {
+    const m = String(text || '').match(re);
+    if (!m) continue;
+    const items = m[2].split(',').map(x => x.trim()).filter(Boolean);
+    if (items.length >= 2) return { title: m[1].trim(), items };
+  }
+  return null;
+}
+
+// What a row shows: the title (the name minus a parsed list) and its steps.
+function taskStepsView(g) {
+  const parsed = _parseStepList(g.text);
+  if (Array.isArray(g.steps) && g.steps.length) {
+    const fromText = parsed && parsed.items.length === g.steps.length &&
+      parsed.items.every((t, i) => t === g.steps[i].text);
+    return { title: fromText ? parsed.title : g.text, steps: g.steps, fromText };
+  }
+  if (parsed) return { title: parsed.title, steps: parsed.items.map(text => ({ text, done: false })), fromText: true };
+  return { title: g.text, steps: [], fromText: false };
+}
+
+// Steps for a renamed task: a list that came from the old name follows the new
+// name (keeping ticks on items that survive); steps added by hand are kept.
+function _stepsAfterRename(g, newText) {
+  const view = taskStepsView(g);
+  if (!view.fromText) return g.steps;
+  const parsed = _parseStepList(newText);
+  if (!parsed) return undefined;
+  const was = new Map(view.steps.map(x => [x.text, x.done]));
+  return parsed.items.map(text => ({ text, done: !!was.get(text) }));
+}
+
+function _fmtEst(min) {
+  if (!(min > 0)) return '';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+// [label, urgent] for a due date relative to the active day.
+function _dueLabel(due) {
+  const d = _daysApart(getActiveDateString(), due);
+  if (d < 0)  return ['past due', true];
+  if (d === 0) return ['due today', true];
+  if (d === 1) return ['due tomorrow', true];
+  const pretty = formatDate(due);              // "Wed, Sep 30"
+  return [d < 7 ? 'due ' + pretty.split(',')[0] : 'due ' + pretty.split(', ')[1], false];
+}
+
+// Star a task into (or out of) today's Focus — at most 3 open at once.
+const FOCUS_MAX = 3;
+function toggleTaskFocus(key, id) {
+  const arr = storeGet(key) || [];
+  const i = arr.findIndex(x => x.id === id);
+  if (i < 0) return;
+  if (!arr[i].focus && arr.filter(x => x.focus && !x.done).length >= FOCUS_MAX) {
+    showToast(`Focus is full — unstar one first (max ${FOCUS_MAX})`);
+    return;
+  }
+  arr[i] = Object.assign({}, arr[i]);
+  if (arr[i].focus) delete arr[i].focus; else arr[i].focus = true;
+  storeSet(key, arr);
+  _flipTaskRows(document.getElementById('taskList'), loadToday);
+}
+
+// ── Toast ── one short confirmation at the bottom of the screen.
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('appToast');
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
+}
+
 // ── Build task row ──
 // Handlers resolve the task by stable id against the live stored array, so they
-// stay correct no matter how the visible list is sorted. `readOnly` locks the
-// checkbox (future days); `draggable` enables drag-reorder (custom sort only).
+// stay correct no matter how the visible list is grouped. `readOnly` locks the
+// checkbox (future days); `draggable` enables drag-reorder (custom order only).
+// Arrays on a task (steps) are always replaced, never mutated in place: rollover
+// copies tasks shallowly, so the same array can sit on several days' copies.
 function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   const priority = g.priority || 'Medium';
-  const priClass = { High: 'task-priority-high', Medium: 'task-priority-med', Low: 'task-priority-low' }[priority] || 'task-priority-med';
+  const isToday = key === todayKey();
+  const isSR = isSundayResetTask(g);
+  const view = taskStepsView(g);
   const li = document.createElement('li');
-  li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
+  li.className = 'task-row' + (priority === 'High' ? ' is-hi' : '') + (g.done ? ' is-done' : '') +
+    (isSR ? ' is-sr' : '') + (g.focus ? ' is-focus' : '');
   li.dataset.idx = idx;
   li.dataset.taskId = g.id || '';
   li.dataset.taskKey = key;
-  li.draggable = !!draggable && !g.done;   // done rows sink to the bottom, no drag
+  li.draggable = !!draggable && !g.done;   // done rows sit in the Done section, no drag
 
-  const reload = () => { if (key === todayKey()) loadToday(); else loadUpcoming(); };
+  const reload = () => { if (isToday) loadToday(); else loadUpcoming(); };
   const mutate = fn => {
     const arr = storeGet(key) || [];
     const i = arr.findIndex(x => x.id === g.id);
     if (i < 0) return;
+    arr[i] = Object.assign({}, arr[i]);
     fn(arr, i);
     storeSet(key, arr);
     reload();
   };
-
-  // Priority click strip (invisible, covers left border area)
-  const priBtn = document.createElement('button');
-  priBtn.className = 'task-priority-btn';
-  priBtn.title = `Priority: ${priority} — click to change`;
-  priBtn.addEventListener('click', () => {
+  const cyclePriority = () => {
     // Cycle by colour: High (red) → Low (green) → Medium (yellow) → High …
     const order = ['High', 'Low', 'Medium'];
     mutate((arr, i) => {
       const cur = arr[i].priority || 'Medium';
       arr[i].priority = order[(order.indexOf(cur) + 1) % order.length];
     });
-  });
+  };
+
+  // Priority click strip (invisible, covers left edge)
+  const priBtn = document.createElement('button');
+  priBtn.className = 'task-priority-btn';
+  priBtn.title = `Priority: ${priority} — click to change`;
+  priBtn.addEventListener('click', cyclePriority);
   li.appendChild(priBtn);
 
-  // Drag handle
   const drag = document.createElement('span');
   drag.className = 'task-drag-handle';
   drag.textContent = '⋮⋮';
@@ -528,6 +609,7 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = !!g.done;
+  cb.setAttribute('aria-label', 'Complete ' + g.text);
   if (readOnly) { cb.disabled = true; cb.title = 'Unlocks when this day starts (6 AM)'; }
   const cbBox = document.createElement('span');
   cbBox.className = 'task-cb-box';
@@ -539,25 +621,31 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
     const arr = storeGet(key) || [];
     const i = arr.findIndex(x => x.id === g.id);
     if (i < 0) return;
-    arr[i].done = cb.checked;
-    if (cb.checked) arr[i].doneAt = new Date().toISOString();
-    else delete arr[i].doneAt;
+    const t = arr[i] = Object.assign({}, arr[i]);
+    t.done = cb.checked;
+    if (cb.checked) t.doneAt = new Date().toISOString();
+    else delete t.doneAt;
+    // Ticking the task ticks its steps; unticking a fully-ticked list clears it.
+    if (view.steps.length) {
+      if (cb.checked) t.steps = view.steps.map(x => ({ text: x.text, done: true }));
+      else if (view.steps.every(x => x.done)) t.steps = view.steps.map(x => ({ text: x.text, done: false }));
+    }
     storeSet(key, arr);
-    // Slide the row down to its new (sorted) spot, like the Habits tab.
-    if (key === todayKey()) _flipTaskRows(document.getElementById('taskList'), loadToday);
+    if (isToday) _flipTaskRows(document.getElementById('taskList'), loadToday);
     else reload();
   });
 
-  // Text + its optional tags (overdue, sunday reset) share one flex wrapper, so
-  // they sit right after the task name instead of out by the area pill.
+  // Name + tags on one line (tags sit right after the name), steps underneath.
   const main = document.createElement('div');
   main.className = 'task-main';
+  const line = document.createElement('div');
+  line.className = 'task-line';
 
   const txt = document.createElement('span');
   txt.className = 'task-text';
-  txt.textContent = g.text;
-  makeInlineEdit(txt, g, key, reload);
-  main.appendChild(txt);
+  txt.textContent = view.title;
+  makeInlineEdit(txt, g, key, reload, view.title);
+  line.appendChild(txt);
 
   const overdueDays = readOnly ? 0 : taskOverdueDays(g);
   if (overdueDays > 0) {
@@ -566,52 +654,136 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
     od.className = 'task-overdue-tag';
     od.textContent = `overdue · ${overdueDays}d`;
     od.title = `Carried over — first added ${overdueDays} day${overdueDays === 1 ? '' : 's'} ago`;
-    main.appendChild(od);
+    line.appendChild(od);
   }
 
-  if (isSundayResetTask(g)) {
+  if (g.due && !g.done) {
+    const [label, urgent] = _dueLabel(g.due);
+    const du = document.createElement('span');
+    du.className = 'task-due-tag' + (urgent ? ' is-urgent' : '');
+    du.textContent = label;
+    du.title = 'Due ' + formatDate(g.due);
+    line.appendChild(du);
+  }
+
+  if (isSR) {
     const tag = document.createElement('span');
-    tag.className = 'task-source-tag';
-    tag.textContent = 'sunday reset';
-    main.appendChild(tag);
+    tag.className = 'task-sr-badge';
+    tag.title = 'Added by Sunday Reset — comes back every Sunday';
+    tag.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>Sunday reset';
+    line.appendChild(tag);
+  }
+
+  if (view.steps.length) {
+    const ct = document.createElement('span');
+    ct.className = 'task-steps-count';
+    ct.textContent = `${view.steps.filter(x => x.done).length}/${view.steps.length}`;
+    line.appendChild(ct);
+  }
+  main.appendChild(line);
+
+  if (view.steps.length) {
+    const steps = document.createElement('div');
+    steps.className = 'task-steps';
+    view.steps.forEach((st, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'task-step' + (st.done ? ' is-done' : '');
+      b.textContent = st.text;
+      b.setAttribute('aria-pressed', st.done ? 'true' : 'false');
+      if (readOnly) b.disabled = true;
+      b.addEventListener('click', () => {
+        const next = view.steps.map((x, j) => ({ text: x.text, done: j === k ? !x.done : !!x.done }));
+        const allDone = next.every(x => x.done);
+        mutate((arr, i) => {
+          arr[i].steps = next;
+          if (allDone && !arr[i].done) { arr[i].done = true; arr[i].doneAt = new Date().toISOString(); }
+          else if (!allDone && arr[i].done) { arr[i].done = false; delete arr[i].doneAt; }
+        });
+      });
+      steps.appendChild(b);
+    });
+    main.appendChild(steps);
   }
   li.appendChild(main);
 
+  // Right side: hover actions, area pill, estimate.
+  const side = document.createElement('div');
+  side.className = 'task-side';
+  const actions = document.createElement('div');
+  actions.className = 'task-actions';
+  const action = (label, title, cls, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'task-action' + (cls ? ' ' + cls : '');
+    b.innerHTML = label;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.addEventListener('click', fn);
+    actions.appendChild(b);
+  };
+  if (isToday && !g.done) {
+    action(g.focus ? '★' : '☆', g.focus ? 'Remove from Focus' : 'Add to Focus', g.focus ? 'is-on' : '',
+      () => toggleTaskFocus(key, g.id));
+    action('↷', 'Move to tomorrow', '', () => {
+      moveTaskToDate(key, g.id, getTomorrowDateString());
+      showToast('Moved to tomorrow');
+    });
+  }
+  action(`<span class="task-pri-dot pri-${priority.toLowerCase()}"></span>`, `Priority: ${priority} — click to change`, '', cyclePriority);
+
+  // Delete
+  action('×', 'Delete task', 'task-delete', () => { deleteTask(key, g); reload(); });
+  side.appendChild(actions);
+
   // Area pill + dropdown
-  li.appendChild(buildAreaPill(g.area, newArea => {
+  side.appendChild(buildAreaPill(g.area, newArea => {
     mutate((arr, i) => { arr[i].area = newArea; });
   }));
 
-  // Delete
-  const del = document.createElement('button');
-  del.className = 'task-delete';
-  del.textContent = '×';
-  del.title = 'Delete task';
-  del.addEventListener('click', () => {
-    // A carried-over task also lives on earlier days — including one that's
-    // since been dragged onto a future Upcoming date, which is why this isn't
-    // gated to `key === todayKey()`. Dismiss its id AND purge those copies, so
-    // rollover can't resurrect it after a reload even if the dismissed id no
-    // longer matches (pre-id rows drift on each load).
-    if (taskAppearsEarlier(g)) {
-      dismissTask(g.id);
-      if (!isSundayResetTask(g)) purgeTaskHistory(g);
-    }
-    // A Sunday Reset task deleted on a Sunday must stay deleted — otherwise the
-    // next refresh re-injects it.
-    if (key === todayKey() && isSundayResetTask(g)) noteSundayResetTaskRemoved(g);
-    mutate((arr, i) => { arr.splice(i, 1); });
-  });
-  li.appendChild(del);
+  if (g.est > 0) {
+    const est = document.createElement('span');
+    est.className = 'task-est';
+    est.textContent = _fmtEst(g.est);
+    est.title = 'Estimate';
+    side.appendChild(est);
+  }
+  li.appendChild(side);
 
   return li;
 }
 
-function makeInlineEdit(el, g, key, reload) {
+// Delete a task from one day's list so it stays gone. Shared by the row's ×,
+// triage's Drop and "move to Someday".
+function deleteTask(key, g) {
+  // A carried-over task also lives on earlier days — including one that's
+  // since been dragged onto a future Upcoming date, which is why this isn't
+  // gated to `key === todayKey()`. Dismiss its id AND purge those copies, so
+  // rollover can't resurrect it after a reload even if the dismissed id no
+  // longer matches (pre-id rows drift on each load).
+  const isSR = isSundayResetTask(g);
+  if (taskAppearsEarlier(g)) {
+    dismissTask(g.id);
+    if (!isSR) purgeTaskHistory(g);
+  }
+  // A Sunday Reset task deleted on a Sunday must stay deleted — otherwise the
+  // next refresh re-injects it.
+  if (key === todayKey() && isSR) noteSundayResetTaskRemoved(g);
+  const arr = storeGet(key) || [];
+  const i = arr.findIndex(x => x.id === g.id);
+  if (i < 0) return;
+  arr.splice(i, 1);
+  storeSet(key, arr);
+}
+
+// Click-to-edit a task's name. The row may show a shortened title (a name whose
+// list became steps), so editing always starts from the full stored name.
+function makeInlineEdit(el, g, key, reload, shown) {
   let original = '';
   el.addEventListener('click', () => {
     if (el.contentEditable === 'true') return;
     original = g.text;
+    el.textContent = g.text;
     el.contentEditable = 'true';
     el.focus();
     const range = document.createRange();
@@ -624,17 +796,24 @@ function makeInlineEdit(el, g, key, reload) {
   el.addEventListener('blur', () => commit());
   el.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    if (e.key === 'Escape') { el.textContent = original; el.contentEditable = 'false'; }
+    if (e.key === 'Escape') { el.contentEditable = 'false'; el.textContent = shown || original; }
   });
   function commit() {
+    if (el.contentEditable !== 'true') return;
     const val = el.textContent.trim();
     el.contentEditable = 'false';
     if (val && val !== original) {
       const arr = storeGet(key) || [];
       const i = arr.findIndex(x => x.id === g.id);
-      if (i >= 0) { arr[i].text = val; storeSet(key, arr); reload(); }
-    } else if (!val) {
-      el.textContent = original;
+      if (i >= 0) {
+        const steps = _stepsAfterRename(arr[i], val);
+        arr[i] = Object.assign({}, arr[i], { text: val });
+        if (steps && steps.length) arr[i].steps = steps; else delete arr[i].steps;
+        storeSet(key, arr);
+        reload();
+      }
+    } else {
+      el.textContent = shown || original;
     }
   }
 }
@@ -687,39 +866,109 @@ function wireDragReorder(listEl, rowClass, onReorder) {
   });
 }
 
-function renderListInto(tasks, listEl, emptyEl, key, readOnly) {
-  listEl.innerHTML = '';
+// ── Today list: grouped sections ──
+// The Custom / Priority / Area switch groups today's open tasks into sections
+// instead of re-sorting one flat list:
+//   custom   → Focus (starred, max 3) then To do — stored order, draggable
+//   priority → High / Medium / Low
+//   area     → one section per area (Areas tab order) with its total estimate,
+//              then No area
+// Done tasks collapse into a Done section at the bottom in every mode, next to
+// the Someday count (both built in js/todoPlan.js).
+const _PRI_COLORS = { High: '#E24B4A', Medium: '#EF9F27', Low: '#52C97A' };
 
-  if (tasks.length === 0) {
-    emptyEl.style.display = 'block';
-    listEl.style.display = 'none';
-  } else {
-    emptyEl.style.display = 'none';
-    listEl.style.display = '';
-
-    const canDrag = !readOnly && getTaskSort() === 'custom';
-    tasks.forEach((g, i) => {
-      listEl.appendChild(buildTaskRow(g, i, tasks, key, readOnly, canDrag));
+function _todayGroups(open, mode) {
+  const estSum = list => list.reduce((n, g) => n + (g.est || 0), 0);
+  const withEst = (n, list) => estSum(list) ? `${n} · ${_fmtEst(estSum(list))}` : String(n);
+  if (mode === 'priority') {
+    return ['High', 'Medium', 'Low'].map(p => {
+      const items = open.filter(g => (g.priority || 'Medium') === p);
+      return { title: p, meta: String(items.length), color: _PRI_COLORS[p], items };
     });
   }
-
-  if (!readOnly && !listEl._dragWired) {
-    listEl._dragWired = true;
-    wireDragReorder(listEl, 'task-row', (fromEl, toEl) =>
-      reorderTaskByDrag(todayKey(), fromEl, toEl));
+  if (mode === 'area') {
+    const areas = getAreas();
+    const groups = areas.map(a => {
+      const items = open.filter(g => g.area === a.name);
+      return { title: a.name, meta: withEst(items.length, items), color: a.color, items };
+    });
+    const known = new Set(areas.map(a => a.name));
+    const none = open.filter(g => !g.area || !known.has(g.area));
+    groups.push({ title: 'No area', meta: withEst(none.length, none), color: '#4C4B47', items: none });
+    return groups;
   }
+  const focus = open.filter(g => g.focus);
+  const rest  = open.filter(g => !g.focus);
+  return [
+    { title: 'Focus', meta: `${focus.length} of ${FOCUS_MAX}`, items: focus, keepEmpty: open.length > 0,
+      hint: 'Star ☆ up to 3 tasks you most need to finish today.' },
+    { title: 'To do', meta: String(rest.length), items: rest },
+  ];
+}
 
-  if (key === todayKey()) renderTodayHeader();
-  else renderUpcomingCount();
+function _buildTaskGroup(group, key, canDrag) {
+  const sec = document.createElement('section');
+  sec.className = 'task-group';
+  const head = document.createElement('div');
+  head.className = 'task-group-head';
+  if (group.color) {
+    const dot = document.createElement('span');
+    dot.className = 'task-group-dot';
+    dot.style.background = group.color;
+    head.appendChild(dot);
+  }
+  const h = document.createElement('h3');
+  h.textContent = group.title;
+  const meta = document.createElement('span');
+  meta.className = 'task-group-meta';
+  meta.textContent = group.meta;
+  const rule = document.createElement('span');
+  rule.className = 'task-group-rule';
+  head.append(h, meta, rule);
+  sec.appendChild(head);
+
+  if (!group.items.length && group.hint) {
+    const hint = document.createElement('div');
+    hint.className = 'task-group-hint';
+    hint.textContent = group.hint;
+    sec.appendChild(hint);
+    return sec;
+  }
+  const ul = document.createElement('ul');
+  ul.className = 'task-list';
+  group.items.forEach((g, i) => ul.appendChild(buildTaskRow(g, i, group.items, key, false, canDrag)));
+  if (canDrag) wireDragReorder(ul, 'task-row', (fromEl, toEl) => reorderTaskByDrag(key, fromEl, toEl));
+  sec.appendChild(ul);
+  return sec;
 }
 
 function loadToday() {
-  const tasks = storeGet(todayKey()) || [];
-  renderListInto(sortTasksForDisplay(tasks, getTaskSort()),
-    document.getElementById('taskList'),
-    document.getElementById('emptyState'),
-    todayKey(), false);
-  paintTaskSortBar(document.getElementById('todaySortBar'), tasks.length);
+  const key   = todayKey();
+  const tasks = storeGet(key) || [];
+  const mode  = getTaskSort();
+  const wrap  = document.getElementById('taskList');
+  const emptyEl = document.getElementById('emptyState');
+  wrap.innerHTML = '';
+  emptyEl.style.display = tasks.length ? 'none' : 'block';
+
+  // Within a section, custom order is the stored order; sortTasksForDisplay
+  // already handles priority/area ordering for the other modes.
+  const open = sortTasksForDisplay(tasks.filter(g => !g.done), mode);
+  const done = tasks.filter(g => g.done);
+  const canDrag = mode === 'custom';
+  if (mode === 'custom') {                       // js/todoPlan.js
+    const nudge = buildBatchNudge();
+    if (nudge) wrap.appendChild(nudge);
+  }
+  _todayGroups(open, mode)
+    .filter(gr => gr.items.length || gr.keepEmpty)
+    .forEach(gr => wrap.appendChild(_buildTaskGroup(gr, key, canDrag)));
+
+  if (tasks.length || getSomeday().length) wrap.appendChild(buildTodayFooter(done, key));   // Done + Someday (js/todoPlan.js)
+
+  paintTaskSortBar(document.getElementById('todaySortBar'), tasks.length, 'Group');
+  paintTriageLink(document.getElementById('todaySortBar'));
+  renderTodayHeader();
 
   const card = document.getElementById('todayCard');
   if (card && !card._crossDropWired) {
@@ -736,15 +985,6 @@ function loadUpcoming() {
   const emptyEl = document.getElementById('tomorrowEmptyState');
   if (!wrap) return;
   wrap.innerHTML = '';
-
-  const target = plannerTargetDate();
-  const dateInput = document.getElementById('plannerDateInput');
-  if (dateInput) {
-    dateInput.min = getTomorrowDateString();
-    if (dateInput.value !== target) dateInput.value = target;
-  }
-  const inp = document.getElementById('tomorrowInput');
-  if (inp) inp.placeholder = `Add a task for ${formatDate(target)}…`;
 
   document.getElementById('tomorrowLabel').textContent = 'Upcoming';
 
@@ -822,56 +1062,6 @@ async function polishTask(text, statusEl) {
   }
 }
 
-// ── Add + Polish handlers ──
-function makeAddHandlers(inputEl, addBtn, polishBtn, getKey, statusEl, reload) {
-  function addTask(text) {
-    if (!text) return;
-    const tasks = storeGet(getKey()) || [];
-    tasks.push(makeTask({ text }));
-    storeSet(getKey(), tasks);
-    inputEl.value = '';
-    reload();
-  }
-
-  addBtn.addEventListener('click', () => addTask(inputEl.value.trim()));
-  inputEl.addEventListener('keydown', e => {
-    if (e.key === 'Enter') addTask(inputEl.value.trim());
-  });
-
-  polishBtn.addEventListener('click', async () => {
-    const raw = inputEl.value.trim();
-    if (!raw) return;
-    if (!ANTHROPIC_API_KEY) {
-      addTask(raw);
-      showStatus(statusEl, 'Polish needs an Anthropic API key — added as-typed.', 'var(--text-tertiary)', 3500);
-      return;
-    }
-    polishBtn.disabled = true;
-    polishBtn.textContent = '✨ Polishing…';
-    const polished = await polishTask(raw, statusEl);
-    polishBtn.disabled = false;
-    polishBtn.textContent = '✨ Polish';
-    if (polished) {
-      addTask(polished);
-    } else {
-      addTask(raw);
-      showStatus(statusEl, 'Polish failed — added as-typed.', 'var(--danger)', 3500);
-    }
-  });
-}
-
-// ── Upcoming card: date picker for the target day of new tasks ──
-// (min/value are seeded by loadUpcoming(), which runs after main.js loads the
-// date helpers; here we only wire the change handler.)
-document.getElementById('plannerDateInput').addEventListener('change', e => {
-  const input = e.target;
-  const min = getTomorrowDateString();
-  if (!input.value || input.value < min) input.value = min;
-  plannerDate = input.value;
-  loadUpcoming();
-});
-
-
 // ── Sunday Reset — weekly recurring to-dos ─────────────────────────────────
 // A fixed Sunday-only checklist. Entries are managed in a slide-in view and
 // auto-injected into Sunday's To Do list, rolling over normally if unfinished.
@@ -887,6 +1077,10 @@ document.getElementById('plannerDateInput').addEventListener('change', e => {
 // still said "done" and the entry never came back. (master.sql drops that key.)
 
 function getSundayReset()      { return MEM['sunday_reset_v1'] || []; }
+// What Sunday does with last week's unfinished copy: 'replace' (default) swaps
+// in a fresh task; 'keep' leaves the old one, overdue count and all.
+function getSundayResetMode()  { return MEM['sunday_reset_mode_v1'] === 'keep' ? 'keep' : 'replace'; }
+function setSundayResetMode(m) { MEM['sunday_reset_mode_v1'] = m; _syncSetting('sunday_reset_mode_v1', m); }
 function saveSundayReset(list) { MEM['sunday_reset_v1'] = list; _syncSetting('sunday_reset_v1', list); }
 
 // True when a task came from a Sunday Reset template — matched by text, the same
@@ -944,13 +1138,28 @@ function applySundayReset() {
 
   const removed = _srRemovedToday(ds);
   const tasks   = storeGet('tasks:' + ds) || [];
-  const texts   = new Set(tasks.map(g => g.text));
+  const replace = getSundayResetMode() === 'replace';
 
   let added = false;
   items.forEach(it => {
-    if (removed.includes(it.id) || texts.has(it.text)) return;
-    tasks.push(makeTask({ text: it.text, area: it.area || null }));
-    texts.add(it.text);
+    if (removed.includes(it.id)) return;
+    const i = tasks.findIndex(g => g.text === it.text);
+    let keepFocus = false;
+    if (i >= 0) {
+      // Last week's copy is still open and was carried onto today. In
+      // "replace" mode it's retired (dismissed, so rollover stops carrying
+      // it) and a fresh one takes its place — a weekly routine shouldn't show
+      // up as a week overdue. Its history rows stay as they were. The fresh
+      // copy first appears today, so later loads leave it alone.
+      const old = tasks[i];
+      if (!replace || old.done || !taskAppearsEarlier(old)) return;
+      dismissTask(old.id);
+      tasks.splice(i, 1);
+      keepFocus = !!old.focus;             // a starred routine stays starred
+    }
+    const fresh = makeTask({ text: it.text, area: it.area || null });
+    if (keepFocus) fresh.focus = true;
+    tasks.push(fresh);
     added = true;
   });
 
@@ -997,107 +1206,165 @@ function _removeInjectedTask(entry) {
 // Sunday leaves the old task sitting there and applySundayReset() adds the new
 // text alongside it as a second task; re-tagging an entry's area leaves the
 // already-injected task on the old one.
+// Applies on any day, not just Sunday: a carried copy sitting on today's list
+// would otherwise keep the old wording and lose its Sunday Reset badge.
 function _updateInjectedTask(oldText, fields) {
   const ds = getActiveDateString();
-  if (!_isSunday(ds)) return;
   const tasks = storeGet('tasks:' + ds) || [];
-  const i = tasks.findIndex(g => g.text === oldText);
+  const i = tasks.findIndex(g => g.text === oldText && !g.done);
   if (i < 0) return;
-  Object.assign(tasks[i], fields);
+  tasks[i] = Object.assign({}, tasks[i], fields);
+  if (fields.text) {
+    const steps = _stepsAfterRename(Object.assign({}, tasks[i], { text: oldText }), fields.text);
+    if (steps && steps.length) tasks[i].steps = steps; else delete tasks[i].steps;
+  }
   storeSet('tasks:' + ds, tasks);
 }
 
-// Small inline text editor for a Sunday Reset row (the shared makeInlineEdit is
-// coupled to storeSet's key-based persistence, which these entries don't use).
-function _srInlineEdit(el, item) {
-  let original = '';
-  el.addEventListener('click', () => {
-    if (el.contentEditable === 'true') return;
-    original = item.text;
-    el.contentEditable = 'true';
-    el.focus();
-    const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
-    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-  });
-  el.addEventListener('blur', commit);
-  el.addEventListener('keydown', e => {
-    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
-    if (e.key === 'Escape') { el.textContent = item.text; el.contentEditable = 'false'; }
-  });
-  function commit() {
-    const val = el.textContent.trim();
-    el.contentEditable = 'false';
-    if (val && val !== item.text) {
-      const oldText = item.text;
-      item.text = val;
-      saveSundayReset(getSundayReset());
-      _updateInjectedTask(oldText, { text: val });
-      _afterSundayResetChange();
-    } else if (!val) {
-      el.textContent = item.text;
-    }
-  }
+// Rename an entry (and the copy on today's list) in one place.
+function _srRename(item, text) {
+  const oldText = item.text;
+  if (!text || text === oldText) return;
+  item.text = text;
+  saveSundayReset(getSundayReset());
+  _updateInjectedTask(oldText, { text });
+  _afterSundayResetChange();
+}
+
+// An entry's steps are the list in its name — "Hair (Nose, Ears)" — so step
+// edits rewrite the name, which keeps Sunday Reset's match-by-text working.
+function _srWithSteps(item, steps) {
+  const parsed = _parseStepList(item.text);
+  const title = parsed ? parsed.title : item.text;
+  return steps.length ? `${title} (${steps.join(', ')})` : title;
 }
 
 function renderSundayResetPage() {
   const body = document.getElementById('sundayResetBody');
   if (!body) return;
   const items = getSundayReset();
+  const onToday = new Set((storeGet(todayKey()) || []).map(g => g.text));
+  const next = _nextSundayLabel();
 
   body.innerHTML = `
     <p class="sunday-reset-intro">
-      These tasks drop into your To&nbsp;Do list every Sunday and roll over if you
-      don't finish them. Next reset: <strong>${_nextSundayLabel()}</strong>.
+      Added to your To&nbsp;Do list every Sunday. Next reset: <strong>${next}</strong>.
     </p>
-    <ul class="sunday-reset-list" id="sundayResetList"></ul>
+    <ul class="sr-list" id="sundayResetList"></ul>
     <div id="sundayResetEmpty" class="empty-state"${items.length ? ' style="display:none;"' : ''}>No weekly tasks yet — add one below.</div>
-    <div class="task-input-wrap tm-input-wrap">
-      <input type="text" class="task-input" id="sundayResetInput" placeholder="Add a weekly task…">
-      <button class="btn-add" id="sundayResetAdd">+ Add</button>
+    <form class="sr-add" id="sundayResetForm" autocomplete="off">
+      <input type="text" class="task-input" id="sundayResetInput" placeholder="Add a weekly task — steps after a colon: Laundry: clothes, sheets" aria-label="New weekly task">
+      <button class="btn-add" type="submit">Add</button>
+    </form>
+    <div class="sr-setting">
+      <span>If last week’s copy isn’t finished on Sunday</span>
+      <div class="at-seg" id="sundayResetMode">
+        <button type="button" data-v="replace">Replace it</button>
+        <button type="button" data-v="keep">Keep it</button>
+      </div>
     </div>`;
 
   const list = document.getElementById('sundayResetList');
   items.forEach(it => {
+    const parsed = _parseStepList(it.text);
+    const title = parsed ? parsed.title : it.text;
+    const steps = parsed ? parsed.items : [];
+
     const li = document.createElement('li');
-    li.className = 'task-row sunday-reset-row';
+    li.className = 'sr-item';
+    const main = document.createElement('div');
+    main.className = 'sr-item-main';
 
-    const txt = document.createElement('span');
-    txt.className = 'task-text';
-    txt.textContent = it.text;
-    _srInlineEdit(txt, it);
-    li.appendChild(txt);
+    const name = document.createElement('input');
+    name.className = 'sr-name';
+    name.value = title;
+    name.setAttribute('aria-label', 'Task name');
+    name.addEventListener('change', () => {
+      const v = name.value.trim();
+      if (!v) { name.value = title; return; }
+      _srRename(it, steps.length ? `${v} (${steps.join(', ')})` : v);
+    });
+    name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); name.blur(); } });
+    main.appendChild(name);
 
-    li.appendChild(buildAreaPill(it.area || null, newArea => {
+    const stepsEl = document.createElement('div');
+    stepsEl.className = 'sr-steps';
+    steps.forEach((st, k) => {
+      const chip = document.createElement('span');
+      chip.className = 'sr-step';
+      chip.textContent = st;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Remove step ' + st);
+      x.addEventListener('click', () => _srRename(it, _srWithSteps(it, steps.filter((_, j) => j !== k))));
+      chip.appendChild(x);
+      stepsEl.appendChild(chip);
+    });
+    const add = document.createElement('input');
+    add.className = 'sr-addstep';
+    add.placeholder = '+ step';
+    add.setAttribute('aria-label', 'Add step');
+    add.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const v = add.value.trim().replace(/[(),]/g, ' ').trim();
+      if (!v) return;
+      _srRename(it, _srWithSteps(it, steps.concat(v)));
+      const again = document.querySelector(`#sundayResetList .sr-item[data-id="${it.id}"] .sr-addstep`);
+      if (again) again.focus();
+    });
+    stepsEl.appendChild(add);
+    main.appendChild(stepsEl);
+    li.dataset.id = it.id;
+    li.appendChild(main);
+
+    const side = document.createElement('div');
+    side.className = 'sr-item-side';
+    const when = document.createElement('span');
+    when.className = 'sr-when' + (onToday.has(it.text) ? '' : ' is-next');
+    when.textContent = onToday.has(it.text) ? 'on today’s list' : 'starts ' + next;
+    side.appendChild(when);
+    side.appendChild(buildAreaPill(it.area || null, newArea => {
       it.area = newArea;
       saveSundayReset(getSundayReset());
       _updateInjectedTask(it.text, { area: newArea });
       _afterSundayResetChange();
     }));
-
     const del = document.createElement('button');
+    del.type = 'button';
     del.className = 'task-delete';
     del.textContent = '×';
     del.title = 'Remove from Sunday Reset';
+    del.setAttribute('aria-label', 'Remove ' + title + ' from Sunday Reset');
     del.addEventListener('click', () => {
       _removeInjectedTask(it);
       saveSundayReset(getSundayReset().filter(x => x.id !== it.id));
       _afterSundayResetChange();
     });
-    li.appendChild(del);
-
+    side.appendChild(del);
+    li.appendChild(side);
     list.appendChild(li);
   });
 
-  const inp = document.getElementById('sundayResetInput');
-  const add = () => {
-    const text = inp.value.trim();
+  const mode = getSundayResetMode();
+  document.querySelectorAll('#sundayResetMode button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === mode);
+    b.addEventListener('click', () => { setSundayResetMode(b.dataset.v); renderSundayResetPage(); });
+  });
+
+  document.getElementById('sundayResetForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const inp = document.getElementById('sundayResetInput');
+    let text = inp.value.trim();
     if (!text) return;
+    // "Laundry: clothes, sheets" is stored as "Laundry (clothes, sheets)".
+    const p = _parseStepList(text);
+    if (p) text = `${p.title} (${p.items.join(', ')})`;
     saveSundayReset(getSundayReset().concat({ id: _srId(), text, area: null }));
     _afterSundayResetChange();
     document.getElementById('sundayResetInput').focus();
-  };
-  document.getElementById('sundayResetAdd').addEventListener('click', add);
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+  });
 }
 
 function openSundayReset() {
@@ -1177,9 +1444,8 @@ function renderTaskHistory() {
     const ul = document.createElement('ul');
     ul.className = 'task-list task-history-list';
     tasks.forEach(g => {
-      const priClass = { High: 'task-priority-high', Medium: 'task-priority-med', Low: 'task-priority-low' }[g.priority || 'Medium'] || 'task-priority-med';
       const li = document.createElement('li');
-      li.className = 'task-row ' + priClass + (g.done ? ' is-done' : '');
+      li.className = 'task-row' + (g.priority === 'High' ? ' is-hi' : '') + (g.done ? ' is-done' : '');
 
       const mark = document.createElement('span');
       mark.className = 'task-history-mark';
@@ -1218,4 +1484,226 @@ document.getElementById('taskHistoryModal').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('taskHistoryModal').classList.contains('open')) closeTaskHistory();
+});
+
+// ── Add task modal ─────────────────────────────────────────────────────────
+// "+ Add task" (or N on the To Do tab) opens a form with every field in one
+// place. Shortcuts typed into the name fill the fields and are stripped from
+// the saved name:  !h !m !l  priority · #area · ~30m / ~1h estimate ·
+// tmr / today  day · *  Focus.
+const _AT = { day: 'today', due: '', pri: 'Medium', area: null, est: 0 };
+let _atReturnFocus = null;
+
+function _atEl(id) { return document.getElementById(id); }
+
+function _addDays(ds, n) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return _localDateStr(new Date(y, m - 1, d + n));
+}
+// The coming Friday after the active day (a week out when today is Friday).
+function _nextFriday() {
+  const ds = getActiveDateString();
+  const [y, m, d] = ds.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return _addDays(ds, ((5 - dow + 7) % 7) || 7);
+}
+
+function _atSeg(field, value) {
+  _AT[field] = value;
+  document.querySelectorAll(`#addTaskForm .at-seg[data-f="${field}"] button`).forEach(b =>
+    b.classList.toggle('on', b.dataset.v === String(value)));
+  if (field === 'day') { _atEl('atDate').hidden = value !== 'pick'; _atFocusState(); }
+  if (field === 'due') _atEl('atDue').hidden = value !== 'pick';
+}
+
+function _atPaintAreas() {
+  const wrap = _atEl('atAreas');
+  const areas = getAreas();
+  wrap.innerHTML = '';
+  if (!areas.length) {
+    wrap.innerHTML = '<span class="at-none">No areas yet — add them in the Areas tab.</span>';
+    return;
+  }
+  const pill = (name, color) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'task-area-pill' + (name ? '' : ' is-empty') + (_AT.area === name ? ' is-picked' : '');
+    b.textContent = name || 'No area';
+    if (color) { b.style.background = color + 'BF'; b.style.color = '#fff'; }
+    b.addEventListener('click', () => { _AT.area = name; _atPaintAreas(); });
+    wrap.appendChild(b);
+  };
+  pill(null, null);
+  areas.forEach(a => pill(a.name, a.color));
+}
+
+function _atFocusState() {
+  const box = _atEl('atFocus');
+  const today = storeGet(todayKey()) || [];
+  const used = today.filter(g => g.focus && !g.done).length;
+  const label = _atEl('atFocusLabel');
+  if (_AT.day !== 'today') {
+    box.checked = false; box.disabled = true;
+    label.textContent = 'Focus is for today’s tasks';
+  } else if (used >= FOCUS_MAX) {
+    box.checked = false; box.disabled = true;
+    label.textContent = `Focus is full (${used} of ${FOCUS_MAX})`;
+  } else {
+    box.disabled = false;
+    label.textContent = `Add to Focus (${used} of ${FOCUS_MAX} used)`;
+  }
+  box.closest('.at-check').classList.toggle('is-disabled', box.disabled);
+}
+
+const _AT_TOKEN = /^(![hml]|#\S+|~\d+(?:m|h)|\*|tmr|tomorrow|today)$/i;
+
+function _atCleanName() {
+  return _atEl('atName').value.split(/\s+/).filter(w => w && !_AT_TOKEN.test(w)).join(' ').trim();
+}
+
+// Read shortcut tokens out of the name and apply them to the form.
+function _atParse() {
+  const chips = [];
+  _atEl('atName').value.split(/\s+/).forEach(w => {
+    let m;
+    if ((m = w.match(/^!([hml])$/i))) {
+      const p = { h: 'High', m: 'Medium', l: 'Low' }[m[1].toLowerCase()];
+      _atSeg('pri', p); chips.push(['pri', p + ' priority']);
+    } else if ((m = w.match(/^#(\S+)$/))) {
+      const a = getAreas().find(x => x.name.toLowerCase().startsWith(m[1].toLowerCase()));
+      if (a) { _AT.area = a.name; _atPaintAreas(); chips.push(['area', a.name]); }
+      else chips.push(['miss', `no area “${m[1]}”`]);
+    } else if ((m = w.match(/^~(\d+)(m|h)$/i))) {
+      const min = +m[1] * (m[2].toLowerCase() === 'h' ? 60 : 1);
+      _atSeg('est', min); _AT.est = min; chips.push(['est', 'est ' + _fmtEst(min)]);
+    } else if (/^(tmr|tomorrow)$/i.test(w)) {
+      _atSeg('day', 'tmr'); chips.push(['day', 'tomorrow']);
+    } else if (/^today$/i.test(w)) {
+      _atSeg('day', 'today'); chips.push(['day', 'today']);
+    } else if (w === '*') {
+      if (!_atEl('atFocus').disabled) { _atEl('atFocus').checked = true; chips.push(['focus', '★ focus']); }
+    }
+  });
+  const box = _atEl('atTokens');
+  box.innerHTML = '';
+  chips.forEach(([k, label]) => {
+    const c = document.createElement('span');
+    c.className = 'at-token at-token-' + k;
+    c.textContent = label;
+    box.appendChild(c);
+  });
+  _atEl('atSubmit').disabled = !_atCleanName();
+}
+
+function openAddTask(startDay) {
+  _atReturnFocus = document.activeElement;
+  const form = _atEl('addTaskForm');
+  form.reset();
+  Object.assign(_AT, { day: startDay === 'tmr' ? 'tmr' : 'today', due: '', pri: 'Medium', area: null, est: 0 });
+  ['day', 'due', 'pri', 'est'].forEach(f => _atSeg(f, _AT[f]));
+  const tmr = getTomorrowDateString();
+  _atEl('atDate').min = tmr;
+  _atEl('atDate').value = tmr;
+  _atEl('atDue').min = getActiveDateString();
+  _atEl('atDue').value = _addDays(getActiveDateString(), 7);
+  const fri = _nextFriday();
+  _atEl('atDueFri').title = formatDate(fri);
+  _atEl('atTokens').innerHTML = '';
+  _atEl('atStatus').textContent = '';
+  _atEl('atSubmit').disabled = true;
+  _atPaintAreas();
+  _atFocusState();
+  _atEl('addTaskModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  _atEl('atName').focus();
+}
+
+function closeAddTask() {
+  _atEl('addTaskModal').classList.remove('open');
+  document.body.style.overflow = '';
+  if (_atReturnFocus && _atReturnFocus.focus) _atReturnFocus.focus();
+}
+
+function _atSubmit() {
+  const text = _atCleanName();
+  if (!text) return;
+  let date;
+  if (_AT.day === 'today') date = getActiveDateString();
+  else if (_AT.day === 'tmr') date = getTomorrowDateString();
+  else {
+    date = _atEl('atDate').value;
+    if (!date || date < getTomorrowDateString()) { _atEl('atStatus').textContent = 'Pick a day from tomorrow on.'; return; }
+  }
+  let due = '';
+  if (_AT.due === 'fri') due = _nextFriday();
+  else if (_AT.due === 'week') due = _addDays(getActiveDateString(), 7);
+  else if (_AT.due === 'pick') due = _atEl('atDue').value;
+
+  const fields = { text, priority: _AT.pri, area: _AT.area };
+  if (_AT.est > 0) fields.est = _AT.est;
+  if (due) fields.due = due;
+  const steps = _atEl('atSteps').value.split(',').map(x => x.trim()).filter(Boolean);
+  if (steps.length) fields.steps = steps.map(t => ({ text: t, done: false }));
+  if (_AT.day === 'today' && _atEl('atFocus').checked) fields.focus = true;
+
+  const key = 'tasks:' + date;
+  const task = makeTask(fields);
+  const arr = (storeGet(key) || []).slice();
+  arr.push(task);
+  storeSet(key, arr);
+  closeAddTask();
+
+  if (date === getActiveDateString()) {
+    loadToday();
+    const row = document.querySelector(`#taskList .task-row[data-task-id="${task.id}"]`);
+    if (row) { row.classList.add('is-new'); row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    showToast(task.focus ? 'Added to Focus' : 'Added to today');
+  } else {
+    loadUpcoming();
+    showToast(`Added to Upcoming · ${date === getTomorrowDateString() ? 'Tomorrow' : formatDate(date)}` +
+      (due ? ' · ' + _dueLabel(due)[0] : ''));
+  }
+}
+
+document.getElementById('addTaskBtn').addEventListener('click', () => openAddTask());
+document.getElementById('addLaterBtn').addEventListener('click', () => openAddTask('tmr'));
+document.getElementById('atName').addEventListener('input', _atParse);
+document.getElementById('addTaskForm').addEventListener('submit', e => { e.preventDefault(); _atSubmit(); });
+document.getElementById('addTaskForm').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.hasAttribute('data-close')) { closeAddTask(); return; }
+  const seg = b.closest('.at-seg');
+  if (seg) _atSeg(seg.dataset.f, seg.dataset.f === 'est' ? +b.dataset.v : b.dataset.v);
+});
+document.getElementById('atPolish').addEventListener('click', async () => {
+  const raw = _atCleanName();
+  if (!raw) return;
+  const status = _atEl('atStatus');
+  if (!ANTHROPIC_API_KEY) { status.textContent = 'Polish needs an Anthropic API key.'; return; }
+  const btn = _atEl('atPolish');
+  btn.disabled = true; btn.textContent = '✨ Polishing…';
+  const polished = await polishTask(raw, status);
+  btn.disabled = false; btn.textContent = '✨ Polish';
+  if (!polished) { status.textContent = 'Polish failed — kept as typed.'; return; }
+  // Keep any shortcut tokens the name still carries.
+  const tokens = _atEl('atName').value.split(/\s+/).filter(w => _AT_TOKEN.test(w));
+  _atEl('atName').value = [polished].concat(tokens).join(' ');
+  _atParse();
+});
+document.getElementById('addTaskModal').addEventListener('click', e => {
+  if (e.target.id === 'addTaskModal') closeAddTask(); // backdrop click only
+});
+document.addEventListener('keydown', e => {
+  const modal = document.getElementById('addTaskModal');
+  if (e.key === 'Escape' && modal.classList.contains('open')) { closeAddTask(); return; }
+  // N opens it — on the To Do tab, when nothing else has the keyboard.
+  if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey &&
+      document.getElementById('tab-tasks').classList.contains('active') &&
+      !document.querySelector('.sr-modal.open') &&
+      !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) &&
+      !document.activeElement.isContentEditable) {
+    e.preventDefault();
+    openAddTask();
+  }
 });

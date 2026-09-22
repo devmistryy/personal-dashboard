@@ -198,12 +198,18 @@ create table if not exists tasks (
   area       text,
   priority   text default 'Medium',
   tid        text,          -- stable client-generated id (g_…), used for dedup + history
-  created_at timestamptz
+  created_at timestamptz,
+  meta       jsonb          -- optional extras: { focus, est, due, steps:[{text,done}] }
 );
 alter table tasks add column if not exists area       text;
 alter table tasks add column if not exists priority   text default 'Medium';
 alter table tasks add column if not exists tid        text;
 alter table tasks add column if not exists created_at timestamptz;
+-- To Do redesign (2026-09-22): Focus flag, time estimate (minutes), due date
+-- (YYYY-MM-DD) and step checklist, kept in one jsonb column. The app only sends
+-- `meta` for a day once a task on it uses one of these, so days that don't are
+-- unaffected even before this runs.
+alter table tasks add column if not exists meta       jsonb;
 -- Queue feature removed.
 alter table tasks drop column if exists queued;
 -- done_at migrated bigint(epoch ms) → timestamptz. Guarded so re-runs are no-ops.

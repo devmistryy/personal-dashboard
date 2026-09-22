@@ -387,37 +387,57 @@ function _weatherIconFor(code) {
   return '🌡️';
 }
 
-// Given today's and tomorrow's sunrise/sunset (as Open-Meteo local ISO
-// strings, no timezone suffix — already wall-clock time via timezone=auto),
-// picks whichever of the four is next after now.
-function _nextSunEvent(sunrises, sunsets) {
-  const now = new Date();
-  const candidates = [
-    { label: 'Sunrise', icon: '🌅', at: new Date(sunrises[0]) },
-    { label: 'Sunset',  icon: '🌇', at: new Date(sunsets[0]) },
-    { label: 'Sunrise', icon: '🌅', at: new Date(sunrises[1]) },
-  ];
-  return candidates.find(c => c.at > now) || candidates[candidates.length - 1];
+// Latest reading, kept so the sky tile can re-place the sun every minute
+// (updateDayBar) without refetching.
+let _weather = null;   // { temp, code, sunrises: [today, tomorrow], sunsets: [...] }
+
+function _applyWeather(tempF, code, sunrises, sunsets) {
+  _weather = { temp: tempF, code, sunrises: sunrises || null, sunsets: sunsets || null };
+  renderSky();
 }
 
-function _applyWeather(tempF, code, sunEvent) {
-  const badge = document.getElementById('weatherBadge');
-  if (!badge) return;
-  document.getElementById('weatherIcon').textContent = _weatherIconFor(code);
-  document.getElementById('weatherTemp').textContent = Math.round(tempF) + '°';
+// The sky tile next to the day info: its colour follows the time of day, the
+// sun sits on an arc between today's sunrise and sunset, and after dark it
+// becomes a moon crossing to tomorrow's sunrise. Open-Meteo's sunrise/sunset
+// are local wall-clock ISO strings (timezone=auto), so new Date() reads them
+// as local time.
+function renderSky() {
+  const row = document.getElementById('weatherBadge');
+  if (!row || !_weather) return;
+  document.getElementById('weatherTemp').textContent = Math.round(_weather.temp) + '°';
+  row.title = _weatherIconFor(_weather.code) + ' ' + Math.round(_weather.temp) + '°F';
+  const sky = document.getElementById('sky');
+  const orb = document.getElementById('skyOrb');
   const sunEl = document.getElementById('weatherSun');
-  if (sunEl) {
-    if (sunEvent) {
-      sunEl.hidden = false;
-      sunEl.replaceChildren(
-        Object.assign(document.createElement('span'), { className: 'weather-sun-icon', textContent: sunEvent.icon }),
-        document.createTextNode(' ' + fmtClock(sunEvent.at))
-      );
-    } else {
-      sunEl.hidden = true;
-    }
+  sky.dataset.cond = _weather.code >= 51 ? 'wet' : _weather.code >= 3 ? 'cloudy' : 'clear';
+
+  const rs = _weather.sunrises, ss = _weather.sunsets;
+  if (!rs || !ss) {                       // old cache without sun times
+    sky.hidden = true; sunEl.textContent = ''; row.hidden = false; return;
   }
-  badge.hidden = false;
+  sky.hidden = false;
+  const now = Date.now();
+  const rise = new Date(rs[0]).getTime(), set = new Date(ss[0]).getTime();
+  const riseNext = new Date(rs[1]).getTime();
+  let f, phase;
+  if (now >= rise && now < set) {
+    f = (now - rise) / (set - rise);
+    phase = now < rise + 2 * 3600e3 ? 'morning' : now > set - 90 * 60e3 ? 'golden' : 'day';
+    sunEl.textContent = 'sunset ' + fmtClock(new Date(set));
+  } else {
+    // Night: from today's sunset to tomorrow's sunrise, or — before dawn — from
+    // (roughly) last night's sunset to this morning's sunrise.
+    const [from, to] = now >= set ? [set, riseNext] : [set - 86400e3, rise];
+    f = Math.min(1, Math.max(0, (now - from) / (to - from)));
+    phase = 'night';
+    sunEl.textContent = 'sunrise ' + fmtClock(new Date(now >= set ? riseNext : rise));
+  }
+  sky.dataset.phase = phase;
+  // Same quadratic as the SVG arc path: y(t) = 40 − 140t + 140t² on a 0–40 box.
+  const y = 40 - 140 * f + 140 * f * f;
+  orb.style.left = `calc(6% + ${(f * 88).toFixed(2)}%)`;
+  orb.style.top  = `calc(3px + ${(y / 40).toFixed(3)} * (75% - 3px))`;
+  row.hidden = false;
 }
 
 // Falls back here when geolocation is denied/unavailable, so the badge
@@ -434,8 +454,7 @@ async function _fetchWeatherFor(latitude, longitude) {
     const data = await res.json();
     const temp = data.current_weather.temperature;
     const code = data.current_weather.weathercode;
-    const sunEvent = _nextSunEvent(data.daily.sunrise, data.daily.sunset);
-    _applyWeather(temp, code, sunEvent);
+    _applyWeather(temp, code, data.daily.sunrise, data.daily.sunset);
     try {
       localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
         temp, code, ts: Date.now(),
@@ -449,8 +468,7 @@ function loadWeather() {
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || 'null'); } catch (e) {}
   if (cached) {
-    const sunEvent = cached.sunrise ? _nextSunEvent(cached.sunrise, cached.sunset) : null;
-    _applyWeather(cached.temp, cached.code, sunEvent);
+    _applyWeather(cached.temp, cached.code, cached.sunrise, cached.sunset);
     if (Date.now() - cached.ts < WEATHER_MAX_AGE_MS) return;
   }
 
@@ -468,80 +486,6 @@ function loadWeather() {
   );
 }
 
-
-// ── Ticker ──
-let tickerItems = [];
-let cycleIdx = 0;
-let tickerInterval = null;
-let tickerLeaveTimer = null;
-
-function buildTickerItems() {
-  const tasks = storeGet(todayKey()) || [];
-  const total = tasks.length;
-  const done  = tasks.filter(g => g.done).length;
-  const meta  = `${done}/${total}`;
-  document.getElementById('taskTickerMeta').textContent = meta;
-  if (total === 0) {
-    return [{ status: 'empty', text: 'No tasks set for today — add one to get rolling.' }];
-  }
-  if (done === total) {
-    return [{ status: 'done', text: '✓ All tasks done — solid day.' }];
-  }
-  return tasks.filter(g => !g.done).map(g => ({ status: 'pending', text: g.text }));
-}
-
-function glyphFor(status) {
-  if (status === 'done') return '✓';
-  if (status === 'pending') return '○';
-  return '·';
-}
-
-function tick(first) {
-  tickerItems = buildTickerItems();
-  if (tickerItems.length === 0) return;
-  const item = tickerItems[cycleIdx % tickerItems.length];
-  cycleIdx = (cycleIdx + 1) % tickerItems.length;
-
-  const stage = document.getElementById('taskTickerStage');
-  const existingRows = [...stage.querySelectorAll('.task-ticker-row')];
-
-  // Drop any leftover rows from an interrupted transition, keeping only the
-  // most recent one to animate out.
-  if (tickerLeaveTimer) { clearTimeout(tickerLeaveTimer); tickerLeaveTimer = null; }
-  const currentRow = existingRows.pop() || null;
-  existingRows.forEach(r => r.remove());
-
-  const newRow = document.createElement('div');
-  newRow.className = 'task-ticker-row';
-  newRow.innerHTML = `<span class="task-ticker-status" data-status="${item.status}">${glyphFor(item.status)}</span><span class="task-ticker-text">${item.text}</span>`;
-
-  if (currentRow && !first) {
-    currentRow.classList.remove('is-entering');
-    currentRow.classList.add('is-leaving');
-    newRow.classList.add('is-entering');
-    stage.appendChild(newRow);
-    tickerLeaveTimer = setTimeout(() => { currentRow.remove(); tickerLeaveTimer = null; }, 460);
-  } else {
-    if (currentRow) currentRow.remove();
-    stage.appendChild(newRow);
-  }
-}
-
-function startTicker() {
-  tick(true);
-  if (tickerInterval) clearInterval(tickerInterval);
-  tickerInterval = setInterval(() => tick(false), 5000);
-}
-
-window.addEventListener('tasks-changed', () => {
-  cycleIdx = 0;
-  tick(false);
-  // Re-space the auto-advance so it doesn't fire right on top of this update.
-  if (tickerInterval) {
-    clearInterval(tickerInterval);
-    tickerInterval = setInterval(() => tick(false), 5000);
-  }
-});
 
 // ── Day Ring ──
 const SUN_PALETTE = [
@@ -590,50 +534,84 @@ function fmtHourDecimal(hDec) {
 
 function updateDayBar() {
   const now = new Date();
-  const C = 2 * Math.PI * 52;
+  const C = 2 * Math.PI * 54;
   const ring  = document.getElementById('ringFill');
-  const pctEl = document.getElementById('ringPct');
   const phaseEl = document.getElementById('ringPhase');
-  const clockEl = document.getElementById('ringClock');
   const statusEl = document.getElementById('ringStatus');
   const remainEl = document.getElementById('ringRemain');
 
   ring.style.strokeDasharray = C;
-  clockEl.textContent = fmtClock(now);
+  const [clock, ampm] = fmtClock(now).split(' ');
+  document.getElementById('ringClock').textContent = clock;
+  document.getElementById('ringAmPm').textContent = ampm;
 
   const hoursEl = document.getElementById('ringHours');
   if (hoursEl) hoursEl.textContent = fmtHourDecimal(WAKE_HOUR) + ' – ' + fmtHourDecimal(SLEEP_HOUR);
 
   const h = now.getHours() + now.getMinutes()/60 + now.getSeconds()/3600;
+  let dayPct;
 
   if (h < WAKE_HOUR) {
+    dayPct = 0;
     ring.style.strokeDashoffset = C;
     ring.style.stroke = '#4D4B47';
-    pctEl.textContent = '—';
     phaseEl.textContent = 'SLEEPING';
-    statusEl.textContent = '😴 Still sleeping';
-    const until = WAKE_HOUR - h;
-    remainEl.textContent = `${fmtHM(until)} until wake-up`;
+    statusEl.textContent = 'Still sleeping';
+    remainEl.textContent = `${fmtHM(WAKE_HOUR - h)} until wake-up`;
   } else if (h < SLEEP_HOUR) {
-    const pct = (h - WAKE_HOUR) / (SLEEP_HOUR - WAKE_HOUR) * 100;
-    ring.style.strokeDashoffset = C * (1 - pct/100);
+    dayPct = (h - WAKE_HOUR) / (SLEEP_HOUR - WAKE_HOUR) * 100;
+    ring.style.strokeDashoffset = C * (1 - dayPct/100);
     ring.style.stroke = '#4A9EFF';
-    pctEl.textContent = Math.round(pct) + '%';
-    const left = SLEEP_HOUR - h;
-    remainEl.textContent = `${fmtHM(left)} awake time left`;
-    if (pct < 25) { phaseEl.textContent='MORNING'; statusEl.textContent='☀️ Morning — fresh start'; }
-    else if (pct < 50) { phaseEl.textContent='MIDDAY'; statusEl.textContent='⚡ Midday — keep moving'; }
-    else if (pct < 75) { phaseEl.textContent='AFTERNOON'; statusEl.textContent='🔥 Afternoon — push it'; }
-    else if (pct < 90) { phaseEl.textContent='EVENING'; statusEl.textContent='⏳ Evening — wrap up'; }
-    else { phaseEl.textContent='BEDTIME'; statusEl.textContent='🌙 Bedtime soon'; }
+    remainEl.textContent = `${fmtHM(SLEEP_HOUR - h)} left`;
+    if (dayPct < 25) { phaseEl.textContent='MORNING'; statusEl.textContent='Morning — fresh start'; }
+    else if (dayPct < 50) { phaseEl.textContent='MIDDAY'; statusEl.textContent='Midday — keep moving'; }
+    else if (dayPct < 75) { phaseEl.textContent='AFTERNOON'; statusEl.textContent='Afternoon — push it'; }
+    else if (dayPct < 90) { phaseEl.textContent='EVENING'; statusEl.textContent='Evening — wrap up'; }
+    else { phaseEl.textContent='BEDTIME'; statusEl.textContent='Bedtime soon'; }
   } else {
+    dayPct = 100;
     ring.style.strokeDashoffset = 0;
     ring.style.stroke = '#E25D7A';
-    pctEl.textContent = '100%';
-    phaseEl.textContent = 'PAST BEDTIME';
-    statusEl.textContent = '⚠️ Past bedtime';
+    phaseEl.textContent = 'LATE';
+    statusEl.textContent = 'Past bedtime';
     remainEl.textContent = 'Sleep!';
   }
+  document.getElementById('dayRing').dataset.dayPct = Math.round(dayPct);
+  renderDayStripTasks();
+  renderSky();
+}
+
+// The task half of the day strip: the inner (green) ring is the share of
+// today's tasks done, and "planned" adds up the estimates on what's still open
+// — green while it fits in the awake time left, red once it doesn't. Called on
+// every task change (renderTodayHeader) and every minute (updateDayBar).
+function renderDayStripTasks() {
+  const ringEl = document.getElementById('ringTasks');
+  if (!ringEl) return;
+  const tasks = storeGet(todayKey()) || [];
+  const done = tasks.filter(g => g.done).length;
+  const pct = tasks.length ? done / tasks.length : 0;
+  const C = 2 * Math.PI * 43;
+  ringEl.style.strokeDasharray = C;
+  ringEl.style.strokeDashoffset = C * (1 - pct);
+  ringEl.style.opacity = pct ? 1 : 0;           // round caps draw a dot at 0%
+  const wrap = document.getElementById('dayRing');
+  wrap.title = `Day ${wrap.dataset.dayPct || 0}% · tasks ${Math.round(pct * 100)}% done (${done}/${tasks.length})`;
+
+  const planned = tasks.filter(g => !g.done).reduce((n, g) => n + (g.est || 0), 0);
+  const pw = document.getElementById('ringPlannedWrap');
+  pw.hidden = !planned;
+  if (!planned) return;
+  const now = new Date();
+  const h = now.getHours() + now.getMinutes()/60;
+  const leftMin = Math.max(0, Math.round((SLEEP_HOUR - Math.max(h, WAKE_HOUR)) * 60));
+  // Whole minutes — fmtHM takes fractional hours and floors float error (145m → "2h 24m").
+  const fmtMin = m => (m >= 60 ? `${Math.floor(m / 60)}h ` : '') + `${String(m % 60).padStart(m >= 60 ? 2 : 1, '0')}m`;
+  const el = document.getElementById('ringPlanned');
+  const fits = planned <= leftMin;
+  el.textContent = fits ? `${fmtMin(planned)} planned` : `${fmtMin(planned)} planned, ${fmtMin(planned - leftMin)} over`;
+  el.className = fits ? 'fits' : 'over';
+  el.title = fits ? `${fmtMin(leftMin - planned)} to spare` : 'More planned than awake time left';
 }
 
 
@@ -913,6 +891,17 @@ function _syncTasks(dateStr, tasks) {
   return run;
 }
 
+// The optional per-task extras, as stored in `tasks.meta`. null when a task has
+// none, so plain tasks keep a null column.
+function _taskMeta(g) {
+  const m = {};
+  if (g.focus) m.focus = true;
+  if (g.est > 0) m.est = g.est;
+  if (g.due) m.due = g.due;
+  if (Array.isArray(g.steps) && g.steps.length) m.steps = g.steps.map(s => ({ text: s.text, done: !!s.done }));
+  return Object.keys(m).length ? m : null;
+}
+
 async function _syncTasksNow(dateStr, tasks) {
   const uid = await _requireUid(); if (!uid) return;
 
@@ -922,14 +911,29 @@ async function _syncTasksNow(dateStr, tasks) {
     return;
   }
 
+  // `meta` (focus / estimate / due / steps) is only sent when some task on this
+  // day actually uses it, so a day without those extras never references the
+  // column — a DB that hasn't had master.sql's `tasks.meta` added yet keeps
+  // saving those days normally instead of rejecting every insert.
+  const metas = tasks.map(_taskMeta);
+  const withMeta = metas.some(Boolean);
+
   // Insert the current set first, asking for the new rows' ids back.
-  const { data: inserted, error: insErr } = await sb.from('tasks').insert(tasks.map(g => ({
-    user_id: uid, date: dateStr, text: g.text,
-    done: g.done || false, done_at: g.doneAt || null,
-    area: g.area || null, priority: g.priority || 'Medium',
-    tid: g.id || null, created_at: g.createdAt || null,
-  }))).select('id');
-  if (insErr) { _syncFailed('tasks insert failed (kept existing rows)', insErr); return; }
+  const { data: inserted, error: insErr } = await sb.from('tasks').insert(tasks.map((g, i) => {
+    const row = {
+      user_id: uid, date: dateStr, text: g.text,
+      done: g.done || false, done_at: g.doneAt || null,
+      area: g.area || null, priority: g.priority || 'Medium',
+      tid: g.id || null, created_at: g.createdAt || null,
+    };
+    if (withMeta) row.meta = metas[i];
+    return row;
+  })).select('id');
+  if (insErr) {
+    _syncFailed(withMeta ? 'tasks insert failed (kept existing rows — run master.sql for tasks.meta?)'
+                         : 'tasks insert failed (kept existing rows)', insErr);
+    return;
+  }
 
   const keepIds = (inserted || []).map(r => r.id);
   if (!keepIds.length) { _syncFailed('tasks insert returned no ids — skipping stale-delete'); return; }
@@ -1250,6 +1254,11 @@ async function loadFromSupabase() {
       area: g.area || null, priority: g.priority || 'Medium',
       createdAt: g.created_at || null };
     if (g.done_at) task.doneAt = g.done_at;
+    const meta = g.meta || {};
+    if (meta.focus) task.focus = true;
+    if (meta.est > 0) task.est = meta.est;
+    if (meta.due) task.due = meta.due;
+    if (Array.isArray(meta.steps) && meta.steps.length) task.steps = meta.steps;
     // Collapse duplicate rows a failed stale-delete may have left (see
     // _syncTasks). `_syncTasks` re-inserts the whole day on every change, so the
     // HIGHEST id is the newest state — and the query is ordered by id ascending,
@@ -1365,7 +1374,7 @@ document.addEventListener('visibilitychange', () => {
   if (now === _lastActiveDate) return;
   _lastActiveDate = now;
   checkStreak(); rollover(); applySundayReset();
-  loadToday(); loadUpcoming(); renderStreak(); tick(true); renderQuoteOfDay();
+  loadToday(); loadUpcoming(); renderStreak(); renderQuoteOfDay();
 });
 
 // Console helpers for the local test account:
@@ -1388,7 +1397,6 @@ function _enterApp() {
   checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
   _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
-  tick(true); // refresh the task ticker immediately with the loaded data
 }
 
 async function signOut() {
@@ -1469,24 +1477,6 @@ checkStreak();
 rollover();
 applySundayReset();
 
-makeAddHandlers(
-  document.getElementById('taskInput'),
-  document.getElementById('taskAddBtn'),
-  document.getElementById('taskPolishBtn'),
-  todayKey,
-  document.getElementById('polishStatus'),
-  loadToday
-);
-
-makeAddHandlers(
-  document.getElementById('tomorrowInput'),
-  document.getElementById('tomorrowAddBtn'),
-  document.getElementById('tomorrowPolishBtn'),
-  () => 'tasks:' + plannerTargetDate(),
-  document.getElementById('tomorrowStatus'),
-  loadUpcoming
-);
-
 loadToday();
 loadUpcoming();
 renderStreak();
@@ -1499,7 +1489,6 @@ renderQuoteOfDay();
 loadWeather();
 setInterval(loadWeather, WEATHER_MAX_AGE_MS);
 
-startTicker();
 renderAreas();
 renderGoals();
 renderDiet();
