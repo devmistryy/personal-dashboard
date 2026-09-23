@@ -552,6 +552,11 @@ function showToast(msg) {
   _toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
 }
 
+// Left-edge priority colour: High red, Medium amber, Low green.
+function _priClass(priority) {
+  return { High: 'task-priority-high', Low: 'task-priority-low' }[priority] || 'task-priority-med';
+}
+
 // ── Build task row ──
 // Handlers resolve the task by stable id against the live stored array, so they
 // stay correct no matter how the visible list is grouped. `readOnly` locks the
@@ -564,7 +569,7 @@ function buildTaskRow(g, idx, tasks, key, readOnly, draggable) {
   const isSR = isSundayResetTask(g);
   const view = taskStepsView(g);
   const li = document.createElement('li');
-  li.className = 'task-row' + (priority === 'High' ? ' is-hi' : '') + (g.done ? ' is-done' : '') +
+  li.className = 'task-row ' + _priClass(priority) + (g.done ? ' is-done' : '') +
     (isSR ? ' is-sr' : '') + (g.focus ? ' is-focus' : '');
   li.dataset.idx = idx;
   li.dataset.taskId = g.id || '';
@@ -1445,7 +1450,7 @@ function renderTaskHistory() {
     ul.className = 'task-list task-history-list';
     tasks.forEach(g => {
       const li = document.createElement('li');
-      li.className = 'task-row' + (g.priority === 'High' ? ' is-hi' : '') + (g.done ? ' is-done' : '');
+      li.className = 'task-row ' + _priClass(g.priority) + (g.done ? ' is-done' : '');
 
       const mark = document.createElement('span');
       mark.className = 'task-history-mark';

@@ -132,33 +132,26 @@
     text-align: center;
   }
 
+  /* Every task is its own card, with its priority as a coloured left edge. */
   .task-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px 8px 8px;
-    margin-bottom: 2px;
-    border-radius: 9px;
-    border: 1px solid transparent;
+    gap: 12px;
+    padding: 12px 14px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.035);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
     transition: background 0.2s;
     position: relative;
   }
-  /* Only High gets a stripe — Medium is the default and Low needs no alarm. */
-  .task-row.is-hi::before {
-    content: ''; position: absolute; left: 0; top: 9px; bottom: 9px;
-    width: 2px; border-radius: 2px; background: #E24B4A;
-  }
-  /* Upcoming + History rows keep the card look */
-  .task-history-list .task-row,
-  .sunday-reset-row {
-    background: rgba(255,255,255,0.035);
-    border-color: rgba(255,255,255,0.06);
-    margin-bottom: 6px;
-  }
+  .task-priority-high { box-shadow: inset 3px 0 0 0 #E24B4A; }
+  .task-priority-med  { box-shadow: inset 3px 0 0 0 #EF9F27; }
+  .task-priority-low  { box-shadow: inset 3px 0 0 0 #52C97A; }
   .task-priority-btn {
     position: absolute; left: 0; top: 0; bottom: 0; width: 18px;
     background: transparent; border: none; cursor: pointer; padding: 0;
-    border-radius: 9px 0 0 9px; z-index: 1;
+    border-radius: 12px 0 0 12px; z-index: 1;
   }
   .task-area-pill {
     font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px;
@@ -202,7 +195,7 @@
   }
   .task-area-dd-new input::placeholder { color: rgba(255,255,255,0.3); }
 
-  .task-row:hover { background: rgba(255,255,255,0.045); }
+  .task-row:hover { background: rgba(255,255,255,0.055); }
 
   .task-row:hover .task-drag-handle,
   .task-row:hover .task-actions,
@@ -1052,7 +1045,7 @@
 
     /* Task rows: no hover on touch, so the actions stay visible (dimmed), and
        the estimate gives up its space to the name. */
-    .task-row { gap: 8px; padding: 9px 8px; align-items: flex-start; }
+    .task-row { gap: 8px; padding: 11px 12px; align-items: flex-start; }
     .task-row .task-drag-handle { display: none; }
     .task-row .task-actions { opacity: 0.55; }
     /* Only star + delete on phones; priority is still the tap strip on the
