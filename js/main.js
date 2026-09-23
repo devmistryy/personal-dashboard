@@ -423,14 +423,14 @@ function renderSky() {
   if (now >= rise && now < set) {
     f = (now - rise) / (set - rise);
     phase = now < rise + 2 * 3600e3 ? 'morning' : now > set - 90 * 60e3 ? 'golden' : 'day';
-    sunEl.textContent = 'sunset ' + fmtClock(new Date(set));
+    sunEl.innerHTML = _sunEventHtml('sunset', new Date(set));
   } else {
     // Night: from today's sunset to tomorrow's sunrise, or — before dawn — from
     // (roughly) last night's sunset to this morning's sunrise.
     const [from, to] = now >= set ? [set, riseNext] : [set - 86400e3, rise];
     f = Math.min(1, Math.max(0, (now - from) / (to - from)));
     phase = 'night';
-    sunEl.textContent = 'sunrise ' + fmtClock(new Date(now >= set ? riseNext : rise));
+    sunEl.innerHTML = _sunEventHtml('sunrise', new Date(now >= set ? riseNext : rise));
   }
   sky.dataset.phase = phase;
   // Same quadratic as the SVG arc path: y(t) = 40 − 140t + 140t² on a 0–40 box.
@@ -438,6 +438,15 @@ function renderSky() {
   orb.style.left = `calc(6% + ${(f * 88).toFixed(2)}%)`;
   orb.style.top  = `calc(3px + ${(y / 40).toFixed(3)} * (75% - 3px))`;
   row.hidden = false;
+}
+
+// The next sun event: a sun on the horizon with an arrow (up = sunrise,
+// down = sunset), the word, and the time.
+function _sunEventHtml(kind, when) {
+  const arrow = kind === 'sunrise' ? 'M12 10V3M9 6l3-3 3 3' : 'M12 3v7M9 7l3 3 3-3';
+  return `<span class="sun-evt sun-evt--${kind}"><svg viewBox="0 0 24 24" aria-hidden="true">` +
+    `<path d="M3 20h18"/><path d="M6.5 20a5.5 5.5 0 0 1 11 0"/><path d="${arrow}"/></svg>` +
+    `<span class="sun-evt-label">${kind}</span><span class="sun-evt-time">${fmtClock(when)}</span></span>`;
 }
 
 // Falls back here when geolocation is denied/unavailable, so the badge
@@ -544,6 +553,10 @@ function updateDayBar() {
   const [clock, ampm] = fmtClock(now).split(' ');
   document.getElementById('ringClock').textContent = clock;
   document.getElementById('ringAmPm').textContent = ampm;
+
+  const dateEl = document.getElementById('stripDate');
+  if (dateEl) dateEl.textContent = formatDate(typeof getActiveDateString === 'function'
+    ? getActiveDateString() : _localDateStr(now));
 
   const hoursEl = document.getElementById('ringHours');
   if (hoursEl) hoursEl.textContent = fmtHourDecimal(WAKE_HOUR) + ' – ' + fmtHourDecimal(SLEEP_HOUR);

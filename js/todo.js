@@ -434,7 +434,6 @@ function renderTodayHeader() {
   const done  = tasks.filter(g => g.done).length;
   const focus = tasks.filter(g => g.focus);
 
-  document.getElementById('todayLabel').textContent = formatDate(getActiveDateString());
   const labelEl = document.getElementById('tmProgressLabel');
   if (focus.length) {
     // Focus is the headline number; the full count rides along after it.

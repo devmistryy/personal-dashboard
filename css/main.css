@@ -224,7 +224,7 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     display: grid;
-    grid-template-columns: auto minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr);
     align-items: center;
     gap: 22px;
     padding: 16px 22px;
@@ -270,6 +270,14 @@
     flex-direction: column;
     gap: 9px;
     min-width: 0;
+  }
+  .day-strip-date {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
   }
   .day-ring-status {
     font-size: 16px;
@@ -359,6 +367,22 @@
     white-space: nowrap;
   }
   .sky-temp { font-size: 15px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  /* Weather gets its own column, right of the day info: a bigger sky tile,
+     with the temperature and next sun event on the same line. */
+  .day-strip > .sky-row { margin-left: 24px; }
+  .day-strip > .sky-row .sky { flex: none; width: 156px; height: 52px; border-radius: 10px; }
+  .day-strip > .sky-row .sky-orb { width: 11px; height: 11px; }
+  .day-strip > .sky-row .sky-text { font-size: 13.5px; display: inline-flex; align-items: center; }
+  .day-strip > .sky-row .sky-temp { font-size: 22px; }
+  .sun-evt { display: inline-flex; align-items: center; gap: 6px; }
+  .sun-evt svg {
+    width: 17px; height: 17px; flex-shrink: 0;
+    fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .sun-evt-label { font-size: 0.85em; letter-spacing: 0.04em; }
+  .sun-evt-time { color: var(--text-primary); font-weight: 600; }
+  .sun-evt--sunrise { color: #F7B27A; }
+  .sun-evt--sunset { color: #F2804C; }
   @media (prefers-reduced-motion: reduce) { .sky-orb, .sky-stars { animation: none !important; } }
 
   /* Quote column, centred, split from the day info by a hairline */
@@ -383,7 +407,7 @@
   }
   .quote-text {
     margin: 0;
-    max-width: 34ch;
+    max-width: 100%;
     font-size: 15px;
     font-weight: 600;
     line-height: 1.4;
@@ -401,6 +425,7 @@
 
   @media (max-width: 900px) {
     .day-strip { grid-template-columns: auto minmax(0, 1fr); }
+    .day-strip > .sky-row { grid-column: 1 / -1; margin-left: 0; }
     .quote-col {
       grid-column: 1 / -1;
       border-left: 0;

@@ -75,7 +75,15 @@
   }
   .hab-group-btn:hover { color: var(--text-primary); }
   .hab-group-btn.active { color: var(--text-primary); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.22); }
-  .hab-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
+  /* Streak colour key, right above the Streak column */
+  .hab-streak-key {
+    display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+    padding: 0 15px 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+  }
+  .hab-streak-key span { display: inline-flex; align-items: center; gap: 4px; }
+  .hab-streak-key i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .hab-streak-key-label { letter-spacing: 0.06em; color: rgba(255,255,255,0.35); margin-right: 2px; }
+  .hab-sort { margin-left: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
   .hab-sort select {
     background: #16171A; color: var(--text-secondary); color-scheme: dark;
     border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
@@ -89,11 +97,11 @@
     gap: 12px;
     align-items: center;
   }
-  .hab-cols { padding: 0 15px 6px; font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.25); letter-spacing: 0.06em; }
+  /* Day letters share the first section title's line, just above the dots. */
+  .hab-cols { position: relative; z-index: 1; pointer-events: none; height: 24px; margin-bottom: -24px; padding: 0 15px 4px; font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.25); letter-spacing: 0.06em; }
   .hab-cols-week { display: flex; justify-content: space-between; padding: 0 1px; }
   .hab-cols-week span { width: 10px; text-align: center; }
   .hab-cols-week span.today { color: var(--text-secondary); }
-  .hab-cols-streak { text-align: right; }
 
   .hab-groups { display: flex; flex-direction: column; gap: 18px; }
   .hab-group { display: flex; flex-direction: column; gap: 6px; }
@@ -109,7 +117,7 @@
   .hab-group-ct { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-tertiary); }
   .hab-group-ct.all { color: var(--success); }
   .hab-group-note { font-size: 11.5px; color: var(--text-tertiary); }
-  .hab-group-rule { flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+  .hab-group-rule { display: none; }
 
   .hab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .hab-row {
@@ -982,28 +990,7 @@
     white-space: nowrap;
   }
 
-  /* ── Habit Detail Page: Overview / Notes tabs ── */
-  .hd-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
-  .hd-tab {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-size: 12.5px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    padding: 8px 18px;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
-  }
-  .hd-tab:hover { color: var(--text-secondary); background: rgba(255,255,255,0.07); }
-  .hd-tab.active {
-    background: rgba(255,255,255,0.10);
-    border-color: rgba(255,255,255,0.18);
-    color: var(--text-primary);
-  }
-
+  /* ── Habit Detail Page: notes ── */
   .hd-note-head {
     display: flex;
     align-items: center;
@@ -1167,9 +1154,6 @@
   .hd-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-tertiary); }
   .hd-sub .task-area-pill { cursor: default; }
   .hd-sub-dot { color: rgba(255,255,255,0.2); }
-  #habitDetailPage .hd-tabs { display: inline-flex; gap: 0; margin: 0; border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 3px; }
-  #habitDetailPage .hd-tab { background: none; border: none; border-radius: 999px; padding: 5px 14px; letter-spacing: 0; }
-  #habitDetailPage .hd-tab.active { background: rgba(255,255,255,0.09); color: var(--text-primary); }
 
   .habit-detail-cols {
     display: grid;
@@ -1275,15 +1259,13 @@
   .hd-heat-key .k-miss { background: rgb(214,48,40); }
   .hd-heat-key .k-void { border: 1.5px dashed rgba(124,147,184,0.7); }
 
-  .hd-notes-prev { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-  .hd-note-card { background: #111214; border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: var(--text-secondary); }
-  .hd-note-card time { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); margin-bottom: 2px; }
-  .hd-note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-  .hd-notes-link {
-    align-self: flex-start; background: none; border: none; padding: 2px 0; cursor: pointer;
-    font-family: var(--font-body); font-size: 12.5px; color: var(--text-tertiary);
+  /* Notes, always open under the history */
+  .hd-notes {
+    margin-top: 14px; background: #111214; border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px; padding: 16px 18px;
   }
-  .hd-notes-link:hover { color: var(--text-primary); }
+  .hd-notes .hd-notes-list { display: flex; flex-direction: column; gap: 8px; }
+  .hd-notes .area-note-input-wrap { margin-top: 12px; }
 
   /* Responsive */
   /* The sidebar takes ~240px, so the list needs the full width well before
@@ -1320,6 +1302,5 @@
     .habit-flame-badge--stat .habit-flame-num { font-size: 20px; transform: translateY(3px); }
     .habit-detail-name, #habitDetailPage .habit-detail-name { font-size: 22px; }
     .day-detail-head .day-detail-date { font-size: 18px; }
-    .hd-tab { padding: 7px 14px; }
     .habit-meta-tag { white-space: nowrap; }
   }

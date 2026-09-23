@@ -822,8 +822,6 @@ function _habitDayPct(habits, ds, today) {
 function _renderHabitHeader(all, active, today) {
   const counted = _habitsCountedOn(active, today, today);
   const done    = counted.filter(h => _habitDoneOn(h, today)).length;
-  document.getElementById('habTodayLabel').textContent = new Date().toLocaleDateString('en-US',
-    { weekday: 'short', month: 'short', day: 'numeric' });
   const num = document.getElementById('habCountNum');
   num.textContent = `${done}/${counted.length}`;
   document.getElementById('habitCard').classList.toggle('hab-all-done', counted.length > 0 && done === counted.length);
@@ -881,6 +879,7 @@ function renderHabits() {
   listEl.innerHTML = '';
   emptyEl.style.display = active.length ? 'none' : 'block';
   document.getElementById('habCols').style.display = shown.length ? '' : 'none';
+  document.getElementById('habStreakKey').style.display = shown.length ? '' : 'none';
 
   const sections = group === 'area'
     ? getAreas().map(a => ({ key: a.name, label: a.name, color: a.color })).concat({ key: '', label: 'No area' })
@@ -1227,18 +1226,7 @@ _hcalGrid.addEventListener('keydown', e => {
 // ── Habit Detail Page ──
 let _detailHabitId = null;
 let _detailWeekOffset = 0;        // 0 = the 13 weeks ending this week
-let _habitDetailTab = 'overview'; // 'overview' | 'notes'
 const _HD_WEEKS = 13;
-
-function _setHabitDetailTab(tab) {
-  _habitDetailTab = tab;
-  document.querySelectorAll('#habitDetailPage .hd-tab').forEach(b =>
-    b.classList.toggle('active', b.dataset.hdtab === tab));
-  document.getElementById('habitDetailOverview').style.display = tab === 'overview' ? '' : 'none';
-  document.getElementById('habitDetailNotes').style.display    = tab === 'notes'    ? '' : 'none';
-  document.getElementById('habitDetailPage').scrollTop = 0;
-}
-
 function openHabitDetail(habitId) {
   _detailHabitId = habitId;
   _detailWeekOffset = 0;
@@ -1247,7 +1235,6 @@ function openHabitDetail(habitId) {
   if (!habit) return;
   renderHabitDetailPage(habit, all);
   renderHabitNotesPanel(habit);
-  _setHabitDetailTab('overview');
   const page = document.getElementById('habitDetailPage');
   page.scrollTop = 0;
   page.classList.add('open');
@@ -1389,7 +1376,6 @@ function renderHabitDetailPage(habit, allHabits) {
     ? `<span>Completed · ${_habitServedDays(habit)} days</span>`
     : `<span>Day ${dayNum}${isTimed ? ' of ' + totalDays : ''}, since ${_habitDayLabel(_habitFirstDay(habit))}</span>`);
   document.getElementById('habitDetailSub').innerHTML = subBits.join('<span class="hd-sub-dot">·</span>');
-  _hdNotesTabLabel(habit);
 
   // Stats
   const best = _habitBestStreak(habit);
@@ -1489,7 +1475,6 @@ function renderHabitDetailPage(habit, allHabits) {
     </div>`;
 
   renderHabitHistoryGrid(habit);
-  _renderHabitNotePreview(habit);
 
   const save = () => { saveHabits(allHabits); renderHabits(); };
 
@@ -1616,27 +1601,6 @@ function renderHabitDetailPage(habit, allHabits) {
   });
 }
 
-function _hdNotesTabLabel(habit) {
-  const n = getHabitNotes(habit.id).length;
-  document.getElementById('hdNotesTab').textContent = n ? `Notes · ${n}` : 'Notes';
-}
-
-// The two newest notes, shown under the history on the Overview tab.
-function _renderHabitNotePreview(habit) {
-  const el = document.getElementById('habitDetailNotePreview');
-  const notes = getHabitNotes(habit.id).slice(-2).reverse();
-  const fmt = ts => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  el.innerHTML = `<div class="hd-notes-prev">${notes.map(n =>
-    `<div class="hd-note-card"><time>${fmt(n.createdAt)}</time><div class="hd-note-text"></div></div>`).join('')}
-    <button type="button" class="hd-notes-link" id="hdNotesLink">${notes.length ? 'All notes →' : '+ Add a note'}</button></div>`;
-  el.querySelectorAll('.hd-note-text').forEach((t, i) => { t.textContent = notes[i].text; });
-  document.getElementById('hdNotesLink').addEventListener('click', () => {
-    _setHabitDetailTab('notes');
-    const inp = document.getElementById('habitNoteInput');
-    if (inp && !notes.length) inp.focus();
-  });
-}
-
 function renderHabitNotesPanel(habit) {
   const panel = document.getElementById('habitDetailNotes');
   if (!panel) return;
@@ -1662,7 +1626,7 @@ function renderHabitNotesPanel(habit) {
       <button id="habitNoteAdd" class="area-note-add-btn">Add note</button>
     </div>`;
 
-  const refresh = () => { renderHabitNotesPanel(habit); _renderHabitNotePreview(habit); _hdNotesTabLabel(habit); };
+  const refresh = () => renderHabitNotesPanel(habit);
   panel.querySelectorAll('.area-note-entry').forEach(el => {
     const n = notes.find(x => x.id === el.dataset.noteId);
     el.querySelector('.area-note-body').textContent = n ? n.text : '';
@@ -2260,9 +2224,6 @@ document.getElementById('habitDetailBack').addEventListener('click', closeHabitD
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open') &&
       !document.querySelector('.sr-modal.open')) closeHabitDetail();
-});
-document.querySelectorAll('#habitDetailPage .hd-tab').forEach(btn => {
-  btn.addEventListener('click', () => _setHabitDetailTab(btn.dataset.hdtab));
 });
 
 document.getElementById('dayDetailBack').addEventListener('click', closeDayDetail);
