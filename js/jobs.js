@@ -291,10 +291,31 @@ function _renderJobRoles() {
   const counts = new Map();
   getJobs().forEach(j => { const r = j.role || ''; counts.set(r, (counts.get(r) || 0) + 1); });
   const rows = [...counts].sort((a, b) => b[1] - a[1] || (a[0] || '~').localeCompare(b[0] || '~'));
+  const known = getJobRoles();
+  known.filter(r => !counts.has(r)).sort((a, b) => a.localeCompare(b)).forEach(r => rows.push([r, 0]));
   el.innerHTML = rows.length
-    ? rows.map(([role, n]) => `<li class="jobs-role-row"><span class="${role ? '' : 'none'}">${_esc(role || 'No role')}</span><b>${n}</b></li>`).join('')
+    ? rows.map(([role, n]) => role
+        ? `<li class="jobs-role-row"><span>${_esc(role)}</span><b>${n}</b>${known.includes(role) ? `<button type="button" class="jobs-role-rm" data-jrole-rm="${_esc(role)}" title="Remove role option">×</button>` : ''}</li>`
+        : `<li class="jobs-role-row"><span class="none">No role</span><b>${n}</b></li>`).join('')
     : '<li class="jobs-role-row"><span class="none">No applications yet</span></li>';
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.target.id !== 'jobRoleAddInput') return;
+  const val = e.target.value.trim();
+  if (!val) return;
+  const roles = getJobRoles();
+  if (!roles.includes(val)) { roles.push(val); saveJobRoles(roles); }
+  e.target.value = '';
+  _renderJobRoles();
+});
+
+document.addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-jrole-rm]');
+  if (!rm) return;
+  saveJobRoles(getJobRoles().filter(r => r !== rm.dataset.jroleRm));
+  _renderJobRoles();
+});
 
 function _jobRowHTML(j) {
   const loc = _jobLocationText(j);
