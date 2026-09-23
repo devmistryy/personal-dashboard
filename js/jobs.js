@@ -61,6 +61,7 @@ function saveJobs(jobs) { MEM['jobs:list'] = jobs; _syncJobs(jobs); }
 // picks but user-authored) — jobs store the plain role string.
 function getJobRoles() { return MEM['job_roles_v1'] || []; }
 function saveJobRoles(list) { MEM['job_roles_v1'] = list; _syncSetting('job_roles_v1', list); }
+function addJobRole(v) { const r = getJobRoles(); if (!r.includes(v)) saveJobRoles([...r, v]); }
 
 function getJobWeeklyGoal() { return Number(MEM['job_weekly_goal_v1']) > 0 ? Number(MEM['job_weekly_goal_v1']) : JOB_WEEKLY_GOAL_DEFAULT; }
 function saveJobWeeklyGoal(n) { MEM['job_weekly_goal_v1'] = n; _syncSetting('job_weekly_goal_v1', n); }
@@ -175,6 +176,13 @@ function _jobLocationText(j) {
   const type = j.locationType === 'hybrid' ? 'hybrid' : j.locationType === 'onsite' ? 'on-site' : '';
   return { place:cities || (type ? '' : '—'), type };
 }
+
+// An application listing N cities counts 1/N toward each place, so a
+// multi-city posting still adds up to one application on the map and its lists.
+function _jobCityShare(j) { return 1 / ((j.locationCities || []).filter(c => String(c).trim()).length || 1); }
+function _jobFmtApps(n) { return String(+n.toFixed(2)); }
+// Lists show whole numbers: nearest, but any share at all shows as at least 1.
+function _jobListCount(n) { return n > 0 ? Math.max(1, Math.round(n)) : 0; }
 
 function _jobReferrer(j) {
   return getReferrals().find(r => r.jobId === j.id && (r.step === 'referred' || r.step === 'thanked' || !r.step));
@@ -294,9 +302,7 @@ function _renderJobRoles() {
   const known = getJobRoles();
   known.filter(r => !counts.has(r)).sort((a, b) => a.localeCompare(b)).forEach(r => rows.push([r, 0]));
   el.innerHTML = rows.length
-    ? rows.map(([role, n]) => role
-        ? `<li class="jobs-role-row"><span>${_esc(role)}</span><b>${n}</b>${known.includes(role) ? `<button type="button" class="jobs-role-rm" data-jrole-rm="${_esc(role)}" title="Remove role option">×</button>` : ''}</li>`
-        : `<li class="jobs-role-row"><span class="none">No role</span><b>${n}</b></li>`).join('')
+    ? rows.map(([role, n]) => `<li class="jobs-role-row"><span class="${role ? '' : 'none'}">${_esc(role || 'No role')}</span><b>${n}</b>${role && known.includes(role) ? `<button type="button" class="jobs-role-rm" data-jrole-rm="${_esc(role)}" title="Remove role option">×</button>` : ''}</li>`).join('')
     : '<li class="jobs-role-row"><span class="none">No applications yet</span></li>';
 }
 
@@ -304,8 +310,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.target.id !== 'jobRoleAddInput') return;
   const val = e.target.value.trim();
   if (!val) return;
-  const roles = getJobRoles();
-  if (!roles.includes(val)) { roles.push(val); saveJobRoles(roles); }
+  addJobRole(val);
   e.target.value = '';
   _renderJobRoles();
 });
@@ -561,12 +566,13 @@ function _jobMapMarkers(entries) {
     if (!groups.has(key)) groups.set(key, {
       label:entry.metro ? _jobMapMetroDisplayName(entry.metro) : entry.label,
       metro:entry.metro, kind:entry.metro ? 'metro' : 'other', places:[], jobs:[], jobIds:new Set(),
-      corePlaces:[], coreJobs:[], coreJobIds:new Set(), totalX:0, totalY:0, weight:0,
+      corePlaces:[], coreJobs:[], coreJobIds:new Set(), apps:0, coreApps:0, totalX:0, totalY:0, weight:0,
       coreX:0, coreY:0, coreWeight:0,
     });
     const group = groups.get(key);
     group.places.push(entry);
-    const weight = entry.jobs.length;
+    const weight = entry.apps;
+    group.apps += weight;
     group.totalX += entry.point[0] * weight;
     group.totalY += entry.point[1] * weight;
     group.weight += weight;
@@ -580,6 +586,7 @@ function _jobMapMarkers(entries) {
       group.coreX += entry.point[0] * weight;
       group.coreY += entry.point[1] * weight;
       group.coreWeight += weight;
+      group.coreApps += weight;
       entry.jobs.forEach(job => {
         if (group.coreJobIds.has(job.id)) return;
         group.coreJobIds.add(job.id);
@@ -588,22 +595,22 @@ function _jobMapMarkers(entries) {
     }
   });
   const grouped = [...groups.values()];
-  const maxMetroApplications = Math.max(...grouped.map(group => group.jobs.length), 1);
-  const maxCityApplications = Math.max(...grouped.map(group => group.coreJobs.length), 1);
+  const maxMetroApplications = Math.max(...grouped.map(group => group.apps), 1);
+  const maxCityApplications = Math.max(...grouped.map(group => group.coreApps), 1);
   return grouped.map(group => {
     group.point = group.coreWeight
       ? [group.coreX / group.coreWeight, group.coreY / group.coreWeight]
       : [group.totalX / group.weight, group.totalY / group.weight];
     group.radius = JOB_MAP_MARKER_MODE === 'numbered'
-      ? Math.min(28, 8 + Math.sqrt(group.jobs.length) * 3)
-      : 10 + Math.sqrt(group.jobs.length / maxMetroApplications) * 18;
-    group.cityRadius = group.coreJobs.length
+      ? Math.min(28, 8 + Math.sqrt(group.apps) * 3)
+      : 10 + Math.sqrt(group.apps / maxMetroApplications) * 18;
+    group.cityRadius = group.coreApps
       ? (JOB_MAP_MARKER_MODE === 'numbered'
-        ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, String(group.coreJobs.length).length - 1) * 3, 3 + Math.sqrt(group.coreJobs.length) * 3))
-        : Math.min(group.radius - 5, 4 + Math.sqrt(group.coreJobs.length / maxCityApplications) * 8))
+        ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, _jobFmtApps(group.coreApps).length - 1) * 3, 3 + Math.sqrt(group.coreApps) * 3))
+        : Math.min(group.radius - 5, 4 + Math.sqrt(group.coreApps / maxCityApplications) * 8))
       : 0;
-    group.cityColorApps = group.coreJobs.length;
-    group.metroColorApps = Math.max(0, group.jobs.length - group.coreJobs.length);
+    group.cityColorApps = group.coreApps;
+    group.metroColorApps = Math.max(0, group.apps - group.coreApps);
     if (group.coreJobs.length) group.kind = 'composite';
     return group;
   });
@@ -714,8 +721,9 @@ async function renderJobMap() {
       const label = String(city).trim();
       if (!label) return;
       const key = label.toLowerCase();
-      if (!locations.has(key)) locations.set(key, { label, jobs:[] });
+      if (!locations.has(key)) locations.set(key, { label, jobs:[], apps:0 });
       locations.get(key).jobs.push(job);
+      locations.get(key).apps += _jobCityShare(job);
     });
   });
   const message = document.getElementById('jobsMapMessage');
@@ -781,10 +789,10 @@ async function renderJobMap() {
     marker.setAttribute('transform', `translate(${point[0]},${point[1]})`);
     marker.setAttribute('tabindex', '0');
     marker.setAttribute('role', 'button');
-    const cityCount = entry.coreJobs.length;
-    const metroCount = entry.jobs.length - cityCount;
-    marker.setAttribute('aria-label', entry.kind === 'other' ? `${entry.label}: ${entry.jobs.length} application${entry.jobs.length === 1 ? '' : 's'}`
-      : `${entry.label}: ${cityCount ? `${cityCount} in the major city, ` : ''}${metroCount} in the metro area`);
+    const cityCount = _jobFmtApps(entry.coreApps);
+    const metroCount = _jobFmtApps(entry.apps - entry.coreApps);
+    marker.setAttribute('aria-label', entry.kind === 'other' ? `${entry.label}: ${_jobFmtApps(entry.apps)} application${entry.apps === 1 ? '' : 's'}`
+      : `${entry.label}: ${entry.coreApps ? `${cityCount} in the major city, ` : ''}${metroCount} in the metro area`);
     const outer = document.createElementNS(ns, 'circle');
     outer.setAttribute('r', entry.radius);
     if (JOB_MAP_MARKER_MODE === 'color' && entry.metro) {
@@ -819,9 +827,9 @@ async function renderJobMap() {
         r.querySelector('em').style.color = color;
         counts.appendChild(r);
       };
-      if (entry.kind === 'other') row('Applications', entry.jobs.length, 'var(--text-primary)');
+      if (entry.kind === 'other') row('Applications', _jobFmtApps(entry.apps), 'var(--text-primary)');
       else {
-        if (cityCount) row('Major City', cityCount, _jobMapCityColor(entry.cityColorApps));
+        if (entry.coreApps) row('Major City', cityCount, _jobMapCityColor(entry.cityColorApps));
         row('Metro Area', metroCount, _jobMapMetroColor(entry.metroColorApps));
       }
       tooltip.appendChild(counts);
@@ -835,7 +843,7 @@ async function renderJobMap() {
     marker.addEventListener('mouseleave', hide);
     marker.addEventListener('focus', show);
     marker.addEventListener('blur', hide);
-    const select = () => _selectJobPlace({ key, label:entry.label, cityJobs:entry.coreJobs, metroJobs:entry.jobs.filter(j => !entry.coreJobIds.has(j.id)), jobs:entry.jobs, other:entry.kind === 'other' });
+    const select = () => _selectJobPlace({ key, label:entry.label, cityJobs:entry.coreJobs, metroJobs:entry.jobs.filter(j => !entry.coreJobIds.has(j.id)), jobs:entry.jobs, cityN:entry.coreApps, metroN:entry.apps - entry.coreApps, n:entry.apps, other:entry.kind === 'other' });
     marker.addEventListener('click', select);
     marker.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
     _jobMapMarkerIndex.set(key, marker);
@@ -879,8 +887,8 @@ function _renderJobPlaceDetail() {
   el.hidden = !sel;
   if (hint) hint.hidden = !!sel;
   if (!sel) { el.innerHTML = ''; return; }
-  const counts = sel.other ? `${live.length} application${live.length === 1 ? '' : 's'}`
-    : `${sel.cityJobs.length ? `Major city ${sel.cityJobs.length} · ` : ''}Metro area ${sel.metroJobs.length}`;
+  const counts = sel.other ? `${_jobListCount(sel.n)} application${_jobListCount(sel.n) === 1 ? '' : 's'}`
+    : `${sel.cityN ? `Major city ${_jobListCount(sel.cityN)} · ` : ''}Metro area ${_jobListCount(sel.metroN)}`;
   const sorted = live.slice().sort((a, b) => (b.dateApplied || '').localeCompare(a.dateApplied || ''));
   el.innerHTML = `<div class="jobs-side-head"><span class="hab-eyebrow">${_esc(sel.label)} · ${_esc(counts)}</span><button type="button" class="jobs-link-btn" data-place-clear>Clear</button></div>` +
     sorted.slice(0, 12).map(j => {
@@ -940,8 +948,7 @@ function _renderJobRoleDropdown(dd, id) {
     if (ev.key === 'Enter') {
       const val = input.value.trim();
       if (!val) return;
-      const roles2 = getJobRoles();
-      if (!roles2.includes(val)) { roles2.push(val); saveJobRoles(roles2); }
+      addJobRole(val);
       _updateJob(id, { role: val });
       _closeJobDropdown();
     }
@@ -2051,8 +2058,7 @@ _ajEl('addJobForm').addEventListener('keydown', e => {
     e.preventDefault();
     const v = e.target.value.trim();
     if (!v) return;
-    const roles = getJobRoles();
-    if (!roles.includes(v)) { roles.push(v); saveJobRoles(roles); }
+    addJobRole(v);
     _aj.role = v;
     _ajPaint();
     return;

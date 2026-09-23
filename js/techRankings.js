@@ -7,10 +7,10 @@ let _applicationLocationRows = [];
 
 function setApplicationLocationRankings(entries) {
   const metroRows = techMetros.map(metro => ({
-    id:`metro:${metro.id}`, name:metro.name, kind:'metro', jobs:[], jobIds:new Set(), places:[],
+    id:`metro:${metro.id}`, name:metro.name, kind:'metro', jobs:[], jobIds:new Set(), places:[], n:0,
   }));
   const cityRows = techCities.map(city => ({
-    id:`city:${city.id}`, name:city.name, kind:'core', jobs:[], jobIds:new Set(), places:[],
+    id:`city:${city.id}`, name:city.name, kind:'core', jobs:[], jobIds:new Set(), places:[], n:0,
   }));
   const otherRows = new Map();
   const metroById = new Map(techMetros.map((metro, index) => [metro.id, metroRows[index]]));
@@ -30,11 +30,12 @@ function setApplicationLocationRankings(entries) {
       if (!metroRow) {
         metroRow = {
           id:`other:${otherKey}`, name:entry.label, kind:'other',
-          jobs:[], jobIds:new Set(), places:[],
+          jobs:[], jobIds:new Set(), places:[], n:0,
         };
         otherRows.set(otherKey, metroRow);
       }
     }
+    metroRow.n += entry.apps;
     entry.jobs.forEach(job => {
       if (metroRow.jobIds.has(job.id)) return;
       metroRow.jobIds.add(job.id);
@@ -45,7 +46,7 @@ function setApplicationLocationRankings(entries) {
   _applicationLocationRows = [...metroRows, ...cityRows, ...otherRows.values()].map(row => ({
     ...row,
     places:row.places.sort((a, b) => a.label.localeCompare(b.label)),
-  })).sort((a, b) => b.jobs.length - a.jobs.length || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+  })).sort((a, b) => b.n - a.n || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
   renderTechRankings();
 }
 
@@ -63,12 +64,14 @@ function _techRankRowName(row) {
 function _techPlaceForMetro(metroId) {
   const metro = _techMetroById.get(metroId);
   const cityIds = new Set(techCities.filter(c => c.metroId === metroId).map(c => `city:${c.id}`));
-  const cityJobs = _applicationLocationRows.filter(r => cityIds.has(r.id)).flatMap(r => r.jobs);
-  const metroJobs = (_applicationLocationRows.find(r => r.id === `metro:${metroId}`) || { jobs:[] }).jobs;
-  return { key:'m:' + metroId, label:metro ? metro.name : metroId, cityJobs, metroJobs, jobs:[...cityJobs, ...metroJobs] };
+  const cityRows = _applicationLocationRows.filter(r => cityIds.has(r.id));
+  const metroRow = _applicationLocationRows.find(r => r.id === `metro:${metroId}`) || { jobs:[], n:0 };
+  const cityJobs = cityRows.flatMap(r => r.jobs);
+  const cityN = cityRows.reduce((sum, r) => sum + r.n, 0);
+  return { key:'m:' + metroId, label:metro ? metro.name : metroId, cityJobs, metroJobs:metroRow.jobs, jobs:[...new Set([...cityJobs, ...metroRow.jobs])], cityN, metroN:metroRow.n, n:cityN + metroRow.n };
 }
 function _techRowPlace(row, kind) {
-  if (kind === 'other') return { key:'o:' + row.id, label:row.name, cityJobs:[], metroJobs:[], jobs:row.jobs, other:true };
+  if (kind === 'other') return { key:'o:' + row.id, label:row.name, cityJobs:[], metroJobs:[], jobs:row.jobs, n:row.n, other:true };
   const metroId = kind === 'metro-rank' ? row.id
     : kind === 'city-rank' ? row.metroId
     : row.kind === 'metro' ? row.id.replace(/^metro:/, '')
@@ -81,11 +84,11 @@ function renderTechRankings() {
   if (!list) return;
   const mode = _techRankingMode;
   const byId = new Map(_applicationLocationRows.map(r => [r.id, r]));
-  const count = id => (byId.get(id) || { jobs:[] }).jobs.length;
+  const count = id => (byId.get(id) || { n:0 }).n;
   let rows;
   if (mode === 'applications') {
-    rows = _applicationLocationRows.filter(r => r.jobs.length).map((r, i) => ({
-      num:i + 1, name:_techRankRowName(r), kind:r.kind, n:r.jobs.length,
+    rows = _applicationLocationRows.filter(r => r.n).map((r, i) => ({
+      num:i + 1, name:_techRankRowName(r), kind:r.kind, n:r.n,
       place:_techRowPlace(r, r.kind === 'other' ? 'other' : 'apps'),
     }));
   } else if (mode === 'metro') {
@@ -109,9 +112,9 @@ function renderTechRankings() {
     const label = row.kind === 'core' ? 'Major city' : row.kind === 'metro' ? 'Metro area' : 'Not ranked';
     item.innerHTML = `<span class="tech-rank-number" aria-hidden="true">${row.num}</span>` +
       `<span class="tech-rank-name"><i class="tech-kind tech-kind-${row.kind}" title="${label}"></i>${_esc(row.name)}${gap ? '<span class="tech-rank-gap" title="A top-15 place with no applications yet">gap</span>' : ''}</span>` +
-      `<span class="tech-rank-n">${row.n}</span>` +
+      `<span class="tech-rank-n">${_jobListCount(row.n)}</span>` +
       (typeof _jobShareBar === 'function' ? _jobShareBar(row.n, row.kind === 'core' ? 'core' : row.kind, total) : '');
-    item.setAttribute('aria-label', `${row.num}. ${row.name}, ${label.toLowerCase()}: ${row.n} application${row.n === 1 ? '' : 's'}`);
+    item.setAttribute('aria-label', `${row.num}. ${row.name}, ${label.toLowerCase()}: ${_jobListCount(row.n)} application${_jobListCount(row.n) === 1 ? '' : 's'}`);
     if (row.place && typeof _selectJobPlace === 'function') {
       const pick = () => _selectJobPlace(row.place);
       item.addEventListener('click', pick);
