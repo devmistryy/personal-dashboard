@@ -1346,6 +1346,9 @@ document.querySelectorAll('#tabBar .tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    // Tabs share one scrolling page, so without this a new tab opens wherever
+    // the last one was scrolled to — often halfway down.
+    window.scrollTo({ top: 0, behavior: 'instant' });
   });
 });
 
