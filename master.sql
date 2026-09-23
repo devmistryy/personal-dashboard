@@ -240,7 +240,7 @@ alter table tasks enable row level security;
 -- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
 -- Backs: habit_sort_v1, task_sort_v1, task_streak_v1, task_dismissed_v1,
 --        sunday_reset_v1, sunday_reset_removed_v1, areas:list, area_notes:<name>,
---        job_roles_v1, job_sites_v1, referral_notes_v1
+--        job_roles_v1, job_sites_v1, referral_notes_v1, job_weekly_goal_v1
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
   user_id uuid references auth.users not null,
@@ -297,6 +297,12 @@ begin
     alter table job_applications drop column location_city;
   end if;
 end $$;
+-- Per-application extras (added 2026-09-22 with the Jobs tab rework), one
+-- jsonb blob like tasks.meta / habits.meta:
+--   { url, notes, next:{date,label}, history:[{status,date}] }
+-- js/jobs.js _syncJobs only sends `meta` once some application has extras,
+-- so saving keeps working until this column exists.
+alter table job_applications add column if not exists meta jsonb;
 alter table job_applications enable row level security;
 
 -- ───────────────────────── referrals ─────────────────────────
@@ -313,6 +319,10 @@ create table if not exists referrals (
   sort_order integer,
   created_at timestamptz default now()
 );
+-- Where each referral stands: 'ask' | 'asked' | 'referred' | 'thanked'
+-- (added 2026-09-22). Null on older rows; the app treats a linked referral
+-- as 'referred' and an unlinked one as 'ask'.
+alter table referrals add column if not exists step text;
 alter table referrals enable row level security;
 
 -- ─────────────────────────── goals ────────────────────────────

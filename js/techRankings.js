@@ -1,5 +1,7 @@
-// Read-only Tech Location Rankings on the Jobs tab.
-let _techRankingMode = 'metro';
+// Tech Location Rankings on the Jobs tab's Locations view: your applications
+// by place (the major city and the rest of its metro counted separately), or
+// the fixed metro / city rankings with your counts beside them.
+let _techRankingMode = 'applications';
 const _techMetroById = new Map(techMetros.map(metro => [metro.id, metro]));
 let _applicationLocationRows = [];
 
@@ -27,7 +29,7 @@ function setApplicationLocationRankings(entries) {
       metroRow = otherRows.get(otherKey);
       if (!metroRow) {
         metroRow = {
-          id:`other:${otherKey}`, name:`Out-of-pocket city: ${entry.label}`, kind:'other',
+          id:`other:${otherKey}`, name:entry.label, kind:'other',
           jobs:[], jobIds:new Set(), places:[],
         };
         otherRows.set(otherKey, metroRow);
@@ -47,105 +49,81 @@ function setApplicationLocationRankings(entries) {
   renderTechRankings();
 }
 
+// A row's display name: the city itself for a major-city row.
+function _techRankRowName(row) {
+  if (row.kind === 'core') {
+    const city = techCities.find(c => `city:${c.id}` === row.id);
+    return city ? city.name : row.name;
+  }
+  return row.name;
+}
+
+// What a row selects on the map: the whole metro (city + metro area), or a
+// single unranked place.
+function _techPlaceForMetro(metroId) {
+  const metro = _techMetroById.get(metroId);
+  const cityIds = new Set(techCities.filter(c => c.metroId === metroId).map(c => `city:${c.id}`));
+  const cityJobs = _applicationLocationRows.filter(r => cityIds.has(r.id)).flatMap(r => r.jobs);
+  const metroJobs = (_applicationLocationRows.find(r => r.id === `metro:${metroId}`) || { jobs:[] }).jobs;
+  return { key:'m:' + metroId, label:metro ? metro.name : metroId, cityJobs, metroJobs, jobs:[...cityJobs, ...metroJobs] };
+}
+function _techRowPlace(row, kind) {
+  if (kind === 'other') return { key:'o:' + row.id, label:row.name, cityJobs:[], metroJobs:[], jobs:row.jobs, other:true };
+  const metroId = kind === 'metro-rank' ? row.id
+    : kind === 'city-rank' ? row.metroId
+    : row.kind === 'metro' ? row.id.replace(/^metro:/, '')
+    : (techCities.find(c => `city:${c.id}` === row.id) || {}).metroId;
+  return metroId ? _techPlaceForMetro(metroId) : null;
+}
+
 function renderTechRankings() {
   const list = document.getElementById('techRankingList');
   if (!list) return;
-  const isApplications = _techRankingMode === 'applications';
-  const isMetro = _techRankingMode === 'metro';
-  const rows = isApplications
-    ? _applicationLocationRows
-    : isMetro
-    ? [...techMetros].sort((a, b) => a.metroTechRank - b.metroTechRank)
-    : [...techCities].sort((a, b) => a.cityTechRank - b.cityTechRank);
+  const mode = _techRankingMode;
+  const byId = new Map(_applicationLocationRows.map(r => [r.id, r]));
+  const count = id => (byId.get(id) || { jobs:[] }).jobs.length;
+  let rows;
+  if (mode === 'applications') {
+    rows = _applicationLocationRows.filter(r => r.jobs.length).map((r, i) => ({
+      num:i + 1, name:_techRankRowName(r), kind:r.kind, n:r.jobs.length,
+      place:_techRowPlace(r, r.kind === 'other' ? 'other' : 'apps'),
+    }));
+  } else if (mode === 'metro') {
+    rows = [...techMetros].sort((a, b) => a.metroTechRank - b.metroTechRank).map(m => ({
+      num:m.metroTechRank, name:m.name, kind:'metro', n:count(`metro:${m.id}`), place:_techRowPlace(m, 'metro-rank'),
+    }));
+  } else {
+    rows = [...techCities].sort((a, b) => a.cityTechRank - b.cityTechRank).map(c => ({
+      num:c.cityTechRank, name:c.name, kind:'core', n:count(`city:${c.id}`), place:_techRowPlace(c, 'city-rank'),
+    }));
+  }
+  const total = typeof _jobOnsiteCount === 'function' ? _jobOnsiteCount() : 0;
+  const selKey = typeof _jobPlaceSel !== 'undefined' && _jobPlaceSel ? _jobPlaceSel.key : null;
   const fragment = document.createDocumentFragment();
-  rows.forEach((row, index) => {
+  rows.forEach(row => {
     const item = document.createElement('li');
-    item.className = 'tech-rank-row';
-    const rank = isApplications ? index + 1 : isMetro ? row.metroTechRank : row.cityTechRank;
-    item.value = rank;
-    const position = document.createElement('div');
-    position.className = 'tech-rank-position';
-    if (isApplications) {
-      position.classList.add('tech-rank-application-position', `tech-rank-application-position-${row.kind}`);
-      position.setAttribute('aria-label', row.kind === 'core' ? 'Major city' : row.kind === 'metro' ? 'Metro area' : 'Out-of-pocket city');
-    } else {
-      position.classList.add('tech-rank-neutral-position');
+    const gap = mode !== 'applications' && row.n === 0 && row.num <= 15;
+    item.className = `tech-rank-row${row.n ? '' : ' zero'}${row.place && row.place.key === selKey ? ' selected' : ''}`;
+    item.value = row.num;
+    item.tabIndex = 0;
+    const label = row.kind === 'core' ? 'Major city' : row.kind === 'metro' ? 'Metro area' : 'Not ranked';
+    item.innerHTML = `<span class="tech-rank-number" aria-hidden="true">${row.num}</span>` +
+      `<span class="tech-rank-name"><i class="tech-kind tech-kind-${row.kind}" title="${label}"></i>${_esc(row.name)}${gap ? '<span class="tech-rank-gap" title="A top-15 place with no applications yet">gap</span>' : ''}</span>` +
+      `<span class="tech-rank-n">${row.n}</span>` +
+      (typeof _jobShareBar === 'function' ? _jobShareBar(row.n, row.kind === 'core' ? 'core' : row.kind, total) : '');
+    item.setAttribute('aria-label', `${row.num}. ${row.name}, ${label.toLowerCase()}: ${row.n} application${row.n === 1 ? '' : 's'}`);
+    if (row.place && typeof _selectJobPlace === 'function') {
+      const pick = () => _selectJobPlace(row.place);
+      item.addEventListener('click', pick);
+      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
     }
-    const number = document.createElement('span');
-    number.className = 'tech-rank-number';
-    number.textContent = `${rank}`;
-    number.setAttribute('aria-hidden', 'true');
-    position.appendChild(number);
-    item.appendChild(position);
-    const content = document.createElement('div');
-    content.className = 'tech-rank-content';
-    let applicationCount = null;
-    const name = document.createElement('strong');
-    name.className = 'tech-rank-name';
-    name.textContent = row.name;
-    content.appendChild(name);
-    if (isApplications) {
-      applicationCount = document.createElement('span');
-      applicationCount.className = 'tech-rank-application-count';
-      const total = document.createElement('strong');
-      total.textContent = row.jobs.length;
-      const label = document.createElement('span');
-      label.textContent = 'APPS';
-      applicationCount.append(total, label);
-    } else if (isMetro) {
-      const applicationRow = _applicationLocationRows.find(item => item.id === `metro:${row.id}`);
-      applicationCount = document.createElement('span');
-      applicationCount.className = 'tech-rank-application-count';
-      const total = document.createElement('strong');
-      total.textContent = applicationRow?.jobs.length || 0;
-      const label = document.createElement('span');
-      label.textContent = 'APPS';
-      applicationCount.append(total, label);
-      const detail = document.createElement('span');
-      detail.className = 'tech-rank-detail';
-      const majorCityNames = new Set(techCities
-        .filter(city => city.metroId === row.id)
-        .flatMap(city => [city.name, ...(TECH_CITY_APPLICATION_ALIASES[city.name] || [])])
-        .map(name => name.toLowerCase()));
-      const areas = (row.includedAreas || techCities.filter(city => city.metroId === row.id).map(city => city.name))
-        .filter(area => !majorCityNames.has(area.toLowerCase()));
-      detail.textContent = areas.join(' · ');
-      content.appendChild(detail);
-    } else {
-      const applicationRow = _applicationLocationRows.find(item => item.id === `city:${row.id}`);
-      applicationCount = document.createElement('span');
-      applicationCount.className = 'tech-rank-application-count';
-      const total = document.createElement('strong');
-      total.textContent = applicationRow?.jobs.length || 0;
-      const label = document.createElement('span');
-      label.textContent = 'APPS';
-      applicationCount.append(total, label);
-    }
-    if (applicationCount) {
-      const total = applicationCount.querySelector('strong');
-      const applicationRow = isApplications
-        ? row
-        : _applicationLocationRows.find(item => item.id === `${isMetro ? 'metro' : 'city'}:${row.id}`);
-      const totalColor = isApplications
-        ? row.kind === 'core'
-          ? _jobMapCityColor(row.jobs.length)
-          : row.kind === 'metro'
-          ? _jobMapMetroColor(row.jobs.length)
-          : '#e1ba63'
-        : isMetro
-        ? _jobMapMetroColor(applicationRow?.jobs.length || 0)
-        : _jobMapCityColor(applicationRow?.jobs.length || 0);
-      total.style.color = totalColor;
-    }
-    item.appendChild(content);
-    if (applicationCount) item.appendChild(applicationCount);
     fragment.appendChild(item);
   });
   list.replaceChildren(fragment);
-  list.setAttribute('aria-label', isApplications ? 'Application locations ranked by application count' : isMetro ? 'Metro technology opportunity ranking' : 'City technology opportunity ranking');
-  document.getElementById('techRankingCount').textContent = `${rows.length} ${isApplications ? 'areas' : isMetro ? 'metros' : 'cities'}`;
+  list.setAttribute('aria-label', mode === 'applications' ? 'Your application locations, ranked by application count' : mode === 'metro' ? 'Metro technology opportunity ranking' : 'City technology opportunity ranking');
+  document.getElementById('techRankingCount').textContent = `${rows.length} ${mode === 'applications' ? 'places' : mode === 'metro' ? 'metros' : 'cities'}`;
   document.querySelectorAll('.tech-rank-mode').forEach(button => {
-    const active = button.dataset.techMode === _techRankingMode;
+    const active = button.dataset.techMode === mode;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });

@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="css/main.css?v=37">
 <link rel="stylesheet" href="css/todo.css?v=31">
 <link rel="stylesheet" href="css/habits.css?v=63">
-<link rel="stylesheet" href="css/jobs.css?v=88">
+<link rel="stylesheet" href="css/jobs.css?v=93">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=6">
@@ -273,120 +273,105 @@
     </div>
   </div>
 
-  <!-- Tab: Jobs -->
+  <!-- Tab: Jobs — Pipeline (list) · application page · Locations (map) -->
   <div class="tab-panel" id="tab-jobs">
-    <div class="jobs-location-layout">
-      <div class="section jobs-map-section">
-        <div class="section-title">Application Map</div>
-        <div class="card jobs-map-card">
-          <div class="jobs-map-header">
-            <div class="jobs-map-header-left">
-              <div class="jobs-map-scale-group jobs-map-scale-group-city">
-                <small>City</small>
-                <div class="jobs-map-city-scale" aria-label="City applications color scale">
-                <div class="jobs-map-scale-ramp" aria-hidden="true"><i class="jobs-map-city-scale-key jobs-map-city-scale-1"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-2"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-3"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-4"></i><i class="jobs-map-city-scale-key jobs-map-city-scale-5"></i></div>
-                <div class="jobs-map-scale-labels"><b id="jobsMapCityScale1">1</b><b id="jobsMapCityScale2">2–3</b><b id="jobsMapCityScale3">4–6</b><b id="jobsMapCityScale4">7–9</b><b id="jobsMapCityScale5">10+</b></div>
-                </div>
+    <div class="jobs-viewtabs" role="tablist" aria-label="Jobs view">
+      <button type="button" role="tab" class="jobs-viewtab" data-jview="pipeline" aria-selected="true">Pipeline</button>
+      <button type="button" role="tab" class="jobs-viewtab" data-jview="locations" aria-selected="false">Locations</button>
+    </div>
+
+    <div class="jobs-view" id="jobsPipelineView">
+      <div class="jobs-layout">
+        <div class="card jobs-panel" id="jobsPanel">
+          <div class="jobs-head">
+            <div class="jobs-head-main">
+              <div class="jobs-head-left">
+                <div class="hab-eyebrow" id="jobsWeekLabel">This week</div>
+                <div class="hab-count"><b id="jobsWeekCount">0</b><span>applied this week</span></div>
               </div>
-              <div class="jobs-map-scale-group jobs-map-scale-group-metro">
-                <small>Metro</small>
-                <div class="jobs-map-metro-scale" aria-label="Metro applications color scale">
-                <div class="jobs-map-scale-ramp" aria-hidden="true"><i class="jobs-map-metro-scale-key jobs-map-metro-scale-1"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-2"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-3"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-4"></i><i class="jobs-map-metro-scale-key jobs-map-metro-scale-5"></i></div>
-                <div class="jobs-map-scale-labels"><b id="jobsMapMetroScale1">1</b><b id="jobsMapMetroScale2">2–3</b><b id="jobsMapMetroScale3">4–6</b><b id="jobsMapMetroScale4">7–9</b><b id="jobsMapMetroScale5">10+</b></div>
-                </div>
+              <div class="jobs-weekgoal">
+                <div class="jobs-wbars" id="jobsWeekBars" title="Applications per week, last 8 weeks. Dashed line: weekly goal"></div>
+                <div class="hab-sub" id="jobsWeekSub"></div>
               </div>
-              <span class="jobs-map-header-summary" id="jobsMapSummary">Locations across the US</span>
             </div>
+            <button class="add-task-btn" id="jobAddBtn" type="button" title="Add an application (N)">+ Add application <kbd>N</kbd></button>
+          </div>
+          <div class="jobs-pipe">
+            <div class="jobs-pipe-bar" id="jobsPipeBar" aria-hidden="true"></div>
+            <div class="jobs-pipe-keys" id="jobsPipeKeys"></div>
+          </div>
+          <div class="jobs-attn" id="jobsAttn" hidden></div>
+          <div class="jobs-toolbar">
+            <label class="jobs-search" for="jobsSearch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="jobsSearch" type="search" placeholder="Search company, role or city" autocomplete="off"></label>
+            <span class="hab-groupbar-label">Group</span>
+            <button class="hab-group-btn" type="button" data-jgroup="stage">Stage</button>
+            <button class="hab-group-btn" type="button" data-jgroup="week">Week</button>
+          </div>
+          <div class="jobs-cols" aria-hidden="true"><span>Company · role</span><span>Location</span><span>Found on</span><span>Applied</span><span>Status</span></div>
+          <div id="jobsList" class="jobs-groups"></div>
+        </div>
+
+        <div class="jobs-side">
+          <div class="card jobs-panel jobs-side-panel">
+            <div class="jobs-side-head"><span class="hab-eyebrow">Job boards</span><span class="jobs-side-note">reply rate</span></div>
+            <ul class="job-site-list" id="jobSiteList"></ul>
+            <div class="job-site-empty" id="jobSiteEmptyState" style="display:none;">No sites ranked yet.</div>
+            <button type="button" class="job-site-add-btn" id="jobSiteAddBtn">+ Add a board</button>
+          </div>
+          <div class="card jobs-panel jobs-side-panel">
+            <div class="jobs-side-head"><span class="hab-eyebrow">Referrals</span><button type="button" class="jobs-link-btn" id="referralNotesOpenBtn">Notes</button></div>
+            <ul class="referral-list" id="referralList"></ul>
+            <div class="referral-empty" id="referralEmptyState" style="display:none;">No referrals yet.</div>
+            <div class="referral-add-row">
+              <span class="job-add-plus">+</span>
+              <input type="text" class="referral-add-input" id="referralAddInput" placeholder="Add a referrer…">
+            </div>
+          </div>
+          <div class="card jobs-panel jobs-side-panel">
+            <div class="jobs-side-head"><span class="hab-eyebrow">Roles</span><span class="jobs-side-note">applications</span></div>
+            <ul class="jobs-role-list" id="jobsRoleList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="jobs-view" id="jobsDetailView" hidden>
+      <div class="card jobs-panel" id="jobDetail"></div>
+    </div>
+
+    <div class="jobs-view" id="jobsLocationsView" hidden>
+      <div class="jobs-loc-layout">
+        <div class="card jobs-panel jobs-map-panel">
+          <div class="jobs-map-head">
+            <div class="jobs-map-legend" aria-label="Map key">
+              <span><i class="jobs-key-ring"></i>metro area</span><span><i class="jobs-key-dot"></i>major city</span>
+              <span><i style="background:#ffffff"></i>1</span><span><i style="background:#12a968"></i>2–3</span><span><i style="background:#22c7c3"></i>4–6</span><span><i style="background:#0666d6"></i>7–9</span><span><i style="background:#8b5cf6"></i>10+</span>
+            </div>
+            <span class="jobs-map-summary" id="jobsMapSummary">Locations across the US</span>
           </div>
           <div class="jobs-map-frame" id="jobsMapFrame">
             <svg id="jobsMap" viewBox="0 8 960 588" role="img" aria-label="Map of US job application locations"></svg>
             <div class="jobs-map-message" id="jobsMapMessage">Loading map…</div>
             <div class="jobs-map-tooltip" id="jobsMapTooltip" hidden></div>
           </div>
+          <div class="jobs-map-stats" id="jobsMapStats"></div>
           <div class="jobs-map-footer" id="jobsMapFooter"></div>
+          <div class="jobs-place-detail" id="jobsPlaceDetail" hidden></div>
+          <div class="jobs-place-hint" id="jobsPlaceHint">Click a marker or a ranking row to see its applications.</div>
         </div>
-      </div>
-      <div class="section tech-rank-section" aria-labelledby="techRankHeading">
-        <div class="section-title" id="techRankHeading">Tech Location Rankings</div>
-        <div class="card tech-rank-card">
-          <div class="tech-rank-toolbar">
-            <div class="tech-rank-toggle" role="group" aria-label="Ranking type">
-              <button type="button" class="tech-rank-mode" data-tech-mode="applications" aria-pressed="false" aria-controls="techRankingList">Applications</button>
-              <button type="button" class="tech-rank-mode" data-tech-mode="city" aria-pressed="false" aria-controls="techRankingList">City</button>
-              <button type="button" class="tech-rank-mode active" data-tech-mode="metro" aria-pressed="true" aria-controls="techRankingList">Metro</button>
-            </div>
-            <span class="tech-rank-count" id="techRankingCount" aria-live="polite"></span>
-          </div>
-          <ol class="tech-rank-list" id="techRankingList"></ol>
-        </div>
-      </div>
-    </div>
-    <div class="jobs-split">
-      <div class="section jobs-col-main">
-        <div class="section-title">Job Applications</div>
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div class="job-sort-bar">
-            <span class="job-sort-label">Sort by</span>
-            <button class="job-sort-btn active" data-sort="date">Date</button>
-            <button class="job-sort-btn" data-sort="status">Status</button>
-            <div class="job-stats">
-              <div class="job-stat-pill">
-                <span class="job-stat-num" id="jobStatTotal">0</span>
-                <span class="job-stat-label">Total</span>
+        <div class="jobs-rank-col">
+          <div class="card jobs-panel tech-rank-card" aria-labelledby="techRankHeading">
+            <h2 class="sr-only" id="techRankHeading">Tech location rankings</h2>
+            <div class="tech-rank-toolbar">
+              <div class="tech-rank-toggle" role="group" aria-label="Ranking type">
+                <button type="button" class="tech-rank-mode active" data-tech-mode="applications" aria-pressed="true" aria-controls="techRankingList">Your apps</button>
+                <button type="button" class="tech-rank-mode" data-tech-mode="metro" aria-pressed="false" aria-controls="techRankingList">Metro rank</button>
+                <button type="button" class="tech-rank-mode" data-tech-mode="city" aria-pressed="false" aria-controls="techRankingList">City rank</button>
               </div>
-              <div class="job-stat-pill job-stat-pill-today">
-                <span class="job-stat-num" id="jobStatToday">0</span>
-                <span class="job-stat-label">Today</span>
-              </div>
+              <span class="tech-rank-count" id="techRankingCount" aria-live="polite"></span>
             </div>
-          </div>
-          <div class="job-table-wrap">
-            <table class="job-table">
-              <colgroup>
-                <col class="col-company"><col class="col-role"><col class="col-platform"><col class="col-date"><col class="col-status"><col class="col-location">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th><span class="th-inner"><i class="ti ti-letter-case" aria-hidden="true"></i>Company</span></th>
-                  <th><span class="th-inner"><i class="ti ti-briefcase" aria-hidden="true"></i>Job Role</span></th>
-                  <th><span class="th-inner"><i class="ti ti-target" aria-hidden="true"></i>Platform</span></th>
-                  <th><span class="th-inner"><i class="ti ti-calendar" aria-hidden="true"></i>Date Applied</span></th>
-                  <th><span class="th-inner"><i class="ti ti-list-check" aria-hidden="true"></i>Status</span></th>
-                  <th><span class="th-inner"><i class="ti ti-map-pin" aria-hidden="true"></i>Location</span></th>
-                </tr>
-              </thead>
-              <tbody class="job-add-tbody">
-                <tr>
-                  <td colspan="6" class="job-add-cell">
-                    <div class="job-add-row">
-                      <span class="job-add-plus">+</span>
-                      <input type="text" class="job-add-input" id="jobAddInput" placeholder="Add company name…">
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-              <tbody id="jobTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="section jobs-col-side">
-        <div class="section-title">Job Boards</div>
-        <div class="card job-site-card">
-          <ul class="job-site-list" id="jobSiteList"></ul>
-          <div class="job-site-empty" id="jobSiteEmptyState" style="display:none;">No sites ranked yet.</div>
-          <button type="button" class="job-site-add-btn" id="jobSiteAddBtn">+ Add site</button>
-        </div>
-
-        <div class="section-title section-title-clickable" id="referralNotesOpenBtn">Referrals</div>
-        <div class="card referral-card">
-          <ul class="referral-list" id="referralList"></ul>
-          <div class="referral-empty" id="referralEmptyState" style="display:none;">No referrals yet.</div>
-          <div class="referral-add-row">
-            <span class="job-add-plus">+</span>
-            <input type="text" class="referral-add-input" id="referralAddInput" placeholder="Referrer name…">
+            <div class="tech-rank-legend"><span><i class="tech-kind tech-kind-core"></i>city</span><span><i class="tech-kind tech-kind-metro"></i>metro</span><span><i class="tech-kind tech-kind-other"></i>unranked</span></div>
+            <ol class="tech-rank-list" id="techRankingList"></ol>
           </div>
         </div>
       </div>
@@ -789,6 +774,41 @@
   </form>
 </div>
 
+<div id="addJobModal" class="sr-modal">
+  <form class="sr-modal-card add-task-card add-job-card" id="addJobForm" role="dialog" aria-modal="true" aria-labelledby="addJobTitle" autocomplete="off">
+    <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="addJobTitle">Add application</h2>
+    <p class="at-hint">Paste the posting link first. It fills in what it can.</p>
+    <label class="aj-url" for="ajUrl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg><input id="ajUrl" placeholder="Posting link (optional)"></label>
+    <p class="at-hint aj-url-note" id="ajUrlNote" hidden></p>
+    <div class="at-name"><input id="ajCompany" placeholder="Company" aria-label="Company"></div>
+    <div class="at-grid">
+      <span class="at-label">Role</span>
+      <div class="at-row aj-opts" id="ajRoles"></div>
+      <span class="at-label">Found on</span>
+      <div class="at-row aj-opts" id="ajPlatforms"></div>
+      <span class="at-label">Location</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="lt"><button type="button" data-v="remote">Remote</button><button type="button" data-v="hybrid">Hybrid</button><button type="button" data-v="onsite">On-site</button></div>
+        <span class="at-row" id="ajCitiesWrap"><span class="job-loc-city-chips" id="ajCities"></span><input class="task-date-input aj-city" id="ajCity" placeholder="City, ST ↵" aria-label="Add a city"></span>
+      </div>
+      <span class="at-label">Applied</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="when"><button type="button" data-v="today">Today</button><button type="button" data-v="yday">Yesterday</button><button type="button" data-v="pick">Pick date</button></div>
+        <input type="date" class="task-date-input at-date" id="ajDate" aria-label="Date applied" hidden>
+      </div>
+      <span class="at-label">Referred by</span>
+      <div class="at-row aj-opts" id="ajRefs"></div>
+    </div>
+    <div class="at-foot">
+      <span class="at-keys"><kbd>↵</kbd> add · <kbd>esc</kbd> cancel</span>
+      <span class="at-status" id="ajStatus"></span>
+      <button type="button" class="btn-polish" data-close>Cancel</button>
+      <button type="submit" class="btn-add" id="ajSubmit" disabled>Add application</button>
+    </div>
+  </form>
+</div>
+
 <div id="addHabitModal" class="sr-modal">
   <form class="sr-modal-card add-task-card" id="addHabitForm" role="dialog" aria-modal="true" aria-labelledby="addHabitTitle" autocomplete="off">
     <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
@@ -930,14 +950,14 @@
 <script src="js/reactiveHabits.js?v=2"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
-<script src="js/jobs.js?v=84"></script>
+<script src="js/jobs.js?v=88"></script>
 <script src="js/techRankingData.js?v=5"></script>
-<script src="js/techRankings.js?v=18"></script>
+<script src="js/techRankings.js?v=20"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=53"></script>
+<script src="js/main.js?v=55"></script>
 </body>
 </html>

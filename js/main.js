@@ -130,6 +130,73 @@ function _seedLocalRealisticJobsFromUrl() {
   _saveLocal();
 }
 
+// `?seedSampleJobs=1` (test@local only): replaces the job applications with
+// the 124-application sample set used for the Jobs tab rework — real company
+// names spread over ~60 US cities, made-up statuses, dates over ~4 months —
+// plus three sample referrals. Deterministic, so every browser gets the same set.
+function _seedLocalSampleJobsFromUrl() {
+  const url = new URL(location.href);
+  if (url.searchParams.get('seedSampleJobs') !== '1') return;
+  url.searchParams.delete('seedSampleJobs');
+  history.replaceState(null, '', url);
+
+  const ds = off => { const d = new Date(); d.setDate(d.getDate() - off); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-'); };
+  const J = (company, role, platform, off, status, locationType, locationCities = []) =>
+    ({ id:_jobId(), company, role, platform, dateApplied:ds(off), status, locationType, locationCities });
+  const base = [
+    J('Stripe','Software Engineer','LinkedIn',0,'Applied','hybrid',['San Francisco, CA','Seattle, WA']),
+    J('Figma','Frontend Engineer','Company Site',0,'Applied','onsite',['New York, NY']),
+    J('Ramp','Full Stack Engineer','Wellfound',1,'Applied','onsite',['New York, NY']),
+    J('Datadog','Software Engineer','LinkedIn',2,'Phone Screen','hybrid',['New York, NY','Boston, MA']),
+    J('Notion','Frontend Engineer','Company Site',3,'Applied','onsite',['San Francisco, CA']),
+    J('Vercel','Frontend Engineer','Built In',4,'Interview','remote'),
+    J('Linear','Full Stack Engineer','Wellfound',5,'Applied','remote'),
+    J('Airbnb','Software Engineer','LinkedIn',6,'Rejected','hybrid',['San Francisco, CA']),
+    J('Snowflake','Software Engineer','Indeed',8,'Applied','onsite',['San Mateo, CA']),
+    J('Cloudflare','Software Engineer','LinkedIn',9,'Phone Screen','hybrid',['Austin, TX']),
+    J('Duolingo','Frontend Engineer','Company Site',11,'Applied','onsite',['Pittsburgh, PA']),
+    J('Robinhood','Software Engineer','LinkedIn',12,'Rejected','onsite',['Menlo Park, CA']),
+    J('Plaid','Full Stack Engineer','Built In',14,'Interview','hybrid',['San Francisco, CA','New York, NY']),
+    J('Asana','Product Manager','LinkedIn',15,'Applied','onsite',['San Francisco, CA']),
+    J('Shopify','Software Engineer','Company Site',17,'Applied','remote'),
+    J('HubSpot','Frontend Engineer','Indeed',19,'Rejected','hybrid',['Cambridge, MA']),
+    J('Brex','Software Engineer','Wellfound',21,'Applied','onsite',['New York, NY']),
+    J('Twilio','Software Engineer','LinkedIn',24,'Applied','remote'),
+    J('Discord','Frontend Engineer','Company Site',27,'Rejected','onsite',['San Francisco, CA']),
+    J('Capital One','Software Engineer','Indeed',30,'Offer','hybrid',['McLean, VA']),
+    J('Anduril','Software Engineer','LinkedIn',33,'Applied','onsite',['Costa Mesa, CA']),
+    J('Instacart','Full Stack Engineer','LinkedIn',36,'Applied','remote'),
+    J('Zillow','Software Engineer','Indeed',40,'Rejected','remote'),
+    J('Epic Games','Software Engineer','Company Site',44,'Applied','onsite',['Raleigh, NC']),
+  ];
+  const companies = ['Meta','Google','Apple','Amazon','Microsoft','Netflix','Uber','Lyft','DoorDash','Pinterest','Snap','Reddit','Dropbox','Box','Atlassian','GitLab','MongoDB','Okta','Palantir','Scale AI','Databricks','Confluent','Elastic','Grafana Labs','Retool','Airtable','Canva','Coinbase','Chime','SoFi','Affirm','Toast','Wayfair','Peloton','Etsy','Squarespace','Spotify','Bloomberg','Two Sigma','Jane Street','Citadel','Oracle','Salesforce','Adobe','Intuit','Workday','ServiceNow','Nvidia','AMD','Qualcomm','Tesla','Rivian','SpaceX','Boeing','Lockheed Martin','Booz Allen','Indeed','Dell','Charles Schwab','Walmart Global Tech','Target Tech','Best Buy','Chewy','Kroger Digital','Nike','Intel','Zendesk','Expedia','T-Mobile','Microsoft Azure','Epic Systems','Cerner','Fidelity','Wells Fargo','Bank of America','Truist','Red Hat','SAS','Honeywell',"Lowe's",'Nationwide','Carvana','GoDaddy','Qualtrics','Pluralsight','Grubhub','Groupon','Morningstar','Allstate','Motorola','Ford','GM','Rocket Mortgage','Quicken Loans','Delta Tech','Home Depot','NCR','Mailchimp','Cox','Humana'];
+  const cities = ['San Francisco, CA','San Francisco, CA','San Francisco, CA','New York, NY','New York, NY','New York, NY','New York, NY','Seattle, WA','Seattle, WA','Bellevue, WA','Redmond, WA','San Jose, CA','Mountain View, CA','Palo Alto, CA','Sunnyvale, CA','Austin, TX','Austin, TX','Austin, TX','Boston, MA','Boston, MA','Cambridge, MA','Los Angeles, CA','Los Angeles, CA','Santa Monica, CA','Irvine, CA','Costa Mesa, CA','San Diego, CA','Chicago, IL','Chicago, IL','Denver, CO','Boulder, CO','Washington, DC','Arlington, VA','Reston, VA','Dallas, TX','Plano, TX','Irving, TX','Raleigh, NC','Durham, NC','Atlanta, GA','Atlanta, GA','Philadelphia, PA','Pittsburgh, PA','Phoenix, AZ','Tempe, AZ','Salt Lake City, UT','Lehi, UT','Minneapolis, MN','Portland, OR','Nashville, TN','Charlotte, NC','Miami, FL','Detroit, MI','Columbus, OH','Madison, WI','Kansas City, MO','Houston, TX','Baltimore, MD','Richmond, VA','Tampa, FL'];
+  const roles = ['Software Engineer','Software Engineer','Frontend Engineer','Full Stack Engineer','Full Stack Engineer','Product Manager'];
+  const platforms = ['LinkedIn','LinkedIn','LinkedIn','Company Site','Company Site','Indeed','Wellfound','Built In'];
+  let seed = 7;
+  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const pick = list => list[Math.floor(rand() * list.length)];
+  const extra = companies.map(company => {
+    const off = Math.floor(Math.pow(rand(), 1.4) * 120) + 1;
+    let status = rand() < 0.34 ? 'Rejected' : 'Applied';
+    if (status === 'Applied' && off > 10 && rand() < 0.18) status = 'Phone Screen';
+    if (status === 'Phone Screen' && rand() < 0.35) status = 'Interview';
+    const type = rand() < 0.16 ? 'remote' : (rand() < 0.45 ? 'hybrid' : 'onsite');
+    const places = type === 'remote' ? [] : (rand() < 0.15 ? [...new Set([pick(cities), pick(cities)])] : [pick(cities)]);
+    return J(company, pick(roles), pick(platforms), off, status, type, places);
+  });
+  MEM['jobs:list'] = [...base, ...extra];
+  MEM['job_roles_v1'] = ['Software Engineer','Frontend Engineer','Full Stack Engineer','Product Manager'];
+  MEM['job_sites_v1'] = ['linkedin','indeed','wellfound','builtin'];
+  const now = new Date().toISOString();
+  MEM['referrals:list'] = [
+    { id:'rf_a', name:'Priya Shah', jobId:base[3].id, step:'referred', createdAt:now },
+    { id:'rf_b', name:'Marcus Lee', jobId:base[12].id, step:'thanked', createdAt:now },
+    { id:'rf_c', name:'Jordan (college friend)', jobId:null, step:'ask', createdAt:now },
+  ];
+  _saveLocal();
+}
+
 // One-time in-place rename of the pre-2026-09 "goal" storage keys to "task", for
 // local (test@local) accounts whose whole MEM blob lives in localStorage. Real
 // accounts re-fetch from Supabase each load, so they need nothing here.
@@ -1310,19 +1377,30 @@ async function loadFromSupabase() {
 
   (results[3].data || []).forEach(row => { MEM[row.key] = row.value; });
 
-  MEM['jobs:list'] = jobs.map(j => ({
-    id: j.id, company: j.company, role: j.role || '', platform: j.platform || '',
-    dateApplied: j.date_applied || '', status: j.status || 'Applied',
-    locationType: j.location_type || '', locationCities: Array.isArray(j.location_cities) ? j.location_cities : [],
-  }));
+  _jobsMetaColumn = jobs.some(j => 'meta' in j);
+  MEM['jobs:list'] = jobs.map(j => {
+    const job = {
+      id: j.id, company: j.company, role: j.role || '', platform: j.platform || '',
+      dateApplied: j.date_applied || '', status: j.status || 'Applied',
+      locationType: j.location_type || '', locationCities: Array.isArray(j.location_cities) ? j.location_cities : [],
+    };
+    const meta = j.meta || {};
+    if (meta.url) job.url = meta.url;
+    if (meta.notes) job.notes = meta.notes;
+    if (meta.next && meta.next.date) job.next = meta.next;
+    if (Array.isArray(meta.history) && meta.history.length) job.history = meta.history;
+    return job;
+  });
 
   MEM['goals:list'] = goalRows.map(g => ({
     id: g.id, title: g.title, area: g.area || null, notes: g.notes || '',
     done: !!g.done, doneAt: g.done_at || null, createdAt: g.created_at,
   }));
 
+  _referralsStepColumn = referralRows.some(r => 'step' in r);
   MEM['referrals:list'] = referralRows.map(r => ({
     id: r.id, name: r.name, jobId: r.job_id || null, createdAt: r.created_at,
+    ...(r.step ? { step: r.step } : {}),
   }));
 
   hNotes.forEach(n => {
@@ -1420,6 +1498,7 @@ window.resetLocalData = function () {
 function _enterApp() {
   if (LOCAL_MODE) _seedLocalCityCoverageFromUrl();
   if (LOCAL_MODE) _seedLocalRealisticJobsFromUrl();
+  if (LOCAL_MODE) _seedLocalSampleJobsFromUrl();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
   checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
