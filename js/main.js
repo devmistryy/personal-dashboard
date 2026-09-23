@@ -769,19 +769,29 @@ async function _syncTaskAreaRename(oldName, newArea) {
   if (error) _syncFailed('task area re-tag failed', error);
 }
 
+// Set on load when the habits rows come back with a `meta` column, so clearing
+// the last schedule still writes meta: null instead of leaving the old one.
+let _habitsMetaColumn = false;
 async function _syncHabits(habits) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _requireUid(); if (!uid) return;
   if (habits.length) {
-    const { error } = await sb.from('habits').upsert(habits.map((h, i) => ({
-      id: h.id, user_id: uid, name: h.name,
-      start_date: h.startDate || null, end_date: h.endDate || null,
-      archived: h.archived || false, archived_at: h.archivedAt || null,
-      sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
-      morning_routine: h.morningRoutine || false, night_routine: h.nightRoutine || false,
-      runs: Array.isArray(h.runs) ? h.runs : [],
-      track_type: h.trackType || 'checkbox', target: h.target || null,
-    })), { onConflict: 'id' });
+    // `meta` only goes out once a habit uses a schedule, so a database that
+    // hasn't run the master.sql column yet keeps saving everything else.
+    const withMeta = _habitsMetaColumn || habits.some(h => h.schedule);
+    const { error } = await sb.from('habits').upsert(habits.map((h, i) => {
+      const row = {
+        id: h.id, user_id: uid, name: h.name,
+        start_date: h.startDate || null, end_date: h.endDate || null,
+        archived: h.archived || false, archived_at: h.archivedAt || null,
+        sort_order: i, area: h.area || null, end_of_day: h.endOfDay || false,
+        morning_routine: h.morningRoutine || false, night_routine: h.nightRoutine || false,
+        runs: Array.isArray(h.runs) ? h.runs : [],
+        track_type: h.trackType || 'checkbox', target: h.target || null,
+      };
+      if (withMeta) row.meta = h.schedule ? { schedule: h.schedule } : null;
+      return row;
+    }), { onConflict: 'id' });
     if (error) _syncFailed('habits upsert failed', error);
   }
   const { data: existing = [], error: selErr } = await sb.from('habits').select('id').eq('user_id', uid);
@@ -1213,6 +1223,7 @@ async function loadFromSupabase() {
   MEM['whoop:workouts'] = results[17].data || [];
   MEM['whoop:profile']  = results[18].data || null;
 
+  _habitsMetaColumn = habits.some(h => 'meta' in h);
   MEM['habits:list'] = habits.map(h => ({
     id: h.id, name: h.name, startDate: h.start_date || h.created_at?.slice(0,10), endDate: h.end_date,
     archived: h.archived, archivedAt: h.archived_at,
@@ -1220,6 +1231,7 @@ async function loadFromSupabase() {
     morningRoutine: h.morning_routine || false, nightRoutine: h.night_routine || false,
     runs: Array.isArray(h.runs) ? h.runs : [],
     trackType: h.track_type || 'checkbox', target: h.target || null,
+    ...(h.meta && h.meta.schedule ? { schedule: h.meta.schedule } : {}),
   }));
 
   logs.forEach(l => {

@@ -141,23 +141,136 @@ function _habitServedDays(habit) {
 function getHabitNotes(id)        { return MEM['habit_notes:' + id] || []; }
 function saveHabitNotes(id, notes) { MEM['habit_notes:' + id] = notes; _syncHabitNotes(id, notes); }
 
-// ── Habit sort mode ──
-function getHabitSort()      { return MEM['habit_sort_v1'] || 'custom'; }
-function setHabitSort(mode)  { MEM['habit_sort_v1'] = mode; _syncSetting('habit_sort_v1', mode); renderHabits(); }
+// ── Routines ──
+// Morning / Anytime / Night / End of day. The three flags are mutually
+// exclusive, so every habit sits in exactly one of these sections.
+const HABIT_ROUTINES = [['morning', 'Morning'], ['anytime', 'Anytime'], ['night', 'Night'], ['eod', 'End of day']];
+const HABIT_ROUTINE_TAG = { morning: 'Morning routine', night: 'Night routine', eod: 'End of day' };
+function _habitRoutine(h) {
+  return h.morningRoutine ? 'morning' : h.nightRoutine ? 'night' : h.endOfDay ? 'eod' : 'anytime';
+}
+function _setHabitRoutine(h, r) {
+  h.morningRoutine = r === 'morning';
+  h.nightRoutine   = r === 'night';
+  h.endOfDay       = r === 'eod';
+}
+function _habitGroupRank(h) {
+  return HABIT_ROUTINES.findIndex(([k]) => k === _habitRoutine(h));
+}
+
+// ── Schedules ──
+// No schedule = every day. {type:'days', days:[0-6]} (0 = Sunday) only asks
+// for those weekdays; {type:'weekly', times:N} asks for N days in each Mon–Sun
+// week and keeps its streak in weeks.
+function _habitSchedule(h) {
+  const s = h.schedule;
+  if (s && s.type === 'days' && Array.isArray(s.days) && s.days.length) return s;
+  if (s && s.type === 'weekly' && s.times > 0) return s;
+  return null;
+}
+function _habitIsWeekly(h) { const s = _habitSchedule(h); return !!s && s.type === 'weekly'; }
+function _habitTimes(h)    { return Math.max(1, Math.min(7, (h.schedule && h.schedule.times) || 1)); }
+function _dow(ds) { const [y, m, d] = ds.split('-').map(Number); return new Date(y, m - 1, d).getDay(); }
+// A weekday a pick-days habit doesn't ask for: it can't be missed, and it
+// neither extends nor breaks a streak.
+function _habitOffDay(h, ds) {
+  const s = _habitSchedule(h);
+  return !!s && s.type === 'days' && !s.days.includes(_dow(ds));
+}
+const _DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function _habitScheduleLabel(h) {
+  const s = _habitSchedule(h);
+  if (!s) return 'Every day';
+  if (s.type === 'weekly') return `${s.times}× a week`;
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const days = order.filter(d => s.days.includes(d));
+  if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Weekdays';
+  return days.map(d => _DOW_SHORT[d]).join(', ');
+}
+
+// Monday of the week `ds` falls in.
+function _weekStart(ds) { return _shiftDay(ds, -((_dow(ds) + 6) % 7)); }
+
+// One Mon–Sun week of a weekly habit, looked at up to `upTo`. Voided days each
+// excuse one of the week's required days; days before the start or after
+// archiving aren't available at all, so a part week asks for less.
+function _habitWeekStatus(h, ws, upTo) {
+  let done = 0, voided = 0, avail = 0;
+  for (let i = 0; i < 7; i++) {
+    const ds = _shiftDay(ws, i);
+    const inPlay = _habitInPriorRun(h, ds) || (ds >= (h.startDate || '0000-00-00') && !_habitRetiredOn(h, ds));
+    if (!inPlay) continue;
+    avail++;
+    if (ds > upTo) continue;
+    if (_habitDoneOn(h, ds)) done++;
+    else if (_habitVoidedOn(h.id, ds)) voided++;
+  }
+  const need = Math.max(0, Math.min(_habitTimes(h), avail) - voided);
+  return { done, need, avail, met: avail > 0 && done >= need };
+}
+
+// Weeks in a row that hit the goal. The current week counts once it's met and
+// never breaks the run while it's still in progress.
+function _habitWeekStreak(h) {
+  const today = habitDateStr(0);
+  let ws = _weekStart(today), n = 0;
+  if (_habitWeekStatus(h, ws, today).met) n++;
+  const first = _habitFirstDay(h);
+  for (let i = 0; i < 520; i++) {
+    ws = _shiftDay(ws, -7);
+    if (_shiftDay(ws, 6) < first) break;
+    const st = _habitWeekStatus(h, ws, _shiftDay(ws, 6));
+    if (st.avail === 0) continue;
+    if (!st.met) break;
+    n++;
+  }
+  return n;
+}
+
+// Earliest day the habit was ever active (its first run, or its start).
+function _habitFirstDay(h) {
+  let first = h.startDate || habitDateStr(0);
+  _habitRuns(h).forEach(r => { if (r.from < first) first = r.from; });
+  return first;
+}
+
+// ── Group + sort ──
+// Group: Routine sections or Area sections. Sort: order inside a section.
+// The old single setting ('area' was one of its sort modes) still reads right.
+function getHabitGroup() {
+  const g = MEM['habit_group_v1'];
+  if (g === 'routine' || g === 'area') return g;
+  return MEM['habit_sort_v1'] === 'area' ? 'area' : 'routine';
+}
+function setHabitGroup(g) { MEM['habit_group_v1'] = g; _syncSetting('habit_group_v1', g); renderHabits(); }
+function getHabitSort() {
+  const m = MEM['habit_sort_v1'];
+  return ['custom', 'az', 'newest', 'oldest'].includes(m) ? m : 'custom';
+}
+function setHabitSort(m) { MEM['habit_sort_v1'] = m; _syncSetting('habit_sort_v1', m); renderHabits(); }
 
 function _habitCreatedKey(h) { return h.createdAt || h.startDate || ''; }
 
-// Morning / (untoggled) / Night / End-of-Day — the three routine flags are
-// mutually exclusive, so this places each habit in exactly one of four bands.
-function _habitGroupRank(h) {
-  return h.morningRoutine ? 0 : h.nightRoutine ? 2 : h.endOfDay ? 3 : 1;
+// Section a habit belongs to under the current grouping.
+function _habitGroupKey(h, group) {
+  if (group === 'area') return getAreas().some(a => a.name === h.area) ? h.area : '';
+  return _habitRoutine(h);
+}
+function _habitGroupIndex(h, group) {
+  if (group === 'area') {
+    const areas = getAreas();
+    const i = areas.findIndex(a => a.name === h.area);
+    return i < 0 ? areas.length : i;
+  }
+  return _habitGroupRank(h);
 }
 
 // Returns a new array sorted for display. `MEM['habits:list']` is never mutated —
 // its order is the canonical "custom" order and the tiebreak for the other modes.
 function _sortHabitsForDisplay(list, mode) {
-  const pos = new Map(list.map((h, i) => [h.id, i]));
-  const byCustom = (a, b) => pos.get(a.id) - pos.get(b.id);
+  const pos = new Map(getHabits().map((h, i) => [h.id, i]));
+  const p = h => pos.has(h.id) ? pos.get(h.id) : Infinity;
+  const byCustom = (a, b) => p(a) - p(b);
   const arr = [...list];
   if (mode === 'az') {
     arr.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || byCustom(a, b));
@@ -165,51 +278,32 @@ function _sortHabitsForDisplay(list, mode) {
     arr.sort((a, b) => _habitCreatedKey(b).localeCompare(_habitCreatedKey(a)) || byCustom(a, b));
   } else if (mode === 'oldest') {
     arr.sort((a, b) => _habitCreatedKey(a).localeCompare(_habitCreatedKey(b)) || byCustom(a, b));
-  } else if (mode === 'area') {
-    arr.sort((a, b) => {
-      const aa = a.area || '', ba = b.area || '';
-      if (!!aa !== !!ba) return aa ? -1 : 1;            // no-area group last
-      return aa.localeCompare(ba, undefined, { sensitivity: 'base' }) || byCustom(a, b);
-    });
-  } else if (mode === 'custom') {
-    // Morning-routine habits first, then untoggled, then Night-routine, then
-    // End-of-Day — custom drag order is the tiebreak within each band.
-    arr.sort((a, b) => _habitGroupRank(a) - _habitGroupRank(b) || byCustom(a, b));
+  } else {
+    arr.sort(byCustom);
   }
-  return arr; // unknown mode → stored order
+  return arr;
 }
 
-const _HABIT_SORT_MODES = [
-  ['custom', 'Custom'], ['az', 'A–Z'], ['area', 'Area'], ['newest', 'Newest'], ['oldest', 'Oldest'],
-];
-
-function _habitSortBarHTML() {
-  const mode = getHabitSort();
-  return `<div class="habit-sort-bar"><span class="habit-sort-label">Sort By:</span>${
-    _HABIT_SORT_MODES.map(([v, l]) =>
-      `<button class="habit-sort-btn${v === mode ? ' active' : ''}" data-sort="${v}">${l}</button>`).join('')
-  }</div>`;
-}
-
-function _syncHabitSortButtons() {
-  const mode = getHabitSort();
-  document.querySelectorAll('.habit-sort-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.sort === mode));
+// Group order first, then the chosen sort inside each group.
+function _orderHabits(list) {
+  const group = getHabitGroup();
+  const sorted = _sortHabitsForDisplay(list, getHabitSort());
+  const idx = new Map(sorted.map((h, i) => [h.id, i]));
+  return sorted.sort((a, b) => _habitGroupIndex(a, group) - _habitGroupIndex(b, group) || idx.get(a.id) - idx.get(b.id));
 }
 
 // Shared drag-reorder handler for both the tracker list and the day-detail checklist.
 // `fromEl`/`toEl` are the dragged and drop-target row elements (keyed by data-habit-id).
 function _reorderHabitByDrag(fromEl, toEl) {
-  const m = getHabitSort();
-  if (m !== 'custom' && m !== 'area') return;
+  if (getHabitSort() !== 'custom') return;
   const fromId = fromEl.dataset.habitId, toId = toEl.dataset.habitId;
   if (!fromId || !toId || fromId === toId) return;
   const list    = getHabits();
   const dragged = list.find(h => h.id === fromId);
   const target  = list.find(h => h.id === toId);
   if (!dragged || !target) return;
-  if (m === 'area' && (dragged.area || null) !== (target.area || null)) return;
-  if (m === 'custom' && _habitGroupRank(dragged) !== _habitGroupRank(target)) return;
+  const group = getHabitGroup();
+  if (_habitGroupKey(dragged, group) !== _habitGroupKey(target, group)) return;
   const next = list.filter(h => h.id !== fromId);
   next.splice(next.indexOf(target), 0, dragged);
   saveHabits(next);
@@ -276,6 +370,8 @@ function _habitStreakEndingOn(habit, endDs) {
     else if (_habitDoneOn(habit, ds)) { streak++; ds = _shiftDay(ds, -1); }
     // Voided day — excused, so carry the streak across it without crediting it.
     else if (_habitVoidedOn(habit.id, ds)) { ds = _shiftDay(ds, -1); }
+    // Off day of a pick-days habit — it wasn't asked for, so it carries too.
+    else if (_habitOffDay(habit, ds) && ds >= (habit.startDate || ds)) { ds = _shiftDay(ds, -1); }
     else break;
   }
   return streak;
@@ -293,7 +389,8 @@ function habitStreak(habitId) {
 // whenever there's nothing to report (yesterday was fine, or nothing preceded it).
 function _habitRecentlyBroken(habit) {
   const today = habitDateStr(0);
-  const yesterday = _shiftDay(today, -1);
+  let yesterday = _shiftDay(today, -1);
+  for (let i = 0; i < 6 && _habitOffDay(habit, yesterday); i++) yesterday = _shiftDay(yesterday, -1);
   if (!_habitScheduledOn(habit, yesterday)) return 0;
   if (_habitDoneOn(habit, yesterday)) return 0;
   if (_habitVoidedOn(habit.id, yesterday)) return 0;
@@ -314,6 +411,7 @@ function _habitDormantDays(habit) {
   let days = 0;
   let ds = _shiftDay(habitDateStr(0), -1);
   for (let i = 0; i < 3650; i++) {
+    if (_habitOffDay(habit, ds) && ds >= (habit.startDate || ds)) { ds = _shiftDay(ds, -1); continue; }
     if (!_habitScheduledOn(habit, ds)) return { days, everDone: false };
     if (_habitDoneOn(habit, ds)) return { days, everDone: true };
     if (_habitVoidedOn(habit.id, ds)) { ds = _shiftDay(ds, -1); continue; }
@@ -381,39 +479,66 @@ function _deleteHabit(habit, allHabits) {
   renderHabits();
 }
 
-function getCurrentWeekDates() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now);
-    d.setDate(now.getDate() + diffToMonday + i);
-    return _localDateStr(d);
-  });
+// The last 7 days, oldest first, ending today.
+function _habitLast7() {
+  const today = habitDateStr(0);
+  return Array.from({ length: 7 }, (_, i) => _shiftDay(today, i - 6));
 }
 
-function buildHabitRow(habit, allHabits, isArchived, canDrag) {
-  const today    = habitDateStr(0);
-  const todayLog = getHabitLog(today);
-  const done     = _habitDoneOn(habit, today);
-  const streak   = habitStreak(habit.id);
-  const brokenN  = (!done && streak === 0) ? _habitRecentlyBroken(habit) : 0;
-  const dormant  = (!done && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
+// Is today's row done? A weekly habit also counts as done for the day once its
+// week's goal is met.
+function _habitRowDone(h, today) {
+  return _habitDoneOn(h, today) ||
+    (_habitIsWeekly(h) && _habitWeekStatus(h, _weekStart(today), today).met);
+}
+
+function _habitDayLabel(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+const _HAB_RING_R = 10.5;
+function _habitRingHtml(count, target) {
+  const C = 2 * Math.PI * _HAB_RING_R;
+  const p = Math.min(1, count / target);
+  const full = count >= target;
+  return `<svg viewBox="0 0 26 26" aria-hidden="true">
+      <circle cx="13" cy="13" r="${_HAB_RING_R}" class="hab-ring-track${full ? ' is-full' : ''}"></circle>
+      <circle cx="13" cy="13" r="${_HAB_RING_R}" class="hab-ring-fill" stroke-dasharray="${p * C} ${C}"></circle>
+    </svg><b>${full ? '✓' : '+'}</b>`;
+}
+
+// One row of the Today list. `opts.inDone` marks a row in the Done today group
+// (it then shows its routine tag); `opts.preview` builds an inert copy for the
+// add-habit modal.
+function buildHabitRow(habit, allHabits, opts) {
+  opts = opts || {};
+  const preview = !!opts.preview;
+  const today     = habitDateStr(0);
+  const weekly    = _habitIsWeekly(habit);
+  const doneToday = _habitDoneOn(habit, today);
+  const rowDone   = _habitRowDone(habit, today);
+  const isVoided  = _habitVoidedOn(habit.id, today);
+  const streak    = weekly ? 0 : habitStreak(habit.id);
+  const brokenN   = (!weekly && !doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
+  const dormant   = (!weekly && !doneToday && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
+  const isIncrement = _isIncrementHabit(habit);
+  const target    = _habitTarget(habit);
+  const count     = isIncrement ? getHabitCount(today, habit.id) : 0;
 
   const isTimed   = !!habit.endDate;
   const dayNum    = _habitDayNum(habit, today);
-  const isVoided  = _habitVoidedOn(habit.id, today);
   const totalDays = isTimed ? _habitTotalDays(habit) : null;
   const pct       = isTimed ? Math.min(100, Math.max(0, (dayNum - 1) / Math.max(totalDays - 1, 1) * 100)) : null;
   const isExpired = isTimed && today > habit.endDate;
 
   const li = document.createElement('li');
-  li.className = 'habit-row' + (done ? ' is-done' : '') + (isArchived ? ' is-archived' : '')
-    + (isVoided ? ' is-voided' : '');
+  li.className = 'hab-row' + (rowDone ? ' is-done' : '') + (isVoided && !rowDone ? ' is-voided' : '');
   li.dataset.habitId = habit.id;
 
-  // Drag-to-reorder — only in Custom / By-area modes, not-done active habits
-  if (!isArchived && canDrag && !done) {
+  const refresh = () => _flipRows(document.getElementById('habitList'), '.hab-row', renderHabits);
+
+  if (opts.canDrag && !preview) {
     li.draggable = true;
     const drag = document.createElement('span');
     drag.className = 'habit-drag-handle';
@@ -422,222 +547,405 @@ function buildHabitRow(habit, allHabits, isArchived, canDrag) {
     li.appendChild(drag);
   }
 
-  // Checkbox (disabled if archived)
-  const cbWrap = document.createElement('label');
-  cbWrap.className = 'habit-cb-wrap';
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = done;
-  if (isArchived) cb.disabled = true;
-  const cbBox = document.createElement('span');
-  cbBox.className = 'habit-cb-box';
-  cbWrap.appendChild(cb);
-  cbWrap.appendChild(cbBox);
-  if (!isArchived) {
-    cb.addEventListener('change', () => {
-      _toggleHabitDone(today, habit);
-      _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits);
+  // Check-in control: a checkbox, or a progress ring that adds one per click.
+  if (isIncrement) {
+    const ring = document.createElement('button');
+    ring.type = 'button';
+    ring.className = 'hab-ring';
+    ring.innerHTML = _habitRingHtml(count, target);
+    ring.setAttribute('aria-label', `Add one to ${habit.name} (${count} of ${target})`);
+    ring.title = count >= target ? 'Click to reset to 0' : 'Click for +1';
+    if (preview) ring.tabIndex = -1;
+    else ring.addEventListener('click', () => {
+      const next = count >= target ? 0 : count + 1;
+      setHabitCount(today, habit, next);
+      refresh();
+      if (next === target) showToast(`${habit.name} · ${target}/${target} done`);
     });
+    li.appendChild(ring);
+  } else {
+    const cbWrap = document.createElement('label');
+    cbWrap.className = 'habit-cb-wrap';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = doneToday;
+    cb.setAttribute('aria-label', (doneToday ? 'Uncheck ' : 'Check off ') + habit.name);
+    if (preview) { cb.tabIndex = -1; cb.disabled = true; }
+    const cbBox = document.createElement('span');
+    cbBox.className = 'habit-cb-box';
+    cbWrap.appendChild(cb);
+    cbWrap.appendChild(cbBox);
+    if (!preview) cb.addEventListener('change', () => { _toggleHabitDone(today, habit); refresh(); });
+    li.appendChild(cbWrap);
   }
-  li.appendChild(cbWrap);
 
-  // Name column
-  const nameCol = document.createElement('div');
-  nameCol.className = 'habit-name-col';
-
+  // Name, day badge and states
+  const main = document.createElement('div');
+  main.className = 'hab-main';
+  const line = document.createElement('div');
+  line.className = 'hab-line';
   const name = document.createElement('span');
-  name.className = 'habit-name';
+  name.className = 'hab-name';
   name.textContent = habit.name;
+  if (!preview) name.addEventListener('click', () => openHabitDetail(habit.id));
+  line.appendChild(name);
+  if (isIncrement) {
+    const step = document.createElement('span');
+    step.className = 'hab-step';
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.textContent = '−';
+    minus.setAttribute('aria-label', 'Remove one');
+    minus.disabled = preview || count <= 0;
+    if (!preview) minus.addEventListener('click', () => { setHabitCount(today, habit, count - 1); refresh(); });
+    step.appendChild(minus);
+    step.appendChild(document.createTextNode(`${count}/${target}`));
+    line.appendChild(step);
+  }
+  const rt = HABIT_ROUTINE_TAG[_habitRoutine(habit)];
+  if (opts.inDone && rt) {
+    const t = document.createElement('span');
+    t.className = 'habit-meta-tag rt-' + _habitRoutine(habit);
+    t.textContent = rt;
+    line.appendChild(t);
+  }
+  main.appendChild(line);
 
-  nameCol.addEventListener('click', () => openHabitDetail(habit.id));
-  nameCol.appendChild(name);
-
-  // Meta line
   const meta = document.createElement('div');
   meta.className = 'habit-meta';
+  const tag = (cls, text, title) => {
+    const t = document.createElement('span');
+    t.className = 'habit-meta-tag ' + cls;
+    t.textContent = text;
+    if (title) t.title = title;
+    meta.appendChild(t);
+  };
+  if (isTimed) tag(isExpired ? 'expired' : 'timed', isExpired ? `Expired · ${totalDays}d run` : `Day ${dayNum} of ${totalDays}`);
+  else tag('ongoing', `Day ${dayNum}`);
+  if (weekly) {
+    const st = _habitWeekStatus(habit, _weekStart(today), today);
+    const bars = document.createElement('span');
+    bars.className = 'hab-wkgoal';
+    bars.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < _habitTimes(habit); i++) {
+      const u = document.createElement('u');
+      if (i < st.done) u.className = 'f';
+      bars.appendChild(u);
+    }
+    meta.appendChild(bars);
+    const t = document.createElement('span');
+    t.className = 'hab-meta-text';
+    t.textContent = `${Math.min(st.done, _habitTimes(habit))} of ${_habitTimes(habit)} this week`;
+    meta.appendChild(t);
+  } else if (_habitSchedule(habit)) {
+    tag('sched', _habitScheduleLabel(habit));
+  }
+  if (isVoided && !rowDone) tag('voided', 'Voided today', "This day is excused — it won't break the streak or count against you");
+  else if (!rowDone && brokenN > 0) tag('ended', `streak ended at ${brokenN}`, `You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one.`);
+  else if (!rowDone && dormant && dormant.days >= 2) tag('idle', `${dormant.days}d idle`, dormant.everDone
+    ? `You haven't done this in ${dormant.days} days.`
+    : `You haven't started this yet — it's been sitting for ${dormant.days} days.`);
+  else if (!rowDone && !weekly && dayNum === 1 && streak === 0) tag('new', 'new');
+  if (isIncrement && !rowDone && count < target) {
+    const t = document.createElement('span');
+    t.className = 'hab-meta-text';
+    t.textContent = `${target - count} to go`;
+    meta.appendChild(t);
+  }
+  main.appendChild(meta);
 
-  const tag = document.createElement('span');
-  if (isArchived) {
-    tag.className = 'habit-meta-tag';
-    const archivedDays = habit.archivedAt ? _habitServedDays(habit) : '?';
-    tag.textContent = `Completed · ${archivedDays}d`;
-  } else if (isTimed) {
-    tag.className = isExpired ? 'habit-meta-tag expired' : 'habit-meta-tag timed';
-    tag.textContent = isExpired
-      ? `Expired · ${totalDays}d run`
-      : `Day ${dayNum} of ${totalDays}`;
-  } else {
-    tag.className = 'habit-meta-tag ongoing';
-    tag.textContent = `Day ${dayNum}`;
-  }
-  meta.appendChild(tag);
-  if (_isIncrementHabit(habit)) {
-    const countTag = document.createElement('span');
-    countTag.className = 'habit-meta-tag count';
-    countTag.textContent = `${getHabitCount(today, habit.id)} / ${_habitTarget(habit)}`;
-    meta.appendChild(countTag);
-  }
-  if (isVoided) {
-    const voidTag = document.createElement('span');
-    voidTag.className = 'habit-meta-tag voided';
-    voidTag.textContent = 'Voided today';
-    voidTag.title = "This day is excused — it won't break the streak or count against you";
-    meta.appendChild(voidTag);
-  }
-  if (habit.endOfDay) {
-    const eodTag = document.createElement('span');
-    eodTag.className = 'habit-meta-tag eod';
-    eodTag.textContent = 'End of Day';
-    meta.appendChild(eodTag);
-  }
-  if (habit.morningRoutine) {
-    const morningTag = document.createElement('span');
-    morningTag.className = 'habit-meta-tag morning';
-    morningTag.textContent = 'Morning Routine';
-    meta.appendChild(morningTag);
-  }
-  if (habit.nightRoutine) {
-    const nightTag = document.createElement('span');
-    nightTag.className = 'habit-meta-tag night';
-    nightTag.textContent = 'Night Routine';
-    meta.appendChild(nightTag);
-  }
-  nameCol.appendChild(meta);
-
-  // Progress bar for timed habits
-  if (isTimed && !isArchived) {
-    const barWrap = document.createElement('div');
-    barWrap.className = 'habit-progress-wrap';
+  if (isTimed && !rowDone) {
+    const bar = document.createElement('div');
+    bar.className = 'habit-progress-wrap';
     const fill = document.createElement('div');
     fill.className = 'habit-progress-fill' + (pct >= 100 ? ' complete' : '');
     fill.style.width = pct + '%';
-    barWrap.appendChild(fill);
-    nameCol.appendChild(barWrap);
+    bar.appendChild(fill);
+    main.appendChild(bar);
   }
 
-  li.appendChild(nameCol);
+  if (!preview) {
+    const hov = document.createElement('div');
+    hov.className = 'hab-hover';
+    const vBtn = document.createElement('button');
+    vBtn.type = 'button';
+    vBtn.textContent = isVoided ? 'Un-void' : '∅ Void today';
+    vBtn.addEventListener('click', () => {
+      const ids = getHabitVoids(today);
+      const i = ids.indexOf(habit.id);
+      if (i === -1) ids.push(habit.id); else ids.splice(i, 1);
+      saveHabitVoids(today, ids);
+      refresh();
+      showToast(i === -1 ? `Voided ${habit.name} for today` : `${habit.name} counts again today`);
+    });
+    const dBtn = document.createElement('button');
+    dBtn.type = 'button';
+    dBtn.textContent = 'Details →';
+    dBtn.addEventListener('click', () => openHabitDetail(habit.id));
+    hov.appendChild(vBtn);
+    hov.appendChild(dBtn);
+    main.appendChild(hov);
+  }
+  li.appendChild(main);
 
-  // Area pill
-  if (!isArchived) {
-    li.appendChild(buildAreaPill(habit.area || null, newArea => {
+  // Area pill — in its old spot, just before the week strip
+  const areaCell = document.createElement('span');
+  areaCell.className = 'hab-area';
+  if (preview) {
+    const a = getAreas().find(x => x.name === habit.area);
+    if (a) {
+      const pill = document.createElement('span');
+      pill.className = 'task-area-pill';
+      pill.textContent = a.name;
+      pill.style.background = a.color + 'BF';
+      pill.style.color = '#fff';
+      areaCell.appendChild(pill);
+    }
+  } else {
+    areaCell.appendChild(buildAreaPill(habit.area || null, newArea => {
       habit.area = newArea;
       saveHabits(allHabits);
       renderHabits();
     }));
   }
+  li.appendChild(areaCell);
 
-  // Weekly dots (Mon–Sun of current week)
-  const last7 = getCurrentWeekDates();
-  const week = document.createElement('div');
-  week.className = 'habit-week';
-  last7.forEach(ds => {
-    const dot = document.createElement('div');
-    const dotDone = _habitDoneOn(habit, ds);
-    const dotVoided = _habitVoidedOn(habit.id, ds);
-    const dotFuture = ds > today;
-    const dotRetired = _habitRetiredOn(habit, ds);
-    const dotBeforeStart = ds < (habit.startDate || today);
-    const dotIsToday = ds === today;
-    const dotStreakBroke = brokenN > 0 && ds === _shiftDay(today, -1);
-    dot.className = 'habit-day-dot' +
-      (dotRetired ? '' : dotDone ? ' done' : dotVoided ? ' voided'
-        : (!dotFuture && !dotBeforeStart && !dotIsToday ? ' missed' : '')) +
-      (dotStreakBroke ? ' streak-broke' : '') +
-      (dotIsToday && !dotRetired ? ' today-dot' : '');
-    if (dotVoided && !dotDone) dot.title = 'Voided';
+  // Last 7 days, today last
+  const week = document.createElement('span');
+  week.className = 'hab-week';
+  week.setAttribute('aria-label', 'Last 7 days');
+  _habitLast7().forEach(ds => {
+    const dot = document.createElement('u');
+    const inPlay = _habitInPriorRun(habit, ds) || (ds >= (habit.startDate || today) && !_habitRetiredOn(habit, ds));
+    let cls = '';
+    if (!inPlay || _habitOffDay(habit, ds)) cls = 'off';
+    else if (_habitDoneOn(habit, ds)) cls = 'done';
+    else if (_habitVoidedOn(habit.id, ds)) cls = 'voided';
+    else if (ds !== today && !weekly) cls = 'missed';
+    if (ds === today) cls += ' today';
+    dot.className = cls.trim();
+    dot.title = _habitDayLabel(ds);
     week.appendChild(dot);
   });
   li.appendChild(week);
 
-  // Streak (also acts as today's check-in toggle)
+  // Streak
   const streakEl = document.createElement('span');
-  streakEl.className = 'habit-streak';
-  const displayStreak = done ? streak + 1 : streak;   // habitStreak() stops at yesterday
-  if (displayStreak > 0) {
-    streakEl.innerHTML = _fireStreakBadgeHtml(displayStreak, { size: 'row' });
-    streakEl.title = done ? 'Click to uncheck today' : 'Click to check in today';
-  } else if (brokenN > 0) {
-    streakEl.innerHTML = _fireStreakBadgeHtml(0, { size: 'row', ember: true });
-    streakEl.title = `You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one.`;
-  } else if (dormant && dormant.days >= 2) {
-    streakEl.innerHTML = _fireStreakBadgeHtml(dormant.days, { size: 'row', dormant: true });
-    streakEl.title = dormant.everDone
-      ? `You haven't done this in ${dormant.days} days. Check in today to start fresh.`
-      : `You haven't started this yet — it's been sitting for ${dormant.days} days.`;
+  streakEl.className = 'hab-streak';
+  if (weekly) {
+    const w = _habitWeekStreak(habit);
+    streakEl.innerHTML = w > 0 ? _fireStreakBadgeHtml(w, { size: 'row', suffix: 'w' })
+      : '<span class="hab-streak-none">–</span>';
+    streakEl.title = w > 0 ? `${w} week${w === 1 ? '' : 's'} in a row at ${_habitTimes(habit)}×` : 'No full weeks yet';
   } else {
-    // No image here, but keep the same icon-slot + num-slot layout as the
-    // flame badges so the dash lands in the flame's column, not the number's.
-    streakEl.innerHTML = `<span class="habit-flame-badge habit-flame-badge--row">
-      <span class="habit-flame-placeholder">–</span>
-      <span class="habit-flame-num"></span>
-    </span>`;
-    streakEl.title = 'Click to check in today';
-  }
-  if (!isArchived) {
-    streakEl.style.cursor = 'pointer';
-    streakEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      _toggleHabitDone(today, habit);
-      setTimeout(() => _flipRows(document.getElementById('habitList'), '.habit-row', renderHabits), 0);
-    });
+    const displayStreak = doneToday ? streak + 1 : streak;   // habitStreak() stops at yesterday
+    if (displayStreak > 0) {
+      streakEl.innerHTML = _fireStreakBadgeHtml(displayStreak, { size: 'row' });
+      streakEl.title = `${displayStreak}-day streak`;
+    } else if (brokenN > 0) {
+      streakEl.innerHTML = _fireStreakBadgeHtml(0, { size: 'row', ember: true });
+      streakEl.title = `A ${brokenN}-day streak ended yesterday`;
+    } else if (dormant && dormant.days >= 2) {
+      streakEl.innerHTML = _fireStreakBadgeHtml(dormant.days, { size: 'row', dormant: true });
+      streakEl.title = `Not done in ${dormant.days} days`;
+    } else {
+      streakEl.innerHTML = '<span class="hab-streak-none">–</span>';
+    }
   }
   li.appendChild(streakEl);
-
-  if (isArchived) {
-    // Restart button — the counterpart to the archive check on active rows
-    const restartBtn = document.createElement('button');
-    restartBtn.className = 'habit-restart-btn';
-    restartBtn.textContent = '↺';
-    restartBtn.title = 'Start this habit again from today';
-    restartBtn.addEventListener('click', () => _restartHabit(habit, allHabits));
-    li.appendChild(restartBtn);
-  }
 
   return li;
 }
 
+// A finished (archived) habit: its run, and a way to start it again.
+function _buildArchivedRow(habit, allHabits) {
+  const li = document.createElement('li');
+  li.className = 'hab-arow';
+  const name = document.createElement('button');
+  name.type = 'button';
+  name.className = 'hab-arow-name';
+  name.textContent = habit.name;
+  name.addEventListener('click', () => openHabitDetail(habit.id));
+  const tag = document.createElement('span');
+  tag.className = 'habit-meta-tag';
+  const days = habit.archivedAt ? _habitServedDays(habit) : '?';
+  tag.textContent = `${days} days` + (habit.startDate && habit.archivedAt
+    ? ` · ${_habitDayLabel(_habitFirstDay(habit))}–${_habitDayLabel(_shiftDay(String(habit.archivedAt).slice(0, 10), -1))}` : '');
+  const restart = document.createElement('button');
+  restart.type = 'button';
+  restart.className = 'hab-restart';
+  restart.textContent = '↺ Start again';
+  restart.addEventListener('click', () => _restartHabit(habit, allHabits));
+  li.append(name, tag, restart);
+  return li;
+}
+
+function _habitSectionHead(label, doneN, totalN, opts) {
+  opts = opts || {};
+  const head = document.createElement('div');
+  head.className = 'hab-group-head';
+  if (opts.color) {
+    const dot = document.createElement('span');
+    dot.className = 'hab-group-dot';
+    dot.style.background = opts.color;
+    head.appendChild(dot);
+  }
+  const h3 = document.createElement('h3');
+  h3.textContent = label;
+  if (opts.routine) h3.className = 'rt-' + opts.routine;
+  if (opts.color) h3.style.color = opts.color;
+  head.appendChild(h3);
+  const ct = document.createElement('span');
+  ct.className = 'hab-group-ct' + (totalN && doneN >= totalN ? ' all' : '');
+  ct.textContent = totalN == null ? String(doneN) : `${doneN}/${totalN}`;
+  head.appendChild(ct);
+  if (opts.note) {
+    const n = document.createElement('span');
+    n.className = 'hab-group-note';
+    n.textContent = opts.note;
+    head.appendChild(n);
+  }
+  const rule = document.createElement('span');
+  rule.className = 'hab-group-rule';
+  head.appendChild(rule);
+  return head;
+}
+
+// Share of counted habits done on `ds`, or null if nothing counted that day.
+function _habitDayPct(habits, ds, today) {
+  const counted = _habitsCountedOn(habits, ds, today);
+  if (!counted.length) return null;
+  const done = counted.filter(h => _habitDoneOn(h, ds)).length;
+  return Math.round(done / counted.length * 100);
+}
+
+function _renderHabitHeader(all, active, today) {
+  const counted = _habitsCountedOn(active, today, today);
+  const done    = counted.filter(h => _habitDoneOn(h, today)).length;
+  document.getElementById('habTodayLabel').textContent = new Date().toLocaleDateString('en-US',
+    { weekday: 'short', month: 'short', day: 'numeric' });
+  const num = document.getElementById('habCountNum');
+  num.textContent = `${done}/${counted.length}`;
+  document.getElementById('habitCard').classList.toggle('hab-all-done', counted.length > 0 && done === counted.length);
+
+  const morningLeft = active.filter(h => _habitRoutine(h) === 'morning' && !_habitOffDay(h, today) &&
+    !_habitRowDone(h, today) && !_habitVoidedOn(h.id, today)).length;
+  const voids = active.filter(h => _habitVoidedOn(h.id, today)).length;
+  const eod   = active.filter(h => h.endOfDay && _habitScheduledOn(h, today) && !_habitDoneOn(h, today));
+  const bits = [];
+  if (counted.length && done === counted.length) bits.push('<em class="ok">All done for today</em>');
+  else if (morningLeft) bits.push(`<em>${morningLeft} left from your morning routine</em>`);
+  if (voids) bits.push(`${voids} voided`);
+  if (eod.length === 1) bits.push(`“${_esc(eod[0].name)}” counts once the day ends`);
+  else if (eod.length > 1) bits.push(`${eod.length} end-of-day habits count once the day ends`);
+  document.getElementById('habSub').innerHTML = bits.join(' · ');
+
+  // Last 7 days, same counting rule as the calendar rings.
+  const days = _habitLast7().map(ds => _habitDayPct(all, ds, today));
+  const vals = days.filter(v => v != null);
+  const pill = document.getElementById('habWeekPill');
+  pill.hidden = !vals.length;
+  document.getElementById('habWeekBars').innerHTML = days.map(v =>
+    `<u style="height:${Math.max(2, Math.round((v || 0) / 100 * 14))}px"${v == null ? ' class="none"' : ''}></u>`).join('');
+  document.getElementById('habWeekPct').textContent = vals.length
+    ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) + '%' : '–';
+}
+
 function renderHabits() {
-  const all      = getHabits();
-  const mode     = getHabitSort();
-  const canDrag  = mode === 'custom' || mode === 'area';
-  const today     = habitDateStr(0);
-  const doneToday = new Set(getHabitLog(today));
-  let active     = _sortHabitsForDisplay(all.filter(h => !h.archived), mode);
-  // Done rows slide to the bottom; voided-today rows sit just above them.
-  const _rank = h => doneToday.has(h.id) ? 2 : _habitVoidedOn(h.id, today) ? 1 : 0;
-  active = [...active].sort((a, b) => _rank(a) - _rank(b));
-  const archived = _sortHabitsForDisplay(all.filter(h => h.archived), mode);
-  const listEl   = document.getElementById('habitList');
-  const emptyEl  = document.getElementById('habitEmpty');
-  const archToggle = document.getElementById('archivedToggle');
-  const archList   = document.getElementById('archivedList');
+  const all     = getHabits();
+  const today   = habitDateStr(0);
+  const group   = getHabitGroup();
+  const sort    = getHabitSort();
+  const active  = all.filter(h => !h.archived);
+  const archived = _sortHabitsForDisplay(all.filter(h => h.archived), sort);
+  const listEl  = document.getElementById('habitList');
+  const emptyEl = document.getElementById('habitEmpty');
 
-  _syncHabitSortButtons();
-  listEl.innerHTML  = '';
-  archList.innerHTML = '';
+  document.querySelectorAll('.hab-group-btn').forEach(b => {
+    const on = b.dataset.group === group;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on);
+  });
+  document.getElementById('habSortSel').value = sort;
+  document.getElementById('habColDays').innerHTML = _habitLast7().map((ds, i) =>
+    `<span${i === 6 ? ' class="today"' : ''}>${'SMTWTFS'[_dow(ds)]}</span>`).join('');
 
-  if (active.length === 0) {
-    emptyEl.style.display = 'block';
-    listEl.style.display  = 'none';
-  } else {
-    emptyEl.style.display = 'none';
-    listEl.style.display  = '';
-    active.forEach(h => listEl.appendChild(buildHabitRow(h, all, false, canDrag)));
+  _renderHabitHeader(all, active, today);
+
+  // A pick-days habit on one of its off days sits out of today's list.
+  const offToday = active.filter(h => _habitOffDay(h, today) && !_habitDoneOn(h, today));
+  const shown    = active.filter(h => !offToday.includes(h));
+  const isDone   = h => _habitRowDone(h, today);
+  const canDrag  = sort === 'custom';
+
+  listEl.innerHTML = '';
+  emptyEl.style.display = active.length ? 'none' : 'block';
+  document.getElementById('habCols').style.display = shown.length ? '' : 'none';
+
+  const sections = group === 'area'
+    ? getAreas().map(a => ({ key: a.name, label: a.name, color: a.color })).concat({ key: '', label: 'No area' })
+    : HABIT_ROUTINES.map(([k, l]) => ({ key: k, label: l, routine: k }));
+
+  sections.forEach(sec => {
+    const members = shown.filter(h => _habitGroupKey(h, group) === sec.key);
+    const open = _sortHabitsForDisplay(members.filter(h => !isDone(h)), sort);
+    if (!open.length) return;
+    // Voided-today rows sit at the bottom of their section.
+    open.sort((a, b) => _habitVoidedOn(a.id, today) - _habitVoidedOn(b.id, today));
+    const counting = members.filter(h => !(_habitVoidedOn(h.id, today) && !isDone(h)));
+    const wrap = document.createElement('div');
+    wrap.className = 'hab-group';
+    wrap.appendChild(_habitSectionHead(sec.label, counting.filter(isDone).length, counting.length, {
+      routine: sec.routine, color: sec.color,
+      note: sec.key === 'eod' && group === 'routine' ? 'counts once the day ends' : '',
+    }));
+    const ul = document.createElement('ul');
+    ul.className = 'hab-list';
+    open.forEach(h => ul.appendChild(buildHabitRow(h, all, { canDrag: canDrag && !_habitVoidedOn(h.id, today) })));
+    wrap.appendChild(ul);
+    listEl.appendChild(wrap);
+  });
+
+  // Done today — everything finished drops all the way down, in section order.
+  const doneRows = _orderHabits(shown.filter(isDone));
+  if (doneRows.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'hab-group hab-group-done';
+    wrap.appendChild(_habitSectionHead('Done today', doneRows.length, null));
+    const ul = document.createElement('ul');
+    ul.className = 'hab-list';
+    doneRows.forEach(h => ul.appendChild(buildHabitRow(h, all, { inDone: true })));
+    wrap.appendChild(ul);
+    listEl.appendChild(wrap);
+  }
+
+  if (offToday.length) {
+    const off = document.createElement('div');
+    off.className = 'hab-offday';
+    off.append('Not scheduled today: ');
+    _orderHabits(offToday).forEach((h, i) => {
+      if (i) off.append(', ');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = h.name;
+      b.title = _habitScheduleLabel(h);
+      b.addEventListener('click', () => openHabitDetail(h.id));
+      off.appendChild(b);
+    });
+    listEl.appendChild(off);
   }
 
   if (!listEl._dragWired) {
     listEl._dragWired = true;
-    wireDragReorder(listEl, 'habit-row', _reorderHabitByDrag);
+    wireDragReorder(listEl, 'hab-row', _reorderHabitByDrag);
   }
 
-  if (archived.length === 0) {
-    archToggle.style.display = 'none';
-  } else {
-    archToggle.style.display = '';
-    document.getElementById('archivedToggleLabel').textContent =
-      `Completed habits (${archived.length})`;
-    archived.forEach(h => archList.appendChild(buildHabitRow(h, all, true, false)));
-  }
+  const archDetails = document.getElementById('archivedToggle');
+  const archList = document.getElementById('archivedList');
+  archList.innerHTML = '';
+  archDetails.hidden = !archived.length;
+  document.getElementById('archivedToggleLabel').textContent = `Completed habits · ${archived.length}`;
+  archived.forEach(h => archList.appendChild(_buildArchivedRow(h, all)));
 
   renderHabitOverviewCalendar();
 
@@ -658,6 +966,7 @@ let _hcalMonth = null; // { year, month }
 
 // Was this habit scheduled on date `ds`? (started, not yet ended, not yet archived)
 function _habitScheduledOn(h, ds) {
+  if (_habitOffDay(h, ds)) return false;       // a weekday a pick-days habit skips
   if (_habitInPriorRun(h, ds)) return true;   // a finished run — its history stands
   const start = h.startDate || '0000-00-00';
   if (ds < start) return false;
@@ -679,7 +988,8 @@ function _habitRetiredOn(h, ds) {
 function _habitsCountedOn(habits, ds, today) {
   return habits.filter(h => _habitScheduledOn(h, ds)
     && !(h.endOfDay && ds === today)
-    && !_habitVoidedOn(h.id, ds));
+    && !_habitVoidedOn(h.id, ds)
+    && !(_habitIsWeekly(h) && !_habitDoneOn(h, ds)));
 }
 
 // Completion-ring colour: a continuous ramp through four regions — red, orange,
@@ -757,7 +1067,7 @@ function _fireStreakBadgeHtml(count, opts) {
   const tier = _fireStreakTier(count);
   return `<span class="habit-flame-badge ${sizeClass} habit-flame-badge--${tier}">
     <img class="habit-flame-img" src="img/flames/flame-${tier}.png" alt="">
-    <span class="habit-flame-num">${count}</span>
+    <span class="habit-flame-num">${count}${opts.suffix ? `<small>${opts.suffix}</small>` : ''}</span>
   </span>`;
 }
 
@@ -791,6 +1101,7 @@ function renderHabitOverviewCalendar() {
   const C = 2 * Math.PI * R;
 
   let html = '';
+  const monthPcts = [];
   DAY_LABELS.forEach(l => { html += `<div class="hcal-day-label">${l}</div>`; });
   for (let i = 0; i < firstDow; i++) html += '<div class="hcal-empty"></div>';
 
@@ -801,7 +1112,7 @@ function renderHabitOverviewCalendar() {
 
     const scheduled = habits.filter(h => _habitScheduledOn(h, ds) && !(h.endOfDay && isToday));
     const counted   = _habitsCountedOn(habits, ds, today);
-    const voidCount = scheduled.length - counted.length;
+    const voidCount = scheduled.filter(h => _habitVoidedOn(h.id, ds)).length;
     const doneIds = getHabitLog(ds);
     const doneCount = counted.filter(h => doneIds.includes(h.id)).length;
     const pct = counted.length ? Math.round(doneCount / counted.length * 100) : 0;
@@ -812,6 +1123,7 @@ function renderHabitOverviewCalendar() {
 
     const hasVoid  = voidCount > 0 && !isFuture;
     const isFull   = pct >= 100 && counted.length > 0;
+    if (!isFuture && counted.length) monthPcts.push(pct);
 
     let cls = 'hcal-day';
     if (isToday) cls += ' today';
@@ -883,6 +1195,9 @@ function renderHabitOverviewCalendar() {
   for (let i = 0; i < trailing; i++) html += '<div class="hcal-empty"></div>';
 
   grid.innerHTML = html;
+  const avg = document.getElementById('hcalAvg');
+  if (avg) avg.textContent = monthPcts.length
+    ? Math.round(monthPcts.reduce((x, y) => x + y, 0) / monthPcts.length) + '%' : '–';
 }
 
 document.getElementById('hcalPrev').addEventListener('click', () => {
@@ -911,8 +1226,9 @@ _hcalGrid.addEventListener('keydown', e => {
 
 // ── Habit Detail Page ──
 let _detailHabitId = null;
-let _detailMonth = null; // { year, month }
+let _detailWeekOffset = 0;        // 0 = the 13 weeks ending this week
 let _habitDetailTab = 'overview'; // 'overview' | 'notes'
+const _HD_WEEKS = 13;
 
 function _setHabitDetailTab(tab) {
   _habitDetailTab = tab;
@@ -925,8 +1241,7 @@ function _setHabitDetailTab(tab) {
 
 function openHabitDetail(habitId) {
   _detailHabitId = habitId;
-  const now = new Date();
-  _detailMonth = { year: now.getFullYear(), month: now.getMonth() };
+  _detailWeekOffset = 0;
   const all = getHabits();
   const habit = all.find(h => h.id === habitId);
   if (!habit) return;
@@ -945,13 +1260,81 @@ function closeHabitDetail() {
   _detailHabitId = null;
 }
 
+// Is `ds` a day this habit was asked for? (in a run, not an off day, not voided)
+function _habitExpectedOn(h, ds) {
+  return _habitScheduledOn(h, ds) && !_habitVoidedOn(h.id, ds);
+}
+
+// Longest run ever, by the same rules as the live streak: voided, off and
+// archived days carry it, a scheduled miss ends it.
+function _habitBestStreak(h) {
+  const today = habitDateStr(0);
+  if (_habitIsWeekly(h)) {
+    let run = 0, best = 0;
+    const first = _weekStart(_habitFirstDay(h));
+    for (let ws = first; ws <= today; ws = _shiftDay(ws, 7)) {
+      const current = ws === _weekStart(today);
+      const st = _habitWeekStatus(h, ws, current ? today : _shiftDay(ws, 6));
+      if (st.avail === 0) continue;
+      if (st.met) { run++; best = Math.max(best, run); }
+      else if (!current) run = 0;
+    }
+    return best;
+  }
+  let run = 0, best = 0;
+  for (let ds = _habitFirstDay(h); ds <= today; ds = _shiftDay(ds, 1)) {
+    if (_habitDoneOn(h, ds)) { run++; best = Math.max(best, run); }
+    else if (ds === today || !_habitExpectedOn(h, ds)) continue;
+    else run = 0;
+  }
+  return best;
+}
+
+// Completion over the last 30 days, plus a running rate per day for the sparkline.
+function _habitRate30(h) {
+  const today = habitDateStr(0);
+  const pts = [];
+  let done = 0, expected = 0;
+  for (let i = 29; i >= 0; i--) {
+    const ds = _shiftDay(today, -i);
+    const d = _habitDoneOn(h, ds);
+    if (_habitIsWeekly(h)) {
+      if (_habitScheduledOn(h, ds)) { expected += _habitTimes(h) / 7; if (d) done++; }
+    } else if (d) { done++; expected++; }
+    else if (ds !== today && _habitExpectedOn(h, ds)) expected++;
+    if (expected > 0) pts.push(Math.min(1, done / expected));
+  }
+  return { pct: expected > 0 ? Math.min(100, Math.round(done / expected * 100)) : null, pts };
+}
+
+function _sparkSvg(pts) {
+  if (pts.length < 2) return '';
+  const xy = pts.map((p, i) => `${(i / (pts.length - 1) * 100).toFixed(1)},${(20 - p * 18).toFixed(1)}`);
+  const last = xy[xy.length - 1].split(',');
+  return `<svg class="hd-spark" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${xy.join(' ')}" fill="none" stroke="#6BE3A4" stroke-width="1.5" vector-effect="non-scaling-stroke"></polyline>
+    <circle cx="${last[0]}" cy="${last[1]}" r="2" fill="#6BE3A4"></circle></svg>`;
+}
+
+function _hdSeg(key, options, current) {
+  return `<div class="at-seg" data-set="${key}">${options.map(([v, l]) =>
+    `<button type="button" data-v="${v}"${v === current ? ' class="on"' : ''}>${l}</button>`).join('')}</div>`;
+}
+
+function _hdDayPicker(days) {
+  return [1, 2, 3, 4, 5, 6, 0].map(d =>
+    `<button type="button" data-dow="${d}"${days.includes(d) ? ' class="on"' : ''} aria-pressed="${days.includes(d)}">${'SMTWTFS'[d]}</button>`).join('');
+}
+
 function renderHabitDetailPage(habit, allHabits) {
   const today = habitDateStr(0);
+  const weekly = _habitIsWeekly(habit);
   const doneToday = _habitDoneOn(habit, today);
-  const streak = habitStreak(habit.id);
-  const displayStreak = doneToday ? streak + 1 : streak;
-  const brokenN = (!doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
-  const dormant = (!doneToday && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
+  const voidedToday = _habitVoidedOn(habit.id, today);
+  const streak = weekly ? 0 : habitStreak(habit.id);
+  const displayStreak = weekly ? _habitWeekStreak(habit) : (doneToday ? streak + 1 : streak);
+  const brokenN = (!weekly && !doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
+  const dormant = (!weekly && !doneToday && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
   const isTimed = !!habit.endDate;
   const startDate = habit.startDate || today;
   const dayNum = _habitDayNum(habit, today);
@@ -962,31 +1345,23 @@ function renderHabitDetailPage(habit, allHabits) {
   const isIncrement = _isIncrementHabit(habit);
   const target = _habitTarget(habit);
   const todayCount = isIncrement ? getHabitCount(today, habit.id) : 0;
+  const routine = _habitRoutine(habit);
+  const sched = _habitSchedule(habit);
+  const offToday = _habitOffDay(habit, today);
 
-  // Count total completions across the habit's tracked window. Check-ins live in
-  // MEM ('habits:log:<date>'), not localStorage — the old localStorage scan never
-  // matched, so this always read 0.
-  // Completions in the current run, plus those banked from earlier runs — the
-  // same span the cumulative day count covers, so the rate can't exceed 100%.
+  // Completions in the current run, plus those banked from earlier runs.
   let totalDone = 0;
   storeListKeys('habits:log:').forEach(k => {
     const ds = k.slice('habits:log:'.length);
     if (ds > today || !_habitDoneOn(habit, ds)) return;
     if (ds >= startDate || _habitInPriorRun(habit, ds)) totalDone++;
   });
-  // Voided days drop out of the denominator, so an excused stretch can't drag the
-  // completion rate down. Check-ins made on a voided day still count in totalDone.
-  // The denominator is the same "Day N" shown above, so the rate is measured over
-  // the days the habit was actually active across all of its runs.
-  const voidedDays  = _habitVoidedCount(habit.id, startDate, today);
-  const daysTracked = Math.max(1, dayNum);
-  const rate = Math.round(totalDone / daysTracked * 100);
+  const voidedDays = _habitVoidedCount(habit.id, startDate, today);
 
   // Name
   const nameEl = document.getElementById('habitDetailName');
-  nameEl.textContent = habit.name;
+  if (document.activeElement !== nameEl) nameEl.textContent = habit.name;
   nameEl.contentEditable = isArchived ? 'false' : 'true';
-
   let origName = habit.name;
   nameEl.onblur = isArchived ? null : () => {
     const val = nameEl.textContent.trim();
@@ -1001,236 +1376,231 @@ function renderHabitDetailPage(habit, allHabits) {
   };
   nameEl.onkeydown = isArchived ? null : (e) => {
     if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
-    if (e.key === 'Escape') { nameEl.textContent = origName; nameEl.blur(); }
+    if (e.key === 'Escape') { e.stopPropagation(); nameEl.textContent = origName; nameEl.blur(); }
   };
 
+  // Sub line: area · routine · schedule · day
+  const areaObj = getAreas().find(a => a.name === habit.area);
+  const subBits = [];
+  if (areaObj) subBits.push(`<span class="task-area-pill" style="background:${_esc(areaObj.color)}BF;color:#fff">${_esc(areaObj.name)}</span>`);
+  subBits.push(`<span>${routine === 'anytime' ? 'Anytime' : HABIT_ROUTINE_TAG[routine]}</span>`);
+  subBits.push(`<span>${_esc(_habitScheduleLabel(habit))}</span>`);
+  subBits.push(isArchived
+    ? `<span>Completed · ${_habitServedDays(habit)} days</span>`
+    : `<span>Day ${dayNum}${isTimed ? ' of ' + totalDays : ''}, since ${_habitDayLabel(_habitFirstDay(habit))}</span>`);
+  document.getElementById('habitDetailSub').innerHTML = subBits.join('<span class="hd-sub-dot">·</span>');
+  _hdNotesTabLabel(habit);
+
   // Stats
-  const streakBadgeHtml = displayStreak > 0
-    ? _fireStreakBadgeHtml(displayStreak, { size: 'stat' })
-    : brokenN > 0
-      ? _fireStreakBadgeHtml(0, { size: 'stat', ember: true })
-      : (dormant && dormant.days >= 2)
-        ? _fireStreakBadgeHtml(dormant.days, { size: 'stat', dormant: true })
-        : `<div class="habit-stat-val">–</div>`;
-  const dormantTitle = dormant && dormant.days >= 2
-    ? (dormant.everDone
-        ? `You haven't done this in ${dormant.days} days. Check in today to start fresh.`
-        : `You haven't started this yet — it's been sitting for ${dormant.days} days.`)
-    : '';
-  const streakTitleAttr = brokenN > 0
-    ? ` title="You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one."`
-    : dormantTitle
-      ? ` title="${dormantTitle}"`
-      : '';
-
+  const best = _habitBestStreak(habit);
+  const rate = _habitRate30(habit);
+  const unit = weekly ? 'w' : '';
+  const streakVal = displayStreak > 0
+    ? _fireStreakBadgeHtml(displayStreak, { size: 'stat', suffix: unit })
+    : brokenN > 0 ? _fireStreakBadgeHtml(0, { size: 'stat', ember: true })
+    : (dormant && dormant.days >= 2) ? _fireStreakBadgeHtml(dormant.days, { size: 'stat', dormant: true })
+    : '<span class="hd-stat-num">–</span>';
+  const streakSub = weekly ? 'weeks in a row'
+    : displayStreak > 0 ? (doneToday ? 'days, incl. today' : 'days, through yesterday')
+    : brokenN > 0 ? `ended at ${brokenN}`
+    : (dormant && dormant.days >= 2) ? `${dormant.days}d idle` : 'not started';
+  const onIt = displayStreak > 0 && displayStreak >= best;
   document.getElementById('habitDetailStats').innerHTML = `
-    <div class="habit-detail-stats-grid">
-      <div class="habit-stat-card"${streakTitleAttr}>
-        ${streakBadgeHtml}
-        <div class="habit-stat-label">Current Streak</div>
-      </div>
-      <div class="habit-stat-card">
-        <div class="habit-stat-val">${totalDone}</div>
-        <div class="habit-stat-label">Total Done</div>
-      </div>
-      <div class="habit-stat-card">
-        <div class="habit-stat-val">${rate}%</div>
-        <div class="habit-stat-label">Completion Rate</div>
-      </div>
+    <div class="hd-stats">
+      <div class="hd-stat"><span class="hd-stat-label">Streak</span><span class="hd-stat-val">${streakVal}</span><span class="hd-stat-sub">${streakSub}</span></div>
+      <div class="hd-stat"><span class="hd-stat-label">Best</span><span class="hd-stat-val"><span class="hd-stat-num">${best}${best ? unit : ''}</span></span>
+        <span class="hd-stat-sub${onIt ? ' good' : ''}">${!best ? '–' : onIt ? "you're on it" : `${best - displayStreak}${unit} to beat it`}</span></div>
+      <div class="hd-stat"><span class="hd-stat-label">30 days</span><span class="hd-stat-val"><span class="hd-stat-num">${rate.pct == null ? '–' : rate.pct}<small>${rate.pct == null ? '' : '%'}</small></span></span>${_sparkSvg(rate.pts)}</div>
+      <div class="hd-stat"><span class="hd-stat-label">Total</span><span class="hd-stat-val"><span class="hd-stat-num">${totalDone}</span></span>
+        <span class="hd-stat-sub">${voidedDays ? `${voidedDays} voided` : 'check-ins'}</span></div>
     </div>
-    ${voidedDays ? `<div class="habit-void-note">${voidedDays} voided day${voidedDays === 1 ? '' : 's'} excluded from the rate and the day count.</div>` : ''}
     ${isTimed ? `
-    <div class="habit-detail-progress-section">
-      <div class="habit-detail-section-title">Progress</div>
-      <div class="habit-detail-progress-bar-wrap">
-        <div class="habit-detail-progress-bar">
-          <div class="habit-detail-progress-fill${pct >= 100 ? ' complete' : ''}" style="width:${pct}%"></div>
-        </div>
-        <span class="habit-detail-progress-label">${isExpired ? 'Completed' : `Day ${dayNum} of ${totalDays}`}</span>
-      </div>
-    </div>
-    ` : ''}
-  `;
+    <div class="hd-progress">
+      <div class="hd-progress-bar"><div class="habit-progress-fill${pct >= 100 ? ' complete' : ''}" style="width:${pct}%"></div></div>
+      <span>${isExpired ? 'Completed' : `Day ${dayNum} of ${totalDays}`}</span>
+    </div>` : ''}`;
 
-  // History grid
-  renderHabitHistoryGrid(habit);
+  // Check-in, settings, archive/delete
+  let checkin;
+  if (isArchived) {
+    checkin = `
+      <div class="hd-checkin is-archived">
+        <div class="hd-checkin-tx"><b>Completed habit</b><span>${habit.archivedAt ? 'Archived ' + formatDate(habit.archivedAt) : 'Archived'}</span></div>
+        <button class="btn-add" id="habitDetailRestart" type="button">Start again</button>
+      </div>`;
+  } else {
+    const wk = weekly ? _habitWeekStatus(habit, _weekStart(today), today) : null;
+    const title = voidedToday && !doneToday ? 'Voided today'
+      : doneToday ? 'Done for today' : 'Check in for today';
+    const sub = voidedToday && !doneToday ? `${formatDate(today)} · excused, the streak carries over`
+      : weekly ? `${formatDate(today)} · ${Math.min(wk.done, _habitTimes(habit))} of ${_habitTimes(habit)} this week`
+      : offToday && !doneToday ? `${formatDate(today)} · not scheduled today — ticking it still counts`
+      : doneToday ? `${formatDate(today)} · streak is ${displayStreak} day${displayStreak === 1 ? '' : 's'}`
+      : streak > 0 ? `${formatDate(today)} · keeps the ${streak}-day streak going` : formatDate(today);
+    const ctl = isIncrement ? `
+        <div class="habit-stepper">
+          <button class="habit-stepper-btn" id="habitCountMinus" type="button" ${todayCount <= 0 ? 'disabled' : ''} aria-label="Remove one">−</button>
+          <span class="habit-stepper-count${todayCount >= target ? ' complete' : ''}">${todayCount} / ${target}</span>
+          <button class="habit-stepper-btn" id="habitCountPlus" type="button" ${todayCount >= target ? 'disabled' : ''} aria-label="Add one">+</button>
+        </div>`
+      : `<button class="hd-cb" id="habitDetailCb" type="button" aria-pressed="${doneToday}" aria-label="${doneToday ? 'Uncheck today' : 'Check in for today'}"></button>`;
+    checkin = `
+      <div class="hd-checkin${doneToday ? ' is-done' : ''}${voidedToday && !doneToday ? ' is-voided' : ''}">
+        ${isIncrement ? '' : ctl}
+        <div class="hd-checkin-tx"><b>${title}</b><span>${sub}</span></div>
+        ${isIncrement ? ctl : ''}
+        <button class="hab-chip hab-chip-void" id="hdVoidToday" type="button">${voidedToday ? 'Un-void' : '∅ Void today'}</button>
+      </div>`;
+  }
 
-  // Actions
+  const days = sched && sched.type === 'days' ? sched.days : [1, 3, 5];
+  const times = sched && sched.type === 'weekly' ? sched.times : 3;
+  const settings = isArchived ? '' : `
+    <div class="hd-settings">
+      <div class="hd-set"><span class="hd-set-k">Routine</span>
+        ${_hdSeg('routine', HABIT_ROUTINES, routine)}</div>
+      <div class="hd-set"><span class="hd-set-k">Tracking</span><div class="at-row">
+        ${_hdSeg('track', [['checkbox', 'Check off'], ['increment', 'Count']], isIncrement ? 'increment' : 'checkbox')}
+        ${isIncrement ? `<span class="at-row"><input type="number" min="1" step="1" class="task-date-input hab-num" id="habitTargetInput" value="${target}" aria-label="Target per day"><span class="at-none">a day</span></span>` : ''}
+      </div></div>
+      <div class="hd-set"><span class="hd-set-k">Schedule</span><div class="at-row">
+        ${_hdSeg('sched', [['daily', 'Every day'], ['days', 'Pick days'], ['weekly', '× a week']], sched ? sched.type : 'daily')}
+        ${sched && sched.type === 'days' ? `<span class="hab-daypick" id="hdDays">${_hdDayPicker(days)}</span>` : ''}
+        ${sched && sched.type === 'weekly' ? `<span class="at-row"><input type="number" min="1" max="6" step="1" class="task-date-input hab-num" id="hdTimes" value="${times}" aria-label="Times per week"><span class="at-none">times</span></span>` : ''}
+      </div></div>
+      <div class="hd-set"><span class="hd-set-k">Area</span><div class="at-areas" id="hdAreas">
+        <button type="button" class="task-area-pill is-empty${habit.area ? '' : ' is-picked'}" data-area="">No area</button>
+        ${getAreas().map(a => `<button type="button" class="task-area-pill${habit.area === a.name ? ' is-picked' : ''}" data-area="${_esc(a.name)}" style="background:${_esc(a.color)}BF;color:#fff">${_esc(a.name)}</button>`).join('')}
+      </div></div>
+      <div class="hd-set"><span class="hd-set-k">Dates</span><div class="at-row">
+        <input type="date" class="task-date-input" id="habitStartDateInput" value="${startDate}" max="${today}" aria-label="Start date">
+        <span class="at-none">→</span>
+        ${_hdSeg('len', [['ongoing', 'Ongoing'], ['ends', 'Ends…']], habit.endDate ? 'ends' : 'ongoing')}
+        ${habit.endDate ? `<input type="date" class="task-date-input" id="hdEndDate" value="${habit.endDate}" min="${startDate}" aria-label="End date">` : ''}
+      </div></div>
+    </div>`;
 
   document.getElementById('habitDetailActions').innerHTML = `
-    ${!isArchived ? `
-    <div class="habit-detail-checkin">
-      <div>
-        <div class="habit-detail-checkin-label">Today's check-in</div>
-        <div class="habit-detail-checkin-sub">${formatDate(today)}</div>
-      </div>
-      ${isIncrement ? `
-      <div class="habit-stepper">
-        <button class="habit-stepper-btn" id="habitCountMinus" ${todayCount <= 0 ? 'disabled' : ''} aria-label="Decrement">−</button>
-        <span class="habit-stepper-count${todayCount >= target ? ' complete' : ''}">${todayCount} / ${target}</span>
-        <button class="habit-stepper-btn" id="habitCountPlus" ${todayCount >= target ? 'disabled' : ''} aria-label="Increment">+</button>
-      </div>
-      ` : `
-      <label class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-        <input type="checkbox" id="habitDetailCb" ${doneToday ? 'checked' : ''}>
-        <span class="habit-cb-box"></span>
-      </label>
-      `}
-    </div>
-    <div class="habit-detail-row-split">
-      <div class="habit-detail-row-field">
-        <span class="habit-detail-start-label">Started</span>
-        <input type="date" class="habit-detail-start-input" id="habitStartDateInput"
-          value="${startDate}" max="${today}">
-      </div>
-    </div>
-    <div class="habit-detail-row-split">
-      <label class="habit-detail-row-field" style="cursor:pointer;">
-        <span class="habit-detail-start-label">Track as a count</span>
-        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-          <input type="checkbox" id="habitDetailIncrement" ${isIncrement ? 'checked' : ''}>
-          <span class="habit-cb-box"></span>
-        </span>
-      </label>
-      ${isIncrement ? `
-      <div class="habit-detail-row-field">
-        <span class="habit-detail-start-label">Target / day</span>
-        <input type="number" min="1" step="1" class="habit-detail-start-input habit-detail-target-input"
-          id="habitTargetInput" value="${target}">
-      </div>
-      ` : ''}
-    </div>
-    <div class="habit-detail-row-split habit-detail-row-split-3">
-      <label class="habit-toggle-compact" title="Excluded from the day's completion % until the day is over">
-        <span class="habit-toggle-compact-label">End of Day</span>
-        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-          <input type="checkbox" id="habitDetailEod" ${habit.endOfDay ? 'checked' : ''}>
-          <span class="habit-cb-box"></span>
-        </span>
-      </label>
-      <label class="habit-toggle-compact">
-        <span class="habit-toggle-compact-label">Morning Routine</span>
-        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-          <input type="checkbox" id="habitDetailMorning" ${habit.morningRoutine ? 'checked' : ''}>
-          <span class="habit-cb-box"></span>
-        </span>
-      </label>
-      <label class="habit-toggle-compact">
-        <span class="habit-toggle-compact-label">Night Routine</span>
-        <span class="habit-cb-wrap" style="position:relative;width:22px;height:22px;flex-shrink:0;">
-          <input type="checkbox" id="habitDetailNight" ${habit.nightRoutine ? 'checked' : ''}>
-          <span class="habit-cb-box"></span>
-        </span>
-      </label>
-    </div>
-    ` : `
-    <div class="habit-detail-checkin">
-      <div style="flex:1;">
-        <div class="habit-detail-checkin-label">Completed habit</div>
-        <div class="habit-detail-checkin-sub">${habit.archivedAt ? 'Archived ' + formatDate(habit.archivedAt) : 'Archived'}</div>
-      </div>
-      <button class="btn-restart" id="habitDetailRestart">Start again</button>
-    </div>
-    `}
-    <div class="habit-detail-danger-row">
-      ${!isArchived ? `<button class="btn-danger" id="habitDetailArchive">Archive</button>` : ''}
-      <button class="btn-danger" id="habitDetailDelete">Delete</button>
-    </div>
-  `;
+    ${checkin}
+    ${settings}
+    <div class="hd-danger">
+      ${isArchived ? '<span></span>' : '<button class="hd-archive" id="habitDetailArchive" type="button">Archive as completed</button>'}
+      <button class="hd-delete" id="habitDetailDelete" type="button">Delete habit…</button>
+    </div>`;
+
+  renderHabitHistoryGrid(habit);
+  _renderHabitNotePreview(habit);
+
+  const save = () => { saveHabits(allHabits); renderHabits(); };
 
   if (isArchived) {
     // renderHabits() re-renders this page via its sync block, so the view flips
     // to the active layout in place rather than closing.
     document.getElementById('habitDetailRestart')
       .addEventListener('click', () => _restartHabit(habit, allHabits));
-  }
-
-  if (!isArchived) {
+  } else {
     if (isIncrement) {
       document.getElementById('habitCountPlus').addEventListener('click', () => {
         setHabitCount(today, habit, getHabitCount(today, habit.id) + 1);
         renderHabits();
-        renderHabitDetailPage(habit, allHabits);
       });
       document.getElementById('habitCountMinus').addEventListener('click', () => {
         setHabitCount(today, habit, getHabitCount(today, habit.id) - 1);
         renderHabits();
-        renderHabitDetailPage(habit, allHabits);
       });
     } else {
-      document.getElementById('habitDetailCb').addEventListener('change', () => {
+      document.getElementById('habitDetailCb').addEventListener('click', () => {
         _toggleHabitDone(today, habit);
         renderHabits();
-        renderHabitDetailPage(habit, allHabits);
       });
     }
-
-    document.getElementById('habitDetailIncrement').addEventListener('change', (e) => {
-      habit.trackType = e.target.checked ? 'increment' : 'checkbox';
-      if (habit.trackType === 'increment' && !habit.target) habit.target = 1;
-      saveHabits(allHabits);
+    document.getElementById('hdVoidToday').addEventListener('click', () => {
+      const ids = getHabitVoids(today);
+      const i = ids.indexOf(habit.id);
+      if (i === -1) ids.push(habit.id); else ids.splice(i, 1);
+      saveHabitVoids(today, ids);
       renderHabits();
-      renderHabitDetailPage(habit, allHabits);
     });
 
-    const _targetInput = document.getElementById('habitTargetInput');
-    if (_targetInput) {
-      const _saveTarget = () => {
-        const v = Math.max(1, parseInt(_targetInput.value, 10) || 1);
-        if (v === _habitTarget(habit)) return;
-        habit.target = v;
-        saveHabits(allHabits);
-        // Re-check today's done-ness against the new target without changing the tally.
-        setHabitCount(today, habit, getHabitCount(today, habit.id));
-        renderHabits();
-        renderHabitDetailPage(habit, allHabits);
-      };
-      _targetInput.addEventListener('blur', _saveTarget);
-      _targetInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); _targetInput.blur(); }
-      });
-    }
+    const actions = document.getElementById('habitDetailActions');
+    actions.querySelectorAll('.at-seg[data-set]').forEach(seg => seg.addEventListener('click', e => {
+      const b = e.target.closest('button[data-v]');
+      if (!b || b.classList.contains('on')) return;
+      const v = b.dataset.v;
+      const key = seg.dataset.set;
+      if (key === 'routine') _setHabitRoutine(habit, v);
+      else if (key === 'track') {
+        habit.trackType = v;
+        if (v === 'increment' && !habit.target) habit.target = 1;
+      } else if (key === 'sched') {
+        if (v === 'daily') delete habit.schedule;
+        else if (v === 'days') habit.schedule = { type: 'days', days: [1, 3, 5] };
+        else habit.schedule = { type: 'weekly', times: 3 };
+      } else if (key === 'len') {
+        if (v === 'ongoing') delete habit.endDate;
+        else habit.endDate = _shiftDay(today > startDate ? today : startDate, 29);
+      }
+      save();
+    }));
 
-    const _startInput = document.getElementById('habitStartDateInput');
-    const _saveStartDate = () => {
-      const newDate = _startInput.value;
-      if (!newDate || newDate > today || newDate === habit.startDate) return;
-      habit.startDate = newDate;
-      saveHabits(allHabits);
-      renderHabitDetailPage(habit, allHabits);
+    const dayPick = document.getElementById('hdDays');
+    if (dayPick) dayPick.addEventListener('click', e => {
+      const b = e.target.closest('button[data-dow]');
+      if (!b) return;
+      const d = +b.dataset.dow;
+      const set = new Set(habit.schedule.days);
+      if (set.has(d)) { if (set.size === 1) return; set.delete(d); } else set.add(d);
+      habit.schedule = { type: 'days', days: [...set].sort() };
+      save();
+    });
+    const numInput = (id, apply) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const commit = () => apply(parseInt(el.value, 10));
+      el.addEventListener('change', commit);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
     };
-    _startInput.addEventListener('blur', _saveStartDate);
-    _startInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); _startInput.blur(); }
+    numInput('hdTimes', v => {
+      const t = Math.max(1, Math.min(6, v || 1));
+      if (t === habit.schedule.times) return;
+      habit.schedule = { type: 'weekly', times: t };
+      save();
+    });
+    numInput('habitTargetInput', v => {
+      const t = Math.max(1, v || 1);
+      if (t === _habitTarget(habit)) return;
+      habit.target = t;
+      saveHabits(allHabits);
+      // Re-check today's done-ness against the new target without changing the tally.
+      setHabitCount(today, habit, getHabitCount(today, habit.id));
+      renderHabits();
     });
 
-    document.getElementById('habitDetailEod').addEventListener('change', (e) => {
-      habit.endOfDay = e.target.checked;
-      if (e.target.checked) { habit.morningRoutine = false; habit.nightRoutine = false; }
-      saveHabits(allHabits);
-      renderHabits();
-      renderHabitOverviewCalendar();
-      renderHabitDetailPage(habit, allHabits);
+    document.getElementById('hdAreas').addEventListener('click', e => {
+      const b = e.target.closest('button[data-area]');
+      if (!b) return;
+      habit.area = b.dataset.area || null;
+      save();
     });
 
-    document.getElementById('habitDetailMorning').addEventListener('change', (e) => {
-      habit.morningRoutine = e.target.checked;
-      if (e.target.checked) { habit.endOfDay = false; habit.nightRoutine = false; }
-      saveHabits(allHabits);
-      renderHabits();
-      renderHabitDetailPage(habit, allHabits);
+    const startInput = document.getElementById('habitStartDateInput');
+    startInput.addEventListener('change', () => {
+      const v = startInput.value;
+      if (!v || v > today || v === habit.startDate) return;
+      if (habit.endDate && v > habit.endDate) return;
+      habit.startDate = v;
+      save();
     });
-
-    document.getElementById('habitDetailNight').addEventListener('change', (e) => {
-      habit.nightRoutine = e.target.checked;
-      if (e.target.checked) { habit.endOfDay = false; habit.morningRoutine = false; }
-      saveHabits(allHabits);
-      renderHabits();
-      renderHabitDetailPage(habit, allHabits);
+    const endInput = document.getElementById('hdEndDate');
+    if (endInput) endInput.addEventListener('change', () => {
+      const v = endInput.value;
+      if (!v || v < startDate || v === habit.endDate) return;
+      habit.endDate = v;
+      save();
     });
 
     document.getElementById('habitDetailArchive').addEventListener('click', () => {
-      if (!confirm(`Archive "${habit.name}"?`)) return;
+      if (!confirm(`Archive "${habit.name}"? It moves to Completed habits, and you can start it again later.`)) return;
       habit.archived = true;
       habit.archivedAt = today;
       saveHabits(allHabits);
@@ -1240,9 +1610,30 @@ function renderHabitDetailPage(habit, allHabits) {
   }
 
   document.getElementById('habitDetailDelete').addEventListener('click', () => {
-    if (!confirm(`Permanently delete "${habit.name}"?`)) return;
+    if (!confirm(`Permanently delete "${habit.name}" and all of its check-ins?`)) return;
     _deleteHabit(habit, allHabits);
     closeHabitDetail();
+  });
+}
+
+function _hdNotesTabLabel(habit) {
+  const n = getHabitNotes(habit.id).length;
+  document.getElementById('hdNotesTab').textContent = n ? `Notes · ${n}` : 'Notes';
+}
+
+// The two newest notes, shown under the history on the Overview tab.
+function _renderHabitNotePreview(habit) {
+  const el = document.getElementById('habitDetailNotePreview');
+  const notes = getHabitNotes(habit.id).slice(-2).reverse();
+  const fmt = ts => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  el.innerHTML = `<div class="hd-notes-prev">${notes.map(n =>
+    `<div class="hd-note-card"><time>${fmt(n.createdAt)}</time><div class="hd-note-text"></div></div>`).join('')}
+    <button type="button" class="hd-notes-link" id="hdNotesLink">${notes.length ? 'All notes →' : '+ Add a note'}</button></div>`;
+  el.querySelectorAll('.hd-note-text').forEach((t, i) => { t.textContent = notes[i].text; });
+  document.getElementById('hdNotesLink').addEventListener('click', () => {
+    _setHabitDetailTab('notes');
+    const inp = document.getElementById('habitNoteInput');
+    if (inp && !notes.length) inp.focus();
   });
 }
 
@@ -1271,12 +1662,13 @@ function renderHabitNotesPanel(habit) {
       <button id="habitNoteAdd" class="area-note-add-btn">Add note</button>
     </div>`;
 
+  const refresh = () => { renderHabitNotesPanel(habit); _renderHabitNotePreview(habit); _hdNotesTabLabel(habit); };
   panel.querySelectorAll('.area-note-entry').forEach(el => {
     const n = notes.find(x => x.id === el.dataset.noteId);
     el.querySelector('.area-note-body').textContent = n ? n.text : '';
     el.querySelector('.hd-note-del').addEventListener('click', () => {
       saveHabitNotes(habit.id, getHabitNotes(habit.id).filter(x => x.id !== el.dataset.noteId));
-      renderHabitNotesPanel(habit);
+      refresh();
     });
   });
 
@@ -1285,7 +1677,7 @@ function renderHabitNotesPanel(habit) {
     const text = inp.value.trim();
     if (!text) return;
     saveHabitNotes(habit.id, getHabitNotes(habit.id).concat({ id: _noteId(), text, createdAt: Date.now() }));
-    renderHabitNotesPanel(habit);
+    refresh();
   };
   document.getElementById('habitNoteAdd').addEventListener('click', add);
   inp.addEventListener('keydown', e => {
@@ -1293,125 +1685,92 @@ function renderHabitNotesPanel(habit) {
   });
 }
 
+// 13 weeks of history, Monday rows down, one column per week, with the date in
+// each square: green done, red missed, a dashed outline for a voided day.
 function renderHabitHistoryGrid(habit) {
   const today = habitDateStr(0);
   const startDate = habit.startDate || today;
   const isArchived = !!habit.archived;
-  const brokenN = _habitRecentlyBroken(habit);
   const isIncrement = _isIncrementHabit(habit);
+  const weekly = _habitIsWeekly(habit);
   const target = isIncrement ? _habitTarget(habit) : 0;
-  const now = new Date();
 
-  const MONTH_NAMES = ['January','February','March','April','May','June',
-                       'July','August','September','October','November','December'];
-  const DAY_LABELS = ['M','T','W','T','F','S','S'];
+  const lastWeek = _shiftDay(_weekStart(today), -7 * _detailWeekOffset);
+  const first = _shiftDay(lastWeek, -7 * (_HD_WEEKS - 1));
+  const floor = _dayDetailFloor();
+  const atStart = first <= floor;
+  const atCurrent = _detailWeekOffset === 0;
+  const lastDay = _shiftDay(lastWeek, 6);
 
-  const { year, month } = _detailMonth;
+  let html = `<div class="hd-hist">
+    <div class="hd-hist-head">
+      <span class="hab-eyebrow">${atCurrent ? 'Last 13 weeks' : `${_habitDayLabel(first)} – ${_habitDayLabel(lastDay)}`}</span>
+      <span class="hd-hist-hint">Click a past day to toggle it</span>
+      <span class="hd-hist-nav">
+        <button class="hcal-nav-btn" id="habitCalPrev" type="button" aria-label="Earlier weeks" ${atStart ? 'disabled' : ''}>‹</button>
+        <button class="hcal-nav-btn" id="habitCalNext" type="button" aria-label="Later weeks" ${atCurrent ? 'disabled' : ''}>›</button>
+      </span>
+    </div>
+    <div class="hd-heat-wrap"><div class="hd-heat">`;
 
-  // Bounds: can go back up to 12 months before today; can't go past current month
-  const limitDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  const atStart = year < limitDate.getFullYear() ||
-                  (year === limitDate.getFullYear() && month <= limitDate.getMonth());
-  const atCurrent = year === now.getFullYear() && month === now.getMonth();
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;
-
-  let html = '<div class="habit-history-section"><div class="habit-detail-section-title">History</div>';
-  html += '<div class="habit-cal-month">';
-  html += `<div class="habit-cal-nav">
-    <button class="habit-cal-nav-btn" id="habitCalPrev" ${atStart ? 'disabled' : ''}>←</button>
-    <div class="habit-cal-month-header">${MONTH_NAMES[month]} ${year}</div>
-    <button class="habit-cal-nav-btn" id="habitCalNext" ${atCurrent ? 'disabled' : ''}>→</button>
-  </div>`;
-  html += '<div class="habit-cal-grid">';
-
-  DAY_LABELS.forEach(l => { html += `<div class="habit-cal-day-label">${l}</div>`; });
-
-  for (let i = 0; i < firstDow; i++) {
-    html += `<div class="habit-cal-empty"></div>`;
+  // Month label on the week that holds the 1st of that month.
+  html += '<span></span>';
+  for (let w = 0; w < _HD_WEEKS; w++) {
+    const [y, m, d] = _shiftDay(first, w * 7).split('-').map(Number);
+    const mon = d <= 7 ? new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' }) : '';
+    html += `<span class="hd-heat-month" style="grid-column:${w + 2}">${mon}</span>`;
   }
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ds = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const done = _habitDoneOn(habit, ds);
-    const voided = _habitVoidedOn(habit.id, ds);
-    const isToday = ds === today;
-    const isFuture = ds > today;
-    const isRetired = _habitRetiredOn(habit, ds);
-    const isBeforeStart = ds < startDate && !_habitInPriorRun(habit, ds);
-    const isStreakBroke = brokenN > 0 && ds === _shiftDay(today, -1);
-    const count = isIncrement ? getHabitCount(ds, habit.id) : 0;
-
-    let cls = 'habit-cal-day';
-    // A retired day gets the same inert treatment as a future one — the habit
-    // was no longer running, so it is neither a win nor a miss.
-    if (isFuture || isRetired) cls += ' future';
-    else if (isBeforeStart) cls += ' before-start';
-    else if (done) cls += ' done';
-    else if (voided) cls += ' voided';
-    else if (!isToday) cls += ' missed';
-    if (isStreakBroke) cls += ' streak-broke';
-    if (isToday && !isRetired) cls += ' today';
-
-    // An archived habit is a frozen record: nothing about it can be re-marked.
-    // An increment habit's count only changes via a stepper (Today's check-in,
-    // or the Day Detail page) — the calendar square is read-only for it.
-    const clickable = !isFuture && !isBeforeStart && !isArchived && !isIncrement;
-    // The tally reads as plain text (e.g. "2/5") rather than a color tint, so
-    // it only shows on days the habit was actually in play.
-    const showCount = isIncrement && !isFuture && !isBeforeStart && !isRetired;
-    if (showCount) cls += ' has-count';
-    const countSub = showCount ? `<span class="habit-cal-day-sub">${count}/${target}</span>` : '';
-    const cellTitle = isRetired ? `${ds} — archived`
-      : voided ? `${ds} — voided`
-      : isIncrement ? `${ds} — ${count} / ${target}`
-      : ds;
-    html += `<div class="${cls}"${clickable ? ` data-date="${ds}" style="cursor:pointer;"` : ''} title="${cellTitle}"><span class="habit-cal-day-num">${d}</span>${countSub}</div>`;
-  }
-
-  // Fill trailing cells to complete the last row
-  const totalCells = firstDow + daysInMonth;
-  const trailing = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
-  for (let i = 0; i < trailing; i++) {
-    html += `<div class="habit-cal-empty"></div>`;
-  }
-
-  html += '</div></div></div>';
+  ['M', '', 'W', '', 'F', '', 'S'].forEach((label, r) => {
+    html += `<span class="hd-heat-dow" style="grid-row:${r + 2}">${label}</span>`;
+    for (let w = 0; w < _HD_WEEKS; w++) {
+      const ds = _shiftDay(first, w * 7 + r);
+      const isFuture = ds > today;
+      const isRetired = _habitRetiredOn(habit, ds);
+      const isBeforeStart = ds < startDate && !_habitInPriorRun(habit, ds);
+      const done = _habitDoneOn(habit, ds);
+      const voided = _habitVoidedOn(habit.id, ds);
+      const off = _habitOffDay(habit, ds);
+      let cls = 'hd-cell';
+      let title = _fullDateLabel(ds);
+      if (isFuture) cls += ' fut';
+      else if (isBeforeStart || isRetired) { cls += ' pre'; title += isRetired ? ' — archived' : ''; }
+      else if (done) { cls += ' done'; title += ' — done'; }
+      else if (voided) { cls += ' void'; title += ' — voided'; }
+      else if (off) { cls += ' off'; title += ' — not scheduled'; }
+      else if (ds === today || weekly) { title += ds === today ? ' — today' : ''; }
+      else { cls += ' miss'; title += ' — missed'; }
+      if (ds === today) cls += ' today';
+      if (isIncrement && !isFuture && !isBeforeStart && !isRetired) title += ` · ${getHabitCount(ds, habit.id)}/${target}`;
+      // An archived habit is a frozen record, and a count habit only changes
+      // through its stepper — so neither gets clickable squares.
+      const clickable = !isFuture && !isBeforeStart && !isRetired && !isArchived && !isIncrement;
+      html += `<span class="${cls}${clickable ? ' clk' : ''}" style="grid-row:${r + 2};grid-column:${w + 2}"` +
+        `${clickable ? ` data-date="${ds}" role="button" tabindex="0"` : ''} title="${title}">${+ds.slice(8)}</span>`;
+    }
+  });
+  html += `</div></div>
+    <div class="hd-heat-key">
+      <span><i class="k-done"></i>done</span><span><i class="k-miss"></i>missed</span><span><i class="k-void"></i>voided</span>
+    </div></div>`;
   document.getElementById('habitDetailHistory').innerHTML = html;
 
-  // Wire day-toggle clicks
-  document.querySelector('.habit-cal-grid').addEventListener('click', (e) => {
-    const cell = e.target.closest('[data-date]');
-    if (!cell) return;
-    const ds = cell.dataset.date;
-    _toggleHabitDone(ds, habit);
+  const heat = document.querySelector('#habitDetailHistory .hd-heat');
+  const toggle = cell => {
+    _toggleHabitDone(cell.dataset.date, habit);
     renderHabits();
-    const allH = getHabits();
-    renderHabitDetailPage(allH.find(h => h.id === habit.id) || habit, allH);
+  };
+  heat.addEventListener('click', e => { const c = e.target.closest('[data-date]'); if (c) toggle(c); });
+  heat.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const c = e.target.closest('[data-date]');
+    if (c) { e.preventDefault(); toggle(c); }
   });
-
-  // Wire nav buttons
-  const prevBtn = document.getElementById('habitCalPrev');
-  const nextBtn = document.getElementById('habitCalNext');
-
-  if (!atStart) {
-    prevBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (month === 0) _detailMonth = { year: year - 1, month: 11 };
-      else _detailMonth = { year, month: month - 1 };
-      renderHabitHistoryGrid(habit);
-    });
-  }
-
-  if (!atCurrent) {
-    nextBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (month === 11) _detailMonth = { year: year + 1, month: 0 };
-      else _detailMonth = { year, month: month + 1 };
-      renderHabitHistoryGrid(habit);
-    });
-  }
+  if (!atStart) document.getElementById('habitCalPrev').addEventListener('click', () => {
+    _detailWeekOffset += _HD_WEEKS; renderHabitHistoryGrid(habit);
+  });
+  if (!atCurrent) document.getElementById('habitCalNext').addEventListener('click', () => {
+    _detailWeekOffset = Math.max(0, _detailWeekOffset - _HD_WEEKS); renderHabitHistoryGrid(habit);
+  });
 }
 
 // ── Day Detail Page (opened from the overview calendar) ──
@@ -1509,11 +1868,10 @@ function renderDayDetail(ds) {
       (voidCount ? ` · ${voidCount} voided` : '')
     : 'No habits were active on this day.';
 
-  const mode    = getHabitSort();
-  const canDrag = mode === 'custom' || mode === 'area';
+  const canDrag = getHabitSort() === 'custom';
 
   const areas   = getAreas();
-  const sorted  = _sortHabitsForDisplay(scheduled, mode);
+  const sorted  = _orderHabits(scheduled);
   // Out-of-play rows sink: voided below active, done below that. Held still while
   // picking in void mode, so a row never jumps out from under the cursor.
   const _rank = h => doneIds.includes(h.id) ? 2 : voidIds.includes(h.id) ? 1 : 0;
@@ -1590,7 +1948,6 @@ function renderDayDetail(ds) {
       <div class="day-detail-summary-text">${summary}</div>
     </div>
     ${scheduled.length ? `
-      ${_dayVoidMode ? '' : _habitSortBarHTML()}
       <div class="day-detail-list-head">
         <div class="habit-detail-section-title">Habits</div>
         <button class="day-void-btn${_dayVoidMode ? ' active' : ''}" id="dayVoidModeBtn">
@@ -1676,47 +2033,233 @@ function renderDayDetail(ds) {
   });
 }
 
-// ── Archived section toggle
-document.getElementById('archivedToggle').addEventListener('click', () => {
-  const toggle = document.getElementById('archivedToggle');
-  const list   = document.getElementById('archivedList');
-  toggle.classList.toggle('open');
-  list.classList.toggle('open');
-});
+// ── Group / sort controls ──
+document.querySelectorAll('.hab-group-btn').forEach(b =>
+  b.addEventListener('click', () => { if (b.dataset.group !== getHabitGroup()) setHabitGroup(b.dataset.group); }));
+document.getElementById('habSortSel').addEventListener('change', e => setHabitSort(e.target.value));
 
-document.getElementById('habitAddBtn').addEventListener('click', addHabit);
-document.getElementById('habitInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') addHabit();
-});
+// ── Add habit modal ──
+const _AH = { area: null, routine: 'anytime', track: 'checkbox', sched: 'daily', days: [1, 3, 5], len: '0' };
+let _ahReturnFocus = null;
+const _ahEl = id => document.getElementById(id);
 
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.habit-sort-btn');
-  if (btn) setHabitSort(btn.dataset.sort);
-});
+function _ahSeg(f, v) {
+  _AH[f] = v;
+  document.querySelectorAll(`#addHabitForm .at-seg[data-f="${f}"] button`).forEach(b =>
+    b.classList.toggle('on', b.dataset.v === v));
+  _ahEl('ahTargetWrap').hidden = _AH.track !== 'increment';
+  _ahEl('ahDays').hidden = _AH.sched !== 'days';
+  _ahEl('ahTimesWrap').hidden = _AH.sched !== 'weekly';
+  _ahEl('ahEnd').hidden = _AH.len !== 'pick';
+}
 
-function addHabit() {
-  const input   = document.getElementById('habitInput');
-  const endDate = document.getElementById('habitEndDate');
-  const name    = input.value.trim();
+function _ahPaintAreas() {
+  const box = _ahEl('ahAreas');
+  box.innerHTML = `<button type="button" class="task-area-pill is-empty${_AH.area ? '' : ' is-picked'}" data-area="">No area</button>` +
+    getAreas().map(a => `<button type="button" class="task-area-pill${_AH.area === a.name ? ' is-picked' : ''}" data-area="${_esc(a.name)}" style="background:${_esc(a.color)}BF;color:#fff">${_esc(a.name)}</button>`).join('');
+}
+
+function _ahPaintDays() {
+  _ahEl('ahDays').innerHTML = _hdDayPicker(_AH.days);
+}
+
+function _ahDraft() {
+  const today = habitDateStr(0);
+  const h = {
+    id: '__preview', name: _ahEl('ahName').value.trim() || 'New habit',
+    startDate: today, archived: false, endOfDay: false, morningRoutine: false, nightRoutine: false,
+    area: _AH.area, createdAt: new Date().toISOString(),
+  };
+  _setHabitRoutine(h, _AH.routine);
+  if (_AH.track === 'increment') { h.trackType = 'increment'; h.target = Math.max(1, parseInt(_ahEl('ahTarget').value, 10) || 1); }
+  if (_AH.sched === 'days') h.schedule = { type: 'days', days: _AH.days.slice() };
+  if (_AH.sched === 'weekly') h.schedule = { type: 'weekly', times: Math.max(1, Math.min(6, parseInt(_ahEl('ahTimes').value, 10) || 1)) };
+  if (_AH.len === '30' || _AH.len === '66') h.endDate = _shiftDay(today, +_AH.len - 1);
+  if (_AH.len === 'pick' && _ahEl('ahEnd').value) h.endDate = _ahEl('ahEnd').value;
+  return h;
+}
+
+function _ahPreview() {
+  const ul = _ahEl('ahPreview');
+  ul.innerHTML = '';
+  ul.appendChild(buildHabitRow(_ahDraft(), [], { preview: true }));
+  _ahEl('ahSubmit').disabled = !_ahEl('ahName').value.trim();
+}
+
+function openAddHabit() {
+  _ahReturnFocus = document.activeElement;
+  _ahEl('addHabitForm').reset();
+  Object.assign(_AH, { area: null, routine: 'anytime', track: 'checkbox', sched: 'daily', days: [1, 3, 5], len: '0' });
+  ['routine', 'track', 'sched', 'len'].forEach(f => _ahSeg(f, _AH[f]));
+  const tomorrow = _shiftDay(habitDateStr(0), 1);
+  _ahEl('ahEnd').min = tomorrow;
+  _ahEl('ahEnd').value = _shiftDay(habitDateStr(0), 29);
+  _ahEl('ahStatus').textContent = '';
+  _ahPaintAreas();
+  _ahPaintDays();
+  _ahPreview();
+  _ahEl('addHabitModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  _ahEl('ahName').focus();
+}
+
+function closeAddHabit() {
+  _ahEl('addHabitModal').classList.remove('open');
+  document.body.style.overflow = '';
+  if (_ahReturnFocus && _ahReturnFocus.focus) _ahReturnFocus.focus();
+}
+
+function _ahSubmit() {
+  const name = _ahEl('ahName').value.trim();
   if (!name) return;
-  const today   = habitDateStr(0);
-  const entry   = { id: _habitId(), name, startDate: today, archived: false, endOfDay: false, morningRoutine: false, nightRoutine: false, createdAt: new Date().toISOString() };
-  if (endDate.value && endDate.value <= today) {
-    alert('The end date has to be after today. Clear it for an ongoing habit.');
-    return;                       // keep what was typed so it can be corrected
+  const today = habitDateStr(0);
+  if (_AH.len === 'pick' && (!_ahEl('ahEnd').value || _ahEl('ahEnd').value <= today)) {
+    _ahEl('ahStatus').textContent = 'Pick an end date after today.';
+    return;
   }
-  if (endDate.value) entry.endDate = endDate.value;
+  const entry = _ahDraft();
+  entry.id = _habitId();
+  entry.name = name;
   const habits = getHabits();
   habits.push(entry);
   saveHabits(habits);
-  input.value    = '';
-  endDate.value  = '';
+  closeAddHabit();
   renderHabits();
+  const row = document.querySelector(`#habitList .hab-row[data-habit-id="${entry.id}"]`);
+  if (row) { row.classList.add('is-new'); row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  showToast(_habitOffDay(entry, today) ? `Habit added · starts ${_habitScheduleLabel(entry)}` : 'Habit added');
 }
+
+_ahEl('habAddBtn').addEventListener('click', openAddHabit);
+_ahEl('ahName').addEventListener('input', _ahPreview);
+_ahEl('ahTarget').addEventListener('input', _ahPreview);
+_ahEl('ahTimes').addEventListener('input', _ahPreview);
+_ahEl('ahEnd').addEventListener('change', _ahPreview);
+_ahEl('addHabitForm').addEventListener('submit', e => { e.preventDefault(); _ahSubmit(); });
+_ahEl('addHabitForm').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.hasAttribute('data-close')) { closeAddHabit(); return; }
+  if (b.dataset.area !== undefined) { _AH.area = b.dataset.area || null; _ahPaintAreas(); _ahPreview(); return; }
+  if (b.dataset.dow !== undefined) {
+    const d = +b.dataset.dow;
+    const i = _AH.days.indexOf(d);
+    if (i === -1) _AH.days.push(d); else if (_AH.days.length > 1) _AH.days.splice(i, 1);
+    _ahPaintDays(); _ahPreview();
+    return;
+  }
+  const seg = b.closest('.at-seg');
+  if (seg) { _ahSeg(seg.dataset.f, b.dataset.v); _ahPreview(); }
+});
+_ahEl('addHabitModal').addEventListener('click', e => { if (e.target.id === 'addHabitModal') closeAddHabit(); });
+
+// ── Void a day ──
+let _vdSel = new Set();
+let _vdWhen = 'today';
+
+function _vdDates() {
+  const today = habitDateStr(0);
+  if (_vdWhen === 'today') return [today];
+  if (_vdWhen === 'yday') return [_shiftDay(today, -1)];
+  let from = _ahEl('vdFrom').value, to = _ahEl('vdTo').value;
+  if (!from || !to) return [];
+  if (from > to) [from, to] = [to, from];
+  if (to > today) to = today;
+  const out = [];
+  for (let ds = from; ds <= to && out.length < 62; ds = _shiftDay(ds, 1)) out.push(ds);
+  return out;
+}
+
+function _vdPaint() {
+  const active = _orderHabits(getHabits().filter(h => !h.archived));
+  _ahEl('vdPick').innerHTML = active.map(h =>
+    `<button type="button" data-hid="${h.id}" class="${_vdSel.has(h.id) ? 'on' : ''}" aria-pressed="${_vdSel.has(h.id)}">${_esc(h.name)}</button>`).join('');
+  document.querySelectorAll('#voidDayForm .at-seg[data-f="when"] button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === _vdWhen));
+  _ahEl('vdRange').hidden = _vdWhen !== 'range';
+  const n = _vdSel.size;
+  _ahEl('vdSubmit').textContent = n ? `Void ${n} habit${n === 1 ? '' : 's'}` : 'Void';
+  _ahEl('vdSubmit').disabled = !n;
+}
+
+function openVoidDay() {
+  const today = habitDateStr(0);
+  _vdWhen = 'today';
+  _vdSel = new Set(getHabits().filter(h => !h.archived && !_habitDoneOn(h, today)).map(h => h.id));
+  _ahEl('vdFrom').value = _shiftDay(today, -2);
+  _ahEl('vdTo').value = today;
+  [_ahEl('vdFrom'), _ahEl('vdTo')].forEach(el => { el.min = _dayDetailFloor(); el.max = today; });
+  _ahEl('vdStatus').textContent = '';
+  _vdPaint();
+  _ahEl('voidDayModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeVoidDay() {
+  _ahEl('voidDayModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function _vdSubmit() {
+  const dates = _vdDates();
+  if (!dates.length) { _ahEl('vdStatus').textContent = 'Pick the days to void.'; return; }
+  const habits = getHabits().filter(h => _vdSel.has(h.id));
+  let n = 0;
+  dates.forEach(ds => {
+    // Mutate the day's live array in place (see renderDayDetail for why).
+    const ids = getHabitVoids(ds);
+    let changed = false;
+    habits.forEach(h => {
+      if (_habitScheduledOn(h, ds) && !ids.includes(h.id)) { ids.push(h.id); changed = true; n++; }
+    });
+    if (changed) saveHabitVoids(ds, ids);
+  });
+  closeVoidDay();
+  renderHabits();
+  const when = _vdWhen === 'today' ? 'today' : _vdWhen === 'yday' ? 'yesterday'
+    : dates.length === 1 ? _habitDayLabel(dates[0]) : `${_habitDayLabel(dates[0])}–${_habitDayLabel(dates[dates.length - 1])}`;
+  showToast(n ? `Voided ${habits.length} habit${habits.length === 1 ? '' : 's'} for ${when}` : 'Nothing to void on those days');
+}
+
+_ahEl('habVoidBtn').addEventListener('click', openVoidDay);
+_ahEl('voidDayForm').addEventListener('submit', e => { e.preventDefault(); _vdSubmit(); });
+_ahEl('voidDayForm').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.hasAttribute('data-close')) { closeVoidDay(); return; }
+  if (b.id === 'vdAll') {
+    const all = getHabits().filter(h => !h.archived).map(h => h.id);
+    _vdSel = _vdSel.size === all.length ? new Set() : new Set(all);
+    _vdPaint();
+    return;
+  }
+  if (b.dataset.hid) { _vdSel.has(b.dataset.hid) ? _vdSel.delete(b.dataset.hid) : _vdSel.add(b.dataset.hid); _vdPaint(); return; }
+  const seg = b.closest('.at-seg');
+  if (seg) { _vdWhen = b.dataset.v; _vdPaint(); }
+});
+_ahEl('voidDayModal').addEventListener('click', e => { if (e.target.id === 'voidDayModal') closeVoidDay(); });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (_ahEl('addHabitModal').classList.contains('open')) { closeAddHabit(); return; }
+    if (_ahEl('voidDayModal').classList.contains('open')) { closeVoidDay(); return; }
+  }
+  // N opens the add modal — on the Habits tab, when nothing else has the keyboard.
+  if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey &&
+      document.getElementById('tab-habits').classList.contains('active') &&
+      !document.querySelector('.sr-modal.open') &&
+      !document.querySelector('.habit-detail-page.open') &&
+      !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) &&
+      !document.activeElement.isContentEditable) {
+    e.preventDefault();
+    openAddHabit();
+  }
+});
 
 document.getElementById('habitDetailBack').addEventListener('click', closeHabitDetail);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open')) closeHabitDetail();
+  if (e.key === 'Escape' && document.getElementById('habitDetailPage').classList.contains('open') &&
+      !document.querySelector('.sr-modal.open')) closeHabitDetail();
 });
 document.querySelectorAll('#habitDetailPage .hd-tab').forEach(btn => {
   btn.addEventListener('click', () => _setHabitDetailTab(btn.dataset.hdtab));

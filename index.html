@@ -19,7 +19,7 @@
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
 <link rel="stylesheet" href="css/main.css?v=32">
 <link rel="stylesheet" href="css/todo.css?v=31">
-<link rel="stylesheet" href="css/habits.css?v=53">
+<link rel="stylesheet" href="css/habits.css?v=57">
 <link rel="stylesheet" href="css/jobs.css?v=88">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
@@ -186,78 +186,79 @@
   <!-- Tab: Habits -->
   <div class="tab-panel" id="tab-habits">
     <div class="section">
-      <div class="habit-cal-split">
-        <div class="habit-cal-left">
-          <div class="section-title">Habit Calendar</div>
-          <div class="card">
-            <div class="hcal">
-              <div class="hcal-nav">
-                <button class="hcal-nav-btn" id="hcalPrev">←</button>
-                <div class="hcal-month-header" id="hcalMonthHeader"></div>
-                <button class="hcal-nav-btn" id="hcalNext">→</button>
-              </div>
-              <div class="hcal-grid" id="hcalGrid"></div>
+      <div class="hab-layout">
+        <!-- Today: the check-in list -->
+        <div class="card hab-panel" id="habitCard">
+          <div class="hab-head">
+            <div class="hab-head-left">
+              <div class="hab-eyebrow" id="habTodayLabel">Today</div>
+              <div class="hab-count"><b id="habCountNum">0/0</b><span>done today</span></div>
+              <div class="hab-sub" id="habSub"></div>
+            </div>
+            <div class="hab-actions">
+              <span class="hab-weekpill" id="habWeekPill" title="Share of habits done, last 7 days"><span class="hab-weekbars" id="habWeekBars"></span><span id="habWeekPct">0%</span><small>7 days</small></span>
+              <button class="hab-chip hab-chip-void" id="habVoidBtn" type="button">∅ Void a day</button>
+              <button class="add-task-btn" id="habAddBtn" type="button" title="Add a habit (N)">+ New habit <kbd>N</kbd></button>
             </div>
           </div>
-
-          <div class="card">
-            <div class="rh-panel">
-              <div class="rh-panel-head">
-                <div class="section-title" style="margin-bottom:0;">Reactive Habits</div>
-                <span id="rhViewAllLink" class="mono rh-view-all">View all &#8594;</span>
-              </div>
-              <ul id="reactiveHabitList" class="rh-list"></ul>
-              <div id="reactiveHabitEmpty" class="empty-state" style="display:none;">No reactive habits yet — add one below.</div>
-              <div class="habit-add-form">
-                <div class="habit-add-row">
-                  <input type="text" class="task-input" id="rhNameInput" placeholder="Add a reactive habit…" style="flex:1;">
-                  <button class="btn-add" id="rhAddBtn">+ Add</button>
-                </div>
-                <div class="habit-date-wrap">
-                  <span class="habit-date-label">Cue type:</span>
-                  <div id="rhCueBtns" style="display:flex;gap:8px;"></div>
-                </div>
-              </div>
-            </div>
+          <div class="hab-groupbar" role="tablist" aria-label="Group habits by">
+            <span class="hab-groupbar-label">Group</span>
+            <button class="hab-group-btn" data-group="routine" role="tab" type="button">Routine</button>
+            <button class="hab-group-btn" data-group="area" role="tab" type="button">Area</button>
+            <span class="hab-groupbar-sp"></span>
+            <label class="hab-sort" for="habSortSel">Sort
+              <select id="habSortSel">
+                <option value="custom">Custom</option>
+                <option value="az">A–Z</option>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+              </select>
+            </label>
           </div>
+          <div class="hab-cols" id="habCols" aria-hidden="true"><span></span><span></span><span></span><span class="hab-cols-week" id="habColDays"></span><span class="hab-cols-streak">Streak</span></div>
+          <div id="habitList" class="hab-groups"></div>
+          <div id="habitEmpty" class="empty-state">No habits yet — hit <strong>+ New habit</strong> or press N.</div>
+          <details class="hab-archived" id="archivedToggle">
+            <summary id="archivedToggleLabel">Completed habits</summary>
+            <ul id="archivedList" class="hab-archived-list"></ul>
+          </details>
         </div>
 
-        <div class="habit-cal-right">
-          <div class="section-title">Habit Tracker</div>
-          <div class="card" id="habitCard">
-            <div class="habit-sort-bar">
-              <span class="habit-sort-label">Sort By:</span>
-              <button class="habit-sort-btn active" data-sort="custom">Custom</button>
-              <button class="habit-sort-btn" data-sort="az">A–Z</button>
-              <button class="habit-sort-btn" data-sort="area">Area</button>
-              <button class="habit-sort-btn" data-sort="newest">Newest</button>
-              <button class="habit-sort-btn" data-sort="oldest">Oldest</button>
-              <div class="habit-flame-legend">
-                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(248,197,50)"></span>1–4</span>
-                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,135,51)"></span>5–13</span>
-                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(253,70,68)"></span>14–29</span>
-                <span class="habit-flame-legend-item"><span class="habit-flame-legend-dot" style="background:rgb(57,150,253)"></span>30+</span>
+        <div class="hab-side">
+          <!-- Month calendar -->
+          <div class="card hab-panel">
+            <div class="hcal">
+              <div class="hcal-nav">
+                <button class="hcal-nav-btn" id="hcalPrev" type="button" aria-label="Previous month">‹</button>
+                <div class="hcal-month-header" id="hcalMonthHeader"></div>
+                <button class="hcal-nav-btn" id="hcalNext" type="button" aria-label="Next month">›</button>
+              </div>
+              <div class="hcal-grid" id="hcalGrid"></div>
+              <div class="hcal-foot">
+                <span>Month <b id="hcalAvg">–</b></span>
+                <span>0%<span class="hcal-ramp"></span>100% · <span class="hcal-void-key">⌀ voided</span></span>
               </div>
             </div>
-            <ul id="habitList" class="habit-list"></ul>
-            <div id="habitEmpty" class="empty-state">No habits yet — add one below.</div>
+          </div>
 
-            <!-- Archived section -->
-            <div class="archived-toggle" id="archivedToggle" style="display:none;">
-              <span class="archived-toggle-arrow">▶</span>
-              <span id="archivedToggleLabel">Completed habits</span>
-            </div>
-            <ul id="archivedList" class="archived-list habit-list"></ul>
-
-            <!-- Add form -->
-            <div class="habit-add-form">
-              <div class="habit-add-row">
-                <input type="text" class="task-input" id="habitInput" placeholder="Add a habit…" style="flex:1;">
-                <button class="btn-add" id="habitAddBtn">+ Add</button>
+          <!-- Reactive habits -->
+          <div class="card hab-panel">
+            <div class="rh-panel">
+              <div class="rh-panel-head">
+                <span class="hab-eyebrow">Reactive habits</span>
+                <button id="rhViewAllLink" class="rh-view-all" type="button">View all →</button>
               </div>
-              <div class="habit-date-wrap">
-                <span class="habit-date-label">End date (leave blank for ongoing):</span>
-                <input type="date" class="habit-date-input" id="habitEndDate">
+              <ul id="reactiveHabitList" class="rh-list"></ul>
+              <div id="reactiveHabitEmpty" class="empty-state" style="display:none;">No reactive habits yet.</div>
+              <button class="rh-add-toggle" id="rhAddToggle" type="button">+ Add a reactive habit</button>
+              <div class="rh-add-form" id="rhAddForm" hidden>
+                <input type="text" class="task-input" id="rhNameInput" placeholder="e.g. Pause before replying when annoyed" aria-label="Reactive habit">
+                <div class="rh-add-row">
+                  <div id="rhCueBtns" class="at-seg"></div>
+                  <span class="hab-groupbar-sp"></span>
+                  <button class="btn-polish" id="rhAddCancel" type="button">Cancel</button>
+                  <button class="btn-add" id="rhAddBtn" type="button">Add</button>
+                </div>
               </div>
             </div>
           </div>
@@ -657,11 +658,16 @@
 
 <div id="habitDetailPage" class="habit-detail-page">
   <div class="habit-detail-wrap">
-    <button id="habitDetailBack" class="habit-detail-back">← Back</button>
-    <h2 class="habit-detail-name" id="habitDetailName" contenteditable="true" spellcheck="false"></h2>
-    <div class="hd-tabs">
-      <button class="hd-tab active" data-hdtab="overview">Overview</button>
-      <button class="hd-tab" data-hdtab="notes">Notes</button>
+    <div class="hd-top">
+      <div class="hd-title">
+        <button id="habitDetailBack" class="habit-detail-back hd-back" type="button">← Habits</button>
+        <h2 class="habit-detail-name" id="habitDetailName" contenteditable="true" spellcheck="false"></h2>
+        <div class="hd-sub" id="habitDetailSub"></div>
+      </div>
+      <div class="hd-tabs" role="tablist">
+        <button class="hd-tab active" data-hdtab="overview" type="button" role="tab">Overview</button>
+        <button class="hd-tab" data-hdtab="notes" type="button" role="tab" id="hdNotesTab">Notes</button>
+      </div>
     </div>
     <div id="habitDetailOverview">
       <div class="habit-detail-cols">
@@ -671,6 +677,7 @@
         </div>
         <div class="habit-detail-col-right">
           <div id="habitDetailHistory"></div>
+          <div id="habitDetailNotePreview"></div>
         </div>
       </div>
     </div>
@@ -781,6 +788,67 @@
   </form>
 </div>
 
+<div id="addHabitModal" class="sr-modal">
+  <form class="sr-modal-card add-task-card" id="addHabitForm" role="dialog" aria-modal="true" aria-labelledby="addHabitTitle" autocomplete="off">
+    <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="addHabitTitle">New habit</h2>
+    <p class="at-hint">Starts today. You can change any of this later on the habit's page.</p>
+    <div class="at-name"><input id="ahName" placeholder="e.g. Stretch 10 minutes" aria-label="Habit name"></div>
+    <div class="at-grid">
+      <span class="at-label">Area</span>
+      <div class="at-areas" id="ahAreas"></div>
+      <span class="at-label">Routine</span>
+      <div class="at-seg" data-f="routine"><button type="button" data-v="morning">Morning</button><button type="button" data-v="anytime">Anytime</button><button type="button" data-v="night">Night</button><button type="button" data-v="eod">End of day</button></div>
+      <span class="at-label">Tracking</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="track"><button type="button" data-v="checkbox">Check off</button><button type="button" data-v="increment">Count</button></div>
+        <span class="at-row" id="ahTargetWrap" hidden><input type="number" class="task-date-input hab-num" id="ahTarget" min="1" step="1" value="8" aria-label="Target per day"><span class="at-none">a day</span></span>
+      </div>
+      <span class="at-label">Schedule</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="sched"><button type="button" data-v="daily">Every day</button><button type="button" data-v="days">Pick days</button><button type="button" data-v="weekly">× a week</button></div>
+        <span class="hab-daypick" id="ahDays" hidden></span>
+        <span class="at-row" id="ahTimesWrap" hidden><input type="number" class="task-date-input hab-num" id="ahTimes" min="1" max="6" step="1" value="3" aria-label="Times per week"><span class="at-none">times</span></span>
+      </div>
+      <span class="at-label">Length</span>
+      <div class="at-row">
+        <div class="at-seg" data-f="len"><button type="button" data-v="0">Ongoing</button><button type="button" data-v="30">30 days</button><button type="button" data-v="66">66 days</button><button type="button" data-v="pick">Pick end…</button></div>
+        <input type="date" class="task-date-input at-date" id="ahEnd" aria-label="End date" hidden>
+      </div>
+    </div>
+    <div class="ah-preview"><div class="hab-eyebrow">Preview</div><ul class="hab-list" id="ahPreview"></ul></div>
+    <div class="at-foot">
+      <span class="at-keys"><kbd>↵</kbd> add · <kbd>esc</kbd> cancel</span>
+      <span class="at-status" id="ahStatus"></span>
+      <button type="button" class="btn-polish" data-close>Cancel</button>
+      <button type="submit" class="btn-add" id="ahSubmit" disabled>Add habit</button>
+    </div>
+  </form>
+</div>
+
+<div id="voidDayModal" class="sr-modal">
+  <form class="sr-modal-card add-task-card" id="voidDayForm" role="dialog" aria-modal="true" aria-labelledby="voidDayTitle" autocomplete="off">
+    <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
+    <h2 class="sr-modal-title vd-title" id="voidDayTitle">∅ Void a day</h2>
+    <p class="at-hint">Voided days never break a streak, don't count against your rate, and don't add to "Day N". A habit you do anyway still counts as done.</p>
+    <div class="at-grid">
+      <span class="at-label">When</span>
+      <div class="at-row">
+        <div class="at-seg vd-seg" data-f="when"><button type="button" data-v="today">Today</button><button type="button" data-v="yday">Yesterday</button><button type="button" data-v="range">A few days…</button></div>
+        <span class="at-row" id="vdRange" hidden><input type="date" class="task-date-input at-date" id="vdFrom" aria-label="From"><span class="at-none">to</span><input type="date" class="task-date-input at-date" id="vdTo" aria-label="To"></span>
+      </div>
+      <span class="at-label">Habits</span>
+      <div class="vd-pick" id="vdPick"></div>
+    </div>
+    <div class="at-foot">
+      <button type="button" class="btn-polish" id="vdAll">Select all</button>
+      <span class="at-status" id="vdStatus"></span>
+      <button type="button" class="btn-polish" data-close>Cancel</button>
+      <button type="submit" class="btn-add vd-submit" id="vdSubmit">Void</button>
+    </div>
+  </form>
+</div>
+
 <div class="app-toast" id="appToast" role="status" hidden></div>
 
 <div id="triageModal" class="sr-modal">
@@ -857,8 +925,8 @@
      is the only file with bare top-level calls. Keep this order. -->
 <script src="js/todo.js?v=30"></script>
 <script src="js/todoPlan.js?v=4"></script>
-<script src="js/habits.js?v=40"></script>
-<script src="js/reactiveHabits.js?v=1"></script>
+<script src="js/habits.js?v=41"></script>
+<script src="js/reactiveHabits.js?v=2"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>
 <script src="js/jobs.js?v=84"></script>
@@ -869,6 +937,6 @@
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=50"></script>
+<script src="js/main.js?v=51"></script>
 </body>
 </html>

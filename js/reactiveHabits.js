@@ -51,19 +51,37 @@ function renderReactiveHabits() {
   if (_reactiveDetailOpen) renderReactiveDetailPage();
 }
 
+// When it was last logged, in words: "today", "yesterday" or "Sep 14".
+function _rhLastLabel(occ) {
+  if (!occ) return 'not logged yet';
+  const d = new Date(occ.ts);
+  const day = _localDateStr(d);
+  const today = _localDateStr(new Date());
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  if (day === today) return 'today';
+  if (day === _localDateStr(y)) return 'yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function buildReactiveHabitRow(habit) {
-  const stats = _rhStats(habit.id);
+  const occ = getReactiveOccurrences().filter(o => o.habitId === habit.id)
+    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  const good = occ.filter(o => o.outcome === 'good').length;
+  const dots = occ.slice(-6).map(o => `<u class="${o.outcome === 'good' ? 'g' : 'b'}"></u>`).join('');
   const li = document.createElement('li');
   li.className = 'rh-row';
   li.dataset.habitId = habit.id;
   li.innerHTML = `
     <div class="rh-name-col">
       <span class="rh-name">${_esc(habit.name)}</span>
-      <span class="rh-badge rh-badge-${habit.cueType}">${_rhCueLabel(habit.cueType)}</span>
+      <span class="rh-sub">
+        <span class="rh-badge rh-badge-${habit.cueType}">${_rhCueLabel(habit.cueType)}</span>
+        ${dots ? `<span class="rh-outs" aria-hidden="true">${dots}</span>` : ''}
+        <span>${occ.length ? `handled ${good} of ${occ.length}` : 'not logged yet'}${occ.length ? ' · ' + _rhLastLabel(occ[occ.length - 1]) : ''}</span>
+      </span>
     </div>
-    <span class="rh-stat mono">${stats.total} · ${stats.pct}%</span>
-    <button class="rh-log-btn good" data-action="good" title="Handled well">${_RH_CHECK_SVG}</button>
-    <button class="rh-log-btn bad" data-action="bad" title="Slipped">${_RH_X_SVG}</button>
+    <button class="rh-log-btn good" data-action="good" type="button" title="Handled well" aria-label="Handled well">${_RH_CHECK_SVG}</button>
+    <button class="rh-log-btn bad" data-action="bad" type="button" title="Slipped" aria-label="Slipped">${_RH_X_SVG}</button>
   `;
   return li;
 }
@@ -72,7 +90,12 @@ document.getElementById('reactiveHabitList').addEventListener('click', e => {
   const btn = e.target.closest('.rh-log-btn');
   const row = e.target.closest('.rh-row');
   if (!row) return;
-  if (btn) { logReactiveOccurrence(row.dataset.habitId, btn.dataset.action === 'good' ? 'good' : 'bad'); return; }
+  if (btn) {
+    const good = btn.dataset.action === 'good';
+    logReactiveOccurrence(row.dataset.habitId, good ? 'good' : 'bad');
+    showToast(good ? 'Logged: handled well' : 'Logged: slipped');
+    return;
+  }
   openReactiveDetail();
 });
 
@@ -82,7 +105,7 @@ function _renderRhCueBtns(containerId, selected, scope) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = ['situational', 'internal'].map(c => `
-    <button class="rh-cue-btn${c === selected ? ' active' : ''}" data-cue="${c}" data-scope="${scope}">${_rhCueLabel(c)}</button>
+    <button type="button" class="rh-cue-btn${c === selected ? ' active on' : ''}" data-cue="${c}" data-scope="${scope}">${_rhCueLabel(c)}</button>
   `).join('');
 }
 
@@ -93,14 +116,25 @@ document.addEventListener('click', e => {
   else { _rhDetailCueType = btn.dataset.cue; _renderRhCueBtns('rhDetailCueBtns', _rhDetailCueType, 'detail'); }
 });
 
+function _rhShowAddForm(show) {
+  document.getElementById('rhAddForm').hidden = !show;
+  document.getElementById('rhAddToggle').hidden = show;
+  if (show) document.getElementById('rhNameInput').focus();
+  else document.getElementById('rhNameInput').value = '';
+}
+
 function addReactiveHabit() {
   const input = document.getElementById('rhNameInput');
   const name = input.value.trim();
   if (!name) return;
   _createReactiveHabit(name, _rhPanelCueType);
-  input.value = '';
+  _rhShowAddForm(false);
   renderReactiveHabits();
+  showToast('Reactive habit added');
 }
+
+document.getElementById('rhAddToggle').addEventListener('click', () => _rhShowAddForm(true));
+document.getElementById('rhAddCancel').addEventListener('click', () => _rhShowAddForm(false));
 
 function _createReactiveHabit(name, cueType) {
   const list = getReactiveHabits();
@@ -118,6 +152,7 @@ function logReactiveOccurrence(habitId, outcome) {
 document.getElementById('rhAddBtn').addEventListener('click', addReactiveHabit);
 document.getElementById('rhNameInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') addReactiveHabit();
+  if (e.key === 'Escape') _rhShowAddForm(false);
 });
 
 // ── Detail overlay ("View all") ──

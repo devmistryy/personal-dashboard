@@ -107,6 +107,12 @@ alter table habits drop column if exists prior_done;
 -- rendering, so it's a plain text column rather than an enum.
 alter table habits add column if not exists track_type text default 'checkbox';
 alter table habits add column if not exists target     integer;
+-- Habits redesign (2026-09-22): a non-daily schedule, kept in one jsonb column.
+-- Shape: {"schedule":{"type":"days","days":[1,3,5]}} (0 = Sunday) or
+-- {"schedule":{"type":"weekly","times":3}}. No schedule = every day. The app
+-- only sends `meta` once some habit has a schedule, so saving keeps working
+-- before this runs.
+alter table habits add column if not exists meta       jsonb;
 alter table habits enable row level security;
 
 -- ───────────────────────── habit_logs ─────────────────────────
