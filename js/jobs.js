@@ -412,6 +412,8 @@ const JOB_MAP_KNOWN_CITIES = {
   'the bronx': [-73.8648, 40.8448],
   'staten island': [-74.1502, 40.5795],
   'washington, dc': [-77.0365, 38.8951],
+  'dc': [-77.0365, 38.8951],
+  'washington dc': [-77.0365, 38.8951],
   'st. louis': [-90.1994, 38.6270],
   'tysons': [-77.2270, 38.9187],
   'st. paul': [-93.0900, 44.9537],
@@ -612,6 +614,9 @@ function _jobMapMarkers(entries) {
     group.cityColorApps = group.coreApps;
     group.metroColorApps = Math.max(0, group.apps - group.coreApps);
     if (group.coreJobs.length) group.kind = 'composite';
+    // Only the major city has applications: no metro ring, just the city dot.
+    group.cityOnly = !!group.cityRadius && group.metroColorApps < 0.001;
+    if (group.cityOnly) group.radius = group.cityRadius;
     return group;
   });
 }
@@ -802,7 +807,7 @@ async function renderJobMap() {
       outer.style.fillOpacity = metroColor === '#ffffff' ? '0.1' : '0.2';
       if (metroColor === '#ffffff') outer.style.strokeOpacity = '0.8';
     }
-    marker.appendChild(outer);
+    if (!entry.cityOnly) marker.appendChild(outer);
     if (entry.cityRadius) {
       const inner = document.createElementNS(ns, 'circle');
       inner.setAttribute('r', entry.cityRadius);
@@ -810,6 +815,7 @@ async function renderJobMap() {
         const cityColor = _jobMapCityColor(entry.cityColorApps);
         inner.style.fill = cityColor;
         inner.style.fillOpacity = cityColor === '#ffffff' ? '0.3' : '1';
+        if (entry.cityOnly) inner.style.stroke = cityColor;
       }
       marker.appendChild(inner);
     }
@@ -830,7 +836,7 @@ async function renderJobMap() {
       if (entry.kind === 'other') row('Applications', _jobFmtApps(entry.apps), 'var(--text-primary)');
       else {
         if (entry.coreApps) row('Major City', cityCount, _jobMapCityColor(entry.cityColorApps));
-        row('Metro Area', metroCount, _jobMapMetroColor(entry.metroColorApps));
+        if (!entry.cityOnly) row('Metro Area', metroCount, _jobMapMetroColor(entry.metroColorApps));
       }
       tooltip.appendChild(counts);
       tooltip.hidden = false;

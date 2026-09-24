@@ -5,6 +5,7 @@ const TECH_RANKING_VERSION = '2026-09-17';
 // Locations that belong to a ranked city rather than its surrounding metro.
 const TECH_CITY_APPLICATION_ALIASES = {
   'New York City':['New York','Manhattan','Brooklyn','Queens','Bronx','The Bronx','Staten Island'],
+  'DC':['Washington, DC','Washington DC','Washington D.C.','D.C.'],
 };
 
 const techMetros = [
@@ -13,7 +14,7 @@ const techMetros = [
   { id:'san-jose', name:'San Jose Metro', metroTechRank:3, includedAreas:['San Jose','Palo Alto','Mountain View','Sunnyvale','Santa Clara'] },
   { id:'seattle', name:'Seattle Metro', metroTechRank:4, includedAreas:['Seattle','Bellevue','Redmond','Kirkland'] },
   { id:'austin', name:'Austin Metro', metroTechRank:5, includedAreas:['Austin','Round Rock','Cedar Park'] },
-  { id:'dc-nova', name:'DC / Northern Virginia', metroTechRank:6, includedAreas:['Washington, DC','Arlington','Alexandria','Tysons','McLean','Reston','Herndon','Bethesda'] },
+  { id:'dc-nova', name:'DC / Northern Virginia', metroTechRank:6, includedAreas:['DC','Arlington','Alexandria','Tysons','McLean','Reston','Herndon','Bethesda'] },
   { id:'dallas-fort-worth', name:'Dallas–Fort Worth', metroTechRank:7, includedAreas:['Dallas','Fort Worth','Plano','Frisco','Irving','Richardson'] },
   { id:'boston', name:'Boston Metro', metroTechRank:8, includedAreas:['Boston','Cambridge','Somerville','Waltham'] },
   { id:'los-angeles', name:'Los Angeles Metro', metroTechRank:9, includedAreas:['Los Angeles','Long Beach','Santa Monica','Culver City','El Segundo'] },
@@ -71,7 +72,7 @@ const techCities = [
   { id:'boston', name:'Boston', cityTechRank:6, metroId:'boston' },
   { id:'los-angeles', name:'Los Angeles', cityTechRank:7, metroId:'los-angeles' },
   { id:'chicago', name:'Chicago', cityTechRank:8, metroId:'chicago' },
-  { id:'washington-dc', name:'Washington, DC', cityTechRank:9, metroId:'dc-nova' },
+  { id:'washington-dc', name:'DC', cityTechRank:9, metroId:'dc-nova' },
   { id:'dallas', name:'Dallas', cityTechRank:10, metroId:'dallas-fort-worth' },
   { id:'philadelphia', name:'Philadelphia', cityTechRank:11, metroId:'philadelphia' },
   { id:'san-diego', name:'San Diego', cityTechRank:12, metroId:'san-diego' },
