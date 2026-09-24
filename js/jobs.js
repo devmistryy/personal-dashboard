@@ -597,25 +597,25 @@ function _jobMapMarkers(entries) {
     }
   });
   const grouped = [...groups.values()];
-  const maxMetroApplications = Math.max(...grouped.map(group => group.apps), 1);
-  const maxCityApplications = Math.max(...grouped.map(group => group.coreApps), 1);
   return grouped.map(group => {
     group.point = group.coreWeight
       ? [group.coreX / group.coreWeight, group.coreY / group.coreWeight]
       : [group.totalX / group.weight, group.totalY / group.weight];
-    group.radius = JOB_MAP_MARKER_MODE === 'numbered'
-      ? Math.min(28, 8 + Math.sqrt(group.apps) * 3)
-      : 10 + Math.sqrt(group.apps / maxMetroApplications) * 18;
-    group.cityRadius = group.coreApps
-      ? (JOB_MAP_MARKER_MODE === 'numbered'
-        ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, _jobFmtApps(group.coreApps).length - 1) * 3, 3 + Math.sqrt(group.coreApps) * 3))
-        : Math.min(group.radius - 5, 4 + Math.sqrt(group.coreApps / maxCityApplications) * 8))
-      : 0;
     group.cityColorApps = group.coreApps;
     group.metroColorApps = Math.max(0, group.apps - group.coreApps);
     if (group.coreJobs.length) group.kind = 'composite';
     // Only the major city has applications: no metro ring, just the city dot.
-    group.cityOnly = !!group.cityRadius && group.metroColorApps < 0.001;
+    group.cityOnly = !!group.coreApps && group.metroColorApps < 0.001;
+    if (JOB_MAP_MARKER_MODE === 'numbered') {
+      group.radius = Math.min(28, 8 + Math.sqrt(group.apps) * 3);
+      group.cityRadius = group.coreApps
+        ? Math.min(group.radius - 4, Math.max(7 + Math.max(0, _jobFmtApps(group.coreApps).length - 1) * 3, 3 + Math.sqrt(group.coreApps) * 3))
+        : 0;
+    } else {
+      // Fixed sizes: the city dot and metro ring's colours show the density.
+      group.cityRadius = group.coreApps ? 8.5 : 0;
+      group.radius = 17;
+    }
     if (group.cityOnly) group.radius = group.cityRadius;
     return group;
   });
@@ -815,7 +815,6 @@ async function renderJobMap() {
         const cityColor = _jobMapCityColor(entry.cityColorApps);
         inner.style.fill = cityColor;
         inner.style.fillOpacity = cityColor === '#ffffff' ? '0.3' : '1';
-        if (entry.cityOnly) inner.style.stroke = cityColor;
       }
       marker.appendChild(inner);
     }
