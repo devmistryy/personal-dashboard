@@ -392,6 +392,41 @@ create table if not exists diet_foods (
 );
 alter table diet_foods enable row level security;
 
+-- ─────────────────── finance_transactions ─────────────────────
+-- one row per transaction. id is text: 'f_' + base36 (js/finance.js _finId).
+-- amount is always positive; category 'Income' marks money in.
+create table if not exists finance_transactions (
+  id          text primary key,
+  user_id     uuid references auth.users not null,
+  date        date not null,
+  merchant    text,
+  amount      numeric(12,2) not null check (amount >= 0),
+  category    text not null,
+  source      text not null default 'manual',   -- 'manual' | 'scan'
+  created_at  timestamptz default now()
+);
+alter table finance_transactions add column if not exists note          text;
+alter table finance_transactions add column if not exists recurring     boolean not null default false;
+alter table finance_transactions add column if not exists receipt_id    text;   -- finance_receipts.id; shared by a split receipt's rows
+alter table finance_transactions add column if not exists needs_review  boolean not null default false;
+alter table finance_transactions add column if not exists review_reason text;
+create index if not exists finance_transactions_user_date_idx
+  on finance_transactions (user_id, date);
+alter table finance_transactions enable row level security;
+
+-- ──────────────────── finance_receipts ────────────────────────
+-- one scanned receipt: a ~1000px JPEG data URL plus what was parsed off it
+-- (highlight boxes, line items, subtotal/tax). Fetched one at a time when a
+-- transaction is opened, never in the bulk load. id: 'r_' + base36.
+create table if not exists finance_receipts (
+  id          text primary key,
+  user_id     uuid references auth.users not null,
+  image       text,
+  data        jsonb not null default '{}',
+  created_at  timestamptz default now()
+);
+alter table finance_receipts enable row level security;
+
 -- ─────────────────── mobility_exercises ───────────────────────
 -- the exercise list. id is text: 's_' + base36 (js/mobility.js _mobId).
 create table if not exists mobility_exercises (
@@ -582,7 +617,7 @@ begin
   foreach t in array array[
     'habits','habit_logs','habit_voids','habit_counts','habit_notes','tasks','goals','settings','job_applications','referrals','areas',
     'diet_entries','diet_foods','mobility_exercises','mobility_logs','reactive_habits','reactive_habit_logs',
-    'whoop_recovery','whoop_workouts','whoop_profile'
+    'whoop_recovery','whoop_workouts','whoop_profile','finance_transactions','finance_receipts'
   ] loop
     if not exists (
       select 1 from pg_policies

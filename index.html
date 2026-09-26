@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="css/diet.css?v=6">
 <link rel="stylesheet" href="css/mobility.css?v=6">
 <link rel="stylesheet" href="css/whoop.css?v=1">
+<link rel="stylesheet" href="css/finance.css?v=3">
 </head>
 <body>
 <div class="app-shell">
@@ -59,6 +60,10 @@
       <button class="tab-btn" data-tab="diet" title="Diet">
         <svg class="tab-btn-icon" viewBox="0 0 24 24"><path d="M7 2v8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V2M9 12v10M17 2c-1.6 0-3 1.8-3 4.5S15.4 11 17 11V2v20"/></svg>
         <span class="tab-btn-label">Diet</span>
+      </button>
+      <button class="tab-btn" data-tab="finance" title="Finance">
+        <svg class="tab-btn-icon" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 10v5M18 10v5"/></svg>
+        <span class="tab-btn-label">Finance</span>
       </button>
       <button class="tab-btn" data-tab="mobility" title="Mobility">
         <svg class="tab-btn-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 8M12 12l3 8M8 11h8"/></svg>
@@ -512,6 +517,83 @@
     </div>
   </div>
 
+  <!-- Tab: Finance -->
+  <div class="tab-panel" id="tab-finance">
+    <div class="fin-head">
+      <div class="fin-month">
+        <button type="button" class="fin-icon-btn" id="finPrev" aria-label="Previous period">‹</button>
+        <h1 id="finTitle"></h1>
+        <button type="button" class="fin-icon-btn" id="finNext" aria-label="Next period">›</button>
+        <button type="button" class="fin-today-btn" id="finToday" hidden>Back to today</button>
+      </div>
+      <div class="fin-head-actions">
+        <div class="fin-seg" role="group" aria-label="Period">
+          <button type="button" data-fin-period="month">Month</button>
+          <button type="button" data-fin-period="quarter">Quarter</button>
+          <button type="button" data-fin-period="year">Year</button>
+        </div>
+        <button type="button" class="btn-polish" id="finManualBtn">+ Manual</button>
+        <button type="button" class="btn-add" id="finScanBtn">📷 Scan receipt</button>
+        <input type="file" id="finScanFile" accept="image/*" hidden>
+      </div>
+    </div>
+
+    <div class="fin-grid">
+      <div class="fin-col">
+        <div class="card" id="finHero"></div>
+
+        <div class="card fin-chart">
+          <div class="fin-card-head">
+            <div><div class="fin-card-title">Spending</div><div class="fin-card-sub" id="finChartSub"></div></div>
+            <div class="fin-legend" id="finChartLegend"></div>
+          </div>
+          <svg id="finChart" viewBox="0 0 640 220" role="img" aria-label="Cumulative spending chart"></svg>
+        </div>
+
+        <div class="card" id="finTxCard">
+          <div class="fin-card-head">
+            <div class="fin-card-title">Transactions</div>
+            <div class="fin-card-sub" id="finTxCount"></div>
+          </div>
+          <div class="fin-toolbar">
+            <input type="search" class="fin-search" id="finSearch" placeholder="Search merchant, category, amount…" aria-label="Search transactions" autocomplete="off">
+            <div class="fin-chips" id="finChips"></div>
+          </div>
+          <div id="finTxList"></div>
+        </div>
+      </div>
+
+      <div class="fin-col">
+        <div class="card">
+          <div class="fin-card-head"><div class="fin-card-title">Scan a receipt</div><div class="fin-card-sub">OCR.space</div></div>
+          <div class="fin-drop" id="finDrop" data-fin-drop role="button" tabindex="0" aria-label="Scan a receipt: choose or drop an image">
+            <div class="fin-drop-icon"><svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg></div>
+            <div class="fin-drop-title">Drop a photo or tap to capture</div>
+            <div class="fin-drop-sub">Reads merchant, date, total and line items.<br>You confirm before anything is saved.</div>
+          </div>
+          <div class="fin-review-list" id="finReviewList"></div>
+        </div>
+
+        <div class="card" id="finCatCard">
+          <div class="fin-card-head">
+            <div><div class="fin-card-title">By category</div><div class="fin-card-sub" id="finCatSub"></div></div>
+            <button type="button" class="fin-link" id="finBudgetEdit">Edit budgets</button>
+          </div>
+          <div class="fin-donut-wrap">
+            <svg id="finDonut" width="170" height="170" viewBox="0 0 170 170" aria-hidden="true"></svg>
+            <div class="fin-donut-center"><div class="fin-mono" id="finDonutTotal">$0</div><div class="fin-card-sub">spent</div></div>
+          </div>
+          <div id="finCats"></div>
+        </div>
+
+        <div class="card">
+          <div class="fin-card-head"><div class="fin-card-title">Coming up</div><div class="fin-card-sub">Recurring · next 14 days</div></div>
+          <div id="finUpcoming"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Tab: Mobility -->
   <div class="tab-panel" id="tab-mobility">
     <div class="section">
@@ -885,6 +967,12 @@
 
 <div class="app-toast" id="appToast" role="status" hidden></div>
 
+<!-- Finance: add / edit / scanned-receipt review (js/finance.js) -->
+<div class="fin-modal-bg" id="finModal" hidden>
+  <div class="fin-modal" id="finModalCard" role="dialog" aria-modal="true" aria-labelledby="finModalTitle"></div>
+</div>
+<div class="fin-toast" id="finToast" role="status" aria-live="polite" hidden></div>
+
 <div id="triageModal" class="sr-modal">
   <div class="sr-modal-card triage-modal-card" role="dialog" aria-modal="true" aria-labelledby="triageTitle">
     <button id="triageClose" class="sr-modal-close" aria-label="Close">×</button>
@@ -968,9 +1056,10 @@
 <script src="js/techRankings.js?v=22"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
-<script src="js/diet.js?v=10"></script>
+<script src="js/diet.js?v=11"></script>
+<script src="js/finance.js?v=3"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=56"></script>
+<script src="js/main.js?v=58"></script>
 </body>
 </html>

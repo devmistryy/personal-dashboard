@@ -1200,6 +1200,54 @@ async function _syncDietEntries(list) {
   }
 }
 
+// ── Finance (js/finance.js) ──
+async function _syncFinance(list) {
+  if (LOCAL_MODE) return _saveLocal();
+  const uid = await _requireUid(); if (!uid) return;
+  if (list.length) {
+    const { error } = await sb.from('finance_transactions').upsert(list.map(t => ({
+      id: t.id, user_id: uid, date: t.date, merchant: t.merchant || null,
+      amount: t.amount, category: t.category, source: t.source || 'manual',
+      note: t.note || null, recurring: !!t.recurring, receipt_id: t.receiptId || null,
+      needs_review: !!t.needsReview, review_reason: t.reviewReason || null,
+    })), { onConflict: 'id' });
+    if (error) _syncFailed('finance_transactions upsert failed (run master.sql?)', error);
+  }
+  const { data: existing = [], error: selErr } =
+    await sb.from('finance_transactions').select('id').eq('user_id', uid);
+  if (selErr) { _syncFailed('finance_transactions select failed', selErr); return; }
+  const keep = new Set(list.map(t => t.id));
+  const toDelete = (existing || []).filter(r => !keep.has(r.id)).map(r => r.id);
+  if (toDelete.length) {
+    const { error: delErr } = await sb.from('finance_transactions').delete().eq('user_id', uid).in('id', toDelete);
+    if (delErr) _syncFailed('finance_transactions delete failed', delErr);
+  }
+}
+
+// Receipt images are large, so they live in their own table and are fetched
+// one at a time when a transaction is opened, never in loadFromSupabase.
+// ponytail: local mode keeps them in memory only (localStorage quota is ~5 MB).
+const _localReceipts = new Map();
+async function _finPutReceipt(id, image, data) {
+  if (LOCAL_MODE) { _localReceipts.set(id, { image, data }); return; }
+  const uid = await _requireUid(); if (!uid) return;
+  const { error } = await sb.from('finance_receipts').upsert({ id, user_id: uid, image, data }, { onConflict: 'id' });
+  if (error) _syncFailed('finance_receipts upsert failed (run master.sql?)', error);
+}
+async function _finGetReceipt(id) {
+  if (LOCAL_MODE) return _localReceipts.get(id) || null;
+  const uid = await _requireUid(); if (!uid) return null;
+  const { data, error } = await sb.from('finance_receipts').select('image,data').eq('user_id', uid).eq('id', id).maybeSingle();
+  if (error) console.error('[sync] finance_receipts select failed:', error);
+  return data || null;
+}
+async function _finDeleteReceipt(id) {
+  if (LOCAL_MODE) { _localReceipts.delete(id); return; }
+  const uid = await _requireUid(); if (!uid) return;
+  const { error } = await sb.from('finance_receipts').delete().eq('user_id', uid).eq('id', id);
+  if (error) _syncFailed('finance_receipts delete failed', error);
+}
+
 async function _syncDietFoods(kind, names) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _requireUid(); if (!uid) return;
@@ -1283,6 +1331,7 @@ async function loadFromSupabase() {
     sb.from('whoop_recovery').select('*').eq('user_id', uid).order('date', { ascending: false }).limit(7),
     sb.from('whoop_workouts').select('*').eq('user_id', uid).order('start', { ascending: false }).limit(20),
     sb.from('whoop_profile').select('*').eq('user_id', uid).maybeSingle(),
+    sb.from('finance_transactions').select('*').eq('user_id', uid).order('date'),
   ]);
 
   results.forEach((r, i) => { if (r.error) console.error('Query', i, 'failed:', r.error); });
@@ -1305,6 +1354,11 @@ async function loadFromSupabase() {
   MEM['whoop:recovery'] = results[16].data || [];
   MEM['whoop:workouts'] = results[17].data || [];
   MEM['whoop:profile']  = results[18].data || null;
+  MEM['finance_tx_v1'] = (results[19].data || []).map(r => ({
+    id: r.id, date: r.date, merchant: r.merchant || '', amount: Number(r.amount),
+    category: r.category, source: r.source, note: r.note || '', recurring: !!r.recurring,
+    receiptId: r.receipt_id || null, needsReview: !!r.needs_review, reviewReason: r.review_reason || '',
+  }));
 
   _habitsMetaColumn = habits.some(h => 'meta' in h);
   MEM['habits:list'] = habits.map(h => ({
@@ -1517,7 +1571,7 @@ function _enterApp() {
   if (LOCAL_MODE) _seedLocalSampleJobsFromUrl();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderMobility(); renderWhoop();
+  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderFinance(); renderMobility(); renderWhoop();
   _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
 }
@@ -1615,5 +1669,6 @@ setInterval(loadWeather, WEATHER_MAX_AGE_MS);
 renderAreas();
 renderGoals();
 renderDiet();
+renderFinance();
 renderMobility();
 initApp();

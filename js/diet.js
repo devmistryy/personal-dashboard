@@ -591,9 +591,17 @@ async function _dietOcr(dataUrl) {
   const text = (r.ParsedText || '').trim();
   if (!text) throw new Error('no text found in the image');
 
+  // x0/y0/x1/y1: the line's bounding box (finance.js draws receipt highlights from it).
   const lines = ((r.TextOverlay && r.TextOverlay.Lines) || []).map(ln => {
-    const w = (ln.Words || [])[0] || {};
-    return { text: (ln.LineText || '').trim(), top: +w.Top || 0, left: +w.Left || 0 };
+    const ws = ln.Words || [];
+    const w = ws[0] || {};
+    const box = ws.length ? {
+      x0: Math.min(...ws.map(v => +v.Left || 0)),
+      y0: Math.min(...ws.map(v => +v.Top || 0)),
+      x1: Math.max(...ws.map(v => (+v.Left || 0) + (+v.Width || 0))),
+      y1: Math.max(...ws.map(v => (+v.Top || 0) + (+v.Height || 0))),
+    } : {};
+    return { text: (ln.LineText || '').trim(), top: +w.Top || 0, left: +w.Left || 0, ...box };
   }).filter(l => l.text);
 
   return { text, lines };

@@ -1,0 +1,64 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Finance mockup</title>
+<link rel="stylesheet" href="../css/main.css">
+<style>
+  body{background:#111;color:var(--text-primary);font-family:var(--font-body);padding:32px;max-width:1000px;margin:auto}
+  h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-tertiary);margin:28px 0 12px}
+  .card{background:var(--card-bg);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:18px}
+  .row{display:grid;gap:14px}.r3{grid-template-columns:repeat(3,1fr)}.r2{grid-template-columns:2fr 1fr}
+  .lbl{font-size:12px;color:var(--text-tertiary)}.big{font:600 28px var(--font-mono);margin-top:6px}
+  .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin:6px 0 12px}.bar i{display:block;height:100%;border-radius:3px}
+  table{width:100%;border-collapse:collapse;font-size:14px}td{padding:10px 4px;border-top:1px solid rgba(255,255,255,.06)}
+  td.m{font-family:var(--font-mono);text-align:right}.tag{font-size:11px;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.08);color:var(--text-secondary)}
+  button{font:inherit;color:#111;background:var(--text-primary);border:0;border-radius:8px;padding:9px 14px;cursor:pointer}
+  button.ghost{background:transparent;color:var(--text-secondary);border:1px solid rgba(255,255,255,.15)}
+  .drop{border:1.5px dashed rgba(255,255,255,.2);border-radius:12px;padding:28px;text-align:center;color:var(--text-secondary)}
+  input,select{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:inherit;border-radius:8px;padding:8px;font:inherit}
+  .f{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.f label{font-size:12px;color:var(--text-tertiary)}
+</style></head><body>
+
+<h2>1 · Finance overview</h2>
+<div class="row r3">
+  <div class="card"><div class="lbl">Spent this month</div><div class="big">$1,842</div><div class="lbl" style="color:var(--warning)">74% of $2,500 budget</div></div>
+  <div class="card"><div class="lbl">Income this month</div><div class="big" style="color:var(--success)">$4,200</div><div class="lbl">+$2,358 net</div></div>
+  <div class="card"><div class="lbl">Receipts scanned</div><div class="big">23</div><div class="lbl">2 need review</div></div>
+</div>
+
+<div class="row r2" style="margin-top:14px">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <b>Recent transactions</b>
+      <span><button class="ghost">+ Manual</button> <button>Scan receipt</button></span>
+    </div>
+    <table>
+      <tr><td>Trader Joe's</td><td><span class="tag">Groceries</span></td><td class="lbl">Sep 25 · 🧾</td><td class="m">−$64.12</td></tr>
+      <tr><td>Shell</td><td><span class="tag">Transport</span></td><td class="lbl">Sep 24 · 🧾</td><td class="m">−$48.90</td></tr>
+      <tr><td>Paycheck</td><td><span class="tag">Income</span></td><td class="lbl">Sep 20</td><td class="m" style="color:var(--success)">+$2,100.00</td></tr>
+      <tr><td>Chipotle</td><td><span class="tag">Dining</span></td><td class="lbl">Sep 19 · 🧾</td><td class="m">−$13.45</td></tr>
+    </table>
+  </div>
+  <div class="card"><b>Budgets</b><div style="margin-top:12px">
+    <div class="lbl">Groceries · $420 / $500</div><div class="bar"><i style="width:84%;background:var(--warning)"></i></div>
+    <div class="lbl">Dining · $310 / $250</div><div class="bar"><i style="width:100%;background:var(--danger)"></i></div>
+    <div class="lbl">Transport · $140 / $300</div><div class="bar"><i style="width:47%;background:var(--success)"></i></div>
+    <div class="lbl">Other · $972 / $1,450</div><div class="bar"><i style="width:67%;background:var(--success)"></i></div>
+  </div></div>
+</div>
+
+<h2>2 · Scan receipt (step 1: upload)</h2>
+<div class="card" style="max-width:460px"><div class="drop">📷 Take photo or drop receipt image<br><span class="lbl">Uses the same OCR.space scan as the diet section</span></div></div>
+
+<h2>3 · Scan receipt (step 2: review before saving)</h2>
+<div class="card row" style="grid-template-columns:160px 1fr;max-width:640px">
+  <div style="background:#eee;color:#333;border-radius:8px;padding:10px;font:11px var(--font-mono);line-height:1.5">TRADER JOE'S<br>09/25/2026<br>BANANAS 1.19<br>OAT MILK 3.99<br>...<br>SUBTOTAL 60.02<br>TAX 4.10<br><b>TOTAL 64.12</b></div>
+  <div><b>Detected — check and save</b>
+    <div class="f">
+      <div><label>Merchant</label><input value="Trader Joe's"></div>
+      <div><label>Total</label><input value="64.12"></div>
+      <div><label>Date</label><input type="date" value="2026-09-25"></div>
+      <div><label>Category</label><select><option>Groceries</option><option>Dining</option></select></div>
+    </div>
+    <div style="margin-top:14px;text-align:right"><button class="ghost">Rescan</button> <button>Save transaction</button></div>
+  </div>
+</div>
+</body></html>
