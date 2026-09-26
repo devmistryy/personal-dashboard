@@ -43,6 +43,7 @@ async function whoopConnectStart() {
 
 let _whoopSyncing = false;
 let _whoopProbedOnce = false;
+let _whoopViewDate = null;
 
 async function whoopSync() {
   if (LOCAL_MODE || _whoopSyncing) return;
@@ -88,11 +89,16 @@ function _whoopApplySyncResult(body) {
     renderWhoop();
     return;
   }
-  if (body.recovery) {
-    const existing = (MEM['whoop:recovery'] || []).filter(r => r.date !== body.recovery.date);
-    MEM['whoop:recovery'] = [body.recovery, ...existing].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const synced = body.recoveries || (body.recovery ? [body.recovery] : []);
+  if (synced.length) {
+    const dates = new Set(synced.map(r => r.date));
+    const existing = (MEM['whoop:recovery'] || []).filter(r => !dates.has(r.date));
+    MEM['whoop:recovery'] = [...synced, ...existing].sort((a, b) => (a.date < b.date ? 1 : -1));
   }
-  if (body.workouts) MEM['whoop:workouts'] = body.workouts;
+  if (body.workouts) {
+    const ids = new Set(body.workouts.map(w => w.id));
+    MEM['whoop:workouts'] = [...body.workouts, ...(MEM['whoop:workouts'] || []).filter(w => !ids.has(w.id))];
+  }
   if (body.profile) MEM['whoop:profile'] = body.profile;
   _whoopSetBanner(null);
   renderWhoop();
@@ -157,9 +163,14 @@ function renderWhoop() {
   connectedEl.hidden = false;
 
   const today = _localDateStr(new Date());
-  const todayRow = recoveryList.find(r => r.date === today) || recoveryList[0];
+  const todayRow = recoveryList.find(r => r.date === _whoopViewDate) ||
+    recoveryList.find(r => r.date === today) || recoveryList[0];
 
   document.getElementById('whoopDate').textContent = todayRow.date === today ? 'Today' : todayRow.date;
+  document.getElementById('whoopDayPick').innerHTML = recoveryList.map(r =>
+    '<option value="' + r.date + '"' + (r.date === todayRow.date ? ' selected' : '') + '>' +
+    (r.date === today ? 'Today' : r.date) + '</option>'
+  ).join('');
   document.getElementById('whoopRecoveryVal').textContent =
     todayRow.recovery_score != null ? todayRow.recovery_score + '%' : '—';
   document.getElementById('whoopStrainVal').textContent =
@@ -181,37 +192,51 @@ function renderWhoop() {
   // for seeing exactly what WHOOP's API returns, not a curated summary.
   const ms = (v) => _whoopMsToHours(v);
   const num = (v, unit, digits) => v != null ? Number(v).toFixed(digits ?? 0) + (unit || '') : '—';
-  const details = [
-    ['Cycle State', todayRow.cycle_score_state || '—'],
-    ['Cycle Avg HR', num(todayRow.avg_heart_rate, ' bpm')],
-    ['Cycle Max HR', num(todayRow.max_heart_rate, ' bpm')],
-    ['Kilojoule', num(todayRow.kilojoule, ' kJ')],
-    ['Recovery State', todayRow.recovery_score_state || '—'],
-    ['Calibrating', todayRow.user_calibrating == null ? '—' : (todayRow.user_calibrating ? 'yes' : 'no')],
-    ['HRV', num(todayRow.hrv_ms, ' ms')],
-    ['Resting HR', num(todayRow.resting_hr, ' bpm')],
-    ['SpO2', num(todayRow.spo2_percentage, '%', 1)],
-    ['Skin Temp', num(todayRow.skin_temp_celsius, '°C', 1)],
-    ['Sleep State', todayRow.sleep_score_state || '—'],
-    ['Sleep Efficiency', num(todayRow.sleep_efficiency_percentage, '%', 1)],
-    ['Sleep Consistency', num(todayRow.sleep_consistency_percentage, '%', 1)],
-    ['Respiratory Rate', num(todayRow.respiratory_rate, '/min', 1)],
-    ['Time in Bed', ms(todayRow.total_in_bed_ms)],
-    ['Time Awake', ms(todayRow.total_awake_ms)],
-    ['No-Data Time', ms(todayRow.total_no_data_ms)],
-    ['Light Sleep', ms(todayRow.light_sleep_ms)],
-    ['Deep (SWS) Sleep', ms(todayRow.deep_sleep_ms)],
-    ['REM Sleep', ms(todayRow.rem_sleep_ms)],
-    ['Sleep Cycles', todayRow.sleep_cycle_count ?? '—'],
-    ['Disturbances', todayRow.disturbance_count ?? '—'],
-    ['Sleep Need: Baseline', ms(todayRow.sleep_need_baseline_ms)],
-    ['Sleep Need: Debt', ms(todayRow.sleep_need_debt_ms)],
-    ['Sleep Need: Strain', ms(todayRow.sleep_need_strain_ms)],
-    ['Sleep Need: Nap', ms(todayRow.sleep_need_nap_ms)],
+  const sections = [
+    [null, null, [
+      ['Cycle State', todayRow.cycle_score_state || '—'],
+      ['Recovery State', todayRow.recovery_score_state || '—'],
+      ['Sleep State', todayRow.sleep_score_state || '—'],
+      ['Calibrating', todayRow.user_calibrating == null ? '—' : (todayRow.user_calibrating ? 'yes' : 'no')],
+    ]],
+    ['Directly measured', 'Raw sensor data', [
+      ['Cycle Avg HR', num(todayRow.avg_heart_rate, ' bpm')],
+      ['Cycle Max HR', num(todayRow.max_heart_rate, ' bpm')],
+      ['Resting HR', num(todayRow.resting_hr, ' bpm')],
+      ['Skin Temp', num(todayRow.skin_temp_celsius, '°C', 1)],
+      ['SpO2', num(todayRow.spo2_percentage, '%', 1)],
+    ]],
+    ['Derived', 'Algorithmic, close to the raw signal', [
+      ['HRV', num(todayRow.hrv_ms, ' ms')],
+      ['Respiratory Rate', num(todayRow.respiratory_rate, '/min', 1)],
+    ]],
+    ['Inferred / modeled', "WHOOP's interpretation — least verifiable", [
+      ['Recovery', num(todayRow.recovery_score, '%')],
+      ['Strain', num(todayRow.strain, '', 1)],
+      ['Kilojoule', num(todayRow.kilojoule, ' kJ')],
+      ['Sleep Performance', num(todayRow.sleep_performance, '%')],
+      ['Sleep Efficiency', num(todayRow.sleep_efficiency_percentage, '%', 1)],
+      ['Sleep Consistency', num(todayRow.sleep_consistency_percentage, '%', 1)],
+      ['Time in Bed', ms(todayRow.total_in_bed_ms)],
+      ['Time Awake', ms(todayRow.total_awake_ms)],
+      ['No-Data Time', ms(todayRow.total_no_data_ms)],
+      ['Light Sleep', ms(todayRow.light_sleep_ms)],
+      ['Deep (SWS) Sleep', ms(todayRow.deep_sleep_ms)],
+      ['REM Sleep', ms(todayRow.rem_sleep_ms)],
+      ['Sleep Cycles', todayRow.sleep_cycle_count ?? '—'],
+      ['Disturbances', todayRow.disturbance_count ?? '—'],
+      ['Sleep Need: Baseline', ms(todayRow.sleep_need_baseline_ms)],
+      ['Sleep Need: Debt', ms(todayRow.sleep_need_debt_ms)],
+      ['Sleep Need: Strain', ms(todayRow.sleep_need_strain_ms)],
+      ['Sleep Need: Nap', ms(todayRow.sleep_need_nap_ms)],
+    ]],
   ];
-  document.getElementById('whoopDetailGrid').innerHTML = details.map(([label, val]) =>
-    '<div class="whoop-detail"><div class="whoop-detail-label">' + label + '</div>' +
-    '<div class="whoop-detail-value">' + val + '</div></div>'
+  document.getElementById('whoopDetailGrid').innerHTML = sections.map(([title, sub, rows]) =>
+    (title ? '<div class="whoop-detail-section">' + title + ' <span>' + sub + '</span></div>' : '') +
+    rows.map(([label, val]) =>
+      '<div class="whoop-detail"><div class="whoop-detail-label">' + label + '</div>' +
+      '<div class="whoop-detail-value">' + val + '</div></div>'
+    ).join('')
   ).join('');
 
   document.getElementById('whoopRawJson').textContent =
@@ -280,7 +305,7 @@ function renderWhoop() {
     profileEl.hidden = true;
   }
 
-  const isStale = todayRow.date !== today;
+  const isStale = todayRow.date !== today && !_whoopViewDate;
   _whoopSetBanner(isStale ? 'Showing last synced data from ' + todayRow.date + '.' : null);
 }
 
@@ -301,3 +326,7 @@ function _whoopHandleOAuthReturn() {
 
 document.getElementById('whoopConnectBtn').addEventListener('click', whoopConnectStart);
 document.getElementById('whoopSyncBtn').addEventListener('click', () => whoopSync());
+document.getElementById('whoopDayPick').addEventListener('change', (e) => {
+  _whoopViewDate = e.target.value;
+  renderWhoop();
+});

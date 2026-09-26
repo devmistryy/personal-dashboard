@@ -1328,8 +1328,8 @@ async function loadFromSupabase() {
     sb.from('habit_counts').select('*').eq('user_id', uid),
     sb.from('reactive_habits').select('*').eq('user_id', uid).order('created_at'),
     sb.from('reactive_habit_logs').select('*').eq('user_id', uid).order('ts'),
-    sb.from('whoop_recovery').select('*').eq('user_id', uid).order('date', { ascending: false }).limit(7),
-    sb.from('whoop_workouts').select('*').eq('user_id', uid).order('start', { ascending: false }).limit(20),
+    sb.from('whoop_recovery').select('*').eq('user_id', uid).order('date', { ascending: false }),
+    sb.from('whoop_workouts').select('*').eq('user_id', uid).order('start', { ascending: false }),
     sb.from('whoop_profile').select('*').eq('user_id', uid).maybeSingle(),
     sb.from('finance_transactions').select('*').eq('user_id', uid).order('date'),
   ]);

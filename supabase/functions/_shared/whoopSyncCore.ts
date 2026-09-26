@@ -31,11 +31,29 @@ async function whoopFetch(path: string, accessToken: string) {
   return res.json();
 }
 
+// Follows WHOOP's nextToken pagination (max 25 records/page) from `start` to now.
+async function whoopFetchAll(path: string, start: string, accessToken: string) {
+  const out: any[] = [];
+  let next: string | null = null;
+  do {
+    const qs = `start=${encodeURIComponent(start)}&limit=25${next ? `&nextToken=${encodeURIComponent(next)}` : ""}`;
+    const page = await whoopFetch(`${path}?${qs}`, accessToken);
+    out.push(...(page?.records ?? []));
+    next = page?.next_token ?? null;
+  } while (next);
+  return out;
+}
+
+// First sync backfills this far; later syncs re-pull a few days so late
+// score updates (recovery/sleep re-scored after the fact) are picked up.
+const BACKFILL_DAYS = 90;
+const RESYNC_DAYS = 3;
+
 export async function runWhoopSync(
   sb: any,
   userId: string,
   clientSecret: string,
-): Promise<{ connected: boolean; recovery?: any; workouts?: any[]; profile?: any; error?: string }> {
+): Promise<{ connected: boolean; recovery?: any; recoveries?: any[]; workouts?: any[]; profile?: any; error?: string }> {
   const { data: tokenRow, error: tokenErr } = await sb
     .from("whoop_tokens")
     .select("*")
@@ -83,18 +101,29 @@ export async function runWhoopSync(
   }
 
   try {
-    const cyclePage = await whoopFetch("/cycle?limit=1", accessToken);
-    const cycle = cyclePage?.records?.[0];
-    if (!cycle) {
-      return { connected: true, recovery: null, workouts: [], profile: null };
-    }
+    const dateQuery = (ascending: boolean) =>
+      sb.from("whoop_recovery").select("date").eq("user_id", userId)
+        .order("date", { ascending }).limit(1).maybeSingle();
+    const [{ data: firstRow }, { data: lastRow }] = await Promise.all([dateQuery(true), dateQuery(false)]);
+    const backfillMs = Date.now() - BACKFILL_DAYS * 86_400_000;
+    // ponytail: re-walks the full window every sync while history is shorter
+    // than BACKFILL_DAYS (e.g. a new WHOOP account); ~4 requests per 25 days.
+    const startMs = !firstRow || new Date(firstRow.date).getTime() > backfillMs + 86_400_000
+      ? backfillMs
+      : new Date(lastRow.date).getTime() - RESYNC_DAYS * 86_400_000;
+    const start = new Date(startMs).toISOString();
 
-    const [recovery, sleep, profile, bodyMeasurement] = await Promise.all([
-      whoopFetch(`/cycle/${cycle.id}/recovery`, accessToken).catch(() => null),
-      whoopFetch(`/cycle/${cycle.id}/sleep`, accessToken).catch(() => null),
+    const [cycles, recoveries, sleeps, workouts, profile, bodyMeasurement] = await Promise.all([
+      whoopFetchAll("/cycle", start, accessToken),
+      whoopFetchAll("/recovery", start, accessToken).catch(() => []),
+      whoopFetchAll("/activity/sleep", start, accessToken).catch(() => []),
+      whoopFetchAll("/activity/workout", start, accessToken).catch(() => []),
       whoopFetch("/user/profile/basic", accessToken).catch(() => null),
       whoopFetch("/user/measurement/body", accessToken).catch(() => null),
     ]);
+    if (!cycles.length) {
+      return { connected: true, recovery: null, recoveries: [], workouts: [], profile: null };
+    }
 
     // Opportunistically back-fill whoop_user_id if it's missing (e.g. the
     // best-effort fetch during the OAuth callback failed) — the webhook
@@ -103,62 +132,69 @@ export async function runWhoopSync(
       await sb.from("whoop_tokens").update({ whoop_user_id: String(profile.user_id) }).eq("user_id", userId);
     }
 
-    // Keyed by the day you WOKE UP, not the cycle's own start — WHOOP
-    // attributes a cycle to the day before the sleep that ends it, which
-    // would otherwise date last night's data as yesterday even though the
-    // wake-up (and the rest of the cycle) belongs to today.
-    const date = sleep?.end
-      ? localDate(sleep.end, sleep.timezone_offset ?? cycle.timezone_offset)
-      : localDate(cycle.start, cycle.timezone_offset);
+    const recoveryByCycle = new Map(recoveries.map((r: any) => [r.cycle_id, r]));
+    const sleepById = new Map(sleeps.map((s: any) => [s.id, s]));
 
-    const workoutsPage = await whoopFetch(
-      `/activity/workout?start=${encodeURIComponent(cycle.start)}&end=${encodeURIComponent(cycle.end ?? new Date().toISOString())}&limit=25`,
-      accessToken,
-    ).catch(() => ({ records: [] }));
-    const workouts = workoutsPage?.records ?? [];
+    // Keyed by date, oldest cycle first, so if two cycles land on the same
+    // wake-up date the newer one wins (and one upsert never hits a key twice).
+    const rowsByDate = new Map<string, any>();
+    for (const cycle of [...cycles].sort((a, b) => (a.start < b.start ? -1 : 1))) {
+      const recovery: any = recoveryByCycle.get(cycle.id) ?? null;
+      const sleep: any = (recovery?.sleep_id && sleepById.get(recovery.sleep_id)) ??
+        sleeps.find((s: any) => s.cycle_id === cycle.id && !s.nap) ?? null;
 
-    const recoveryRow = {
-      user_id: userId,
-      date,
-      cycle_score_state: cycle.score_state ?? null,
-      strain: cycle.score?.strain ?? null,
-      avg_heart_rate: cycle.score?.average_heart_rate ?? null,
-      max_heart_rate: cycle.score?.max_heart_rate ?? null,
-      kilojoule: cycle.score?.kilojoule ?? null,
-      recovery_score_state: recovery?.score_state ?? null,
-      user_calibrating: recovery?.score?.user_calibrating ?? null,
-      recovery_score: recovery?.score?.recovery_score ?? null,
-      resting_hr: recovery?.score?.resting_heart_rate ?? null,
-      hrv_ms: recovery?.score?.hrv_rmssd_milli ?? null,
-      spo2_percentage: recovery?.score?.spo2_percentage ?? null,
-      skin_temp_celsius: recovery?.score?.skin_temp_celsius ?? null,
-      sleep_score_state: sleep?.score_state ?? null,
-      is_nap: sleep?.nap ?? null,
-      sleep_start: sleep?.start ?? null,
-      sleep_end: sleep?.end ?? null,
-      sleep_performance: sleep?.score?.sleep_performance_percentage ?? null,
-      sleep_efficiency_percentage: sleep?.score?.sleep_efficiency_percentage ?? null,
-      sleep_consistency_percentage: sleep?.score?.sleep_consistency_percentage ?? null,
-      respiratory_rate: sleep?.score?.respiratory_rate ?? null,
-      total_in_bed_ms: sleep?.score?.stage_summary?.total_in_bed_time_milli ?? null,
-      total_awake_ms: sleep?.score?.stage_summary?.total_awake_time_milli ?? null,
-      total_no_data_ms: sleep?.score?.stage_summary?.total_no_data_time_milli ?? null,
-      light_sleep_ms: sleep?.score?.stage_summary?.total_light_sleep_time_milli ?? null,
-      deep_sleep_ms: sleep?.score?.stage_summary?.total_slow_wave_sleep_time_milli ?? null,
-      rem_sleep_ms: sleep?.score?.stage_summary?.total_rem_sleep_time_milli ?? null,
-      sleep_cycle_count: sleep?.score?.stage_summary?.sleep_cycle_count ?? null,
-      disturbance_count: sleep?.score?.stage_summary?.disturbance_count ?? null,
-      sleep_need_baseline_ms: sleep?.score?.sleep_needed?.baseline_milli ?? null,
-      sleep_need_debt_ms: sleep?.score?.sleep_needed?.need_from_sleep_debt_milli ?? null,
-      sleep_need_strain_ms: sleep?.score?.sleep_needed?.need_from_recent_strain_milli ?? null,
-      sleep_need_nap_ms: sleep?.score?.sleep_needed?.need_from_recent_nap_milli ?? null,
-      raw: { cycle, recovery, sleep },
-      synced_at: new Date().toISOString(),
-    };
+      // Keyed by the day you WOKE UP, not the cycle's own start — WHOOP
+      // attributes a cycle to the day before the sleep that ends it, which
+      // would otherwise date last night's data as yesterday even though the
+      // wake-up (and the rest of the cycle) belongs to today.
+      const date = sleep?.end
+        ? localDate(sleep.end, sleep.timezone_offset ?? cycle.timezone_offset)
+        : localDate(cycle.start, cycle.timezone_offset);
 
+      rowsByDate.set(date, {
+        user_id: userId,
+        date,
+        cycle_score_state: cycle.score_state ?? null,
+        strain: cycle.score?.strain ?? null,
+        avg_heart_rate: cycle.score?.average_heart_rate ?? null,
+        max_heart_rate: cycle.score?.max_heart_rate ?? null,
+        kilojoule: cycle.score?.kilojoule ?? null,
+        recovery_score_state: recovery?.score_state ?? null,
+        user_calibrating: recovery?.score?.user_calibrating ?? null,
+        recovery_score: recovery?.score?.recovery_score ?? null,
+        resting_hr: recovery?.score?.resting_heart_rate ?? null,
+        hrv_ms: recovery?.score?.hrv_rmssd_milli ?? null,
+        spo2_percentage: recovery?.score?.spo2_percentage ?? null,
+        skin_temp_celsius: recovery?.score?.skin_temp_celsius ?? null,
+        sleep_score_state: sleep?.score_state ?? null,
+        is_nap: sleep?.nap ?? null,
+        sleep_start: sleep?.start ?? null,
+        sleep_end: sleep?.end ?? null,
+        sleep_performance: sleep?.score?.sleep_performance_percentage ?? null,
+        sleep_efficiency_percentage: sleep?.score?.sleep_efficiency_percentage ?? null,
+        sleep_consistency_percentage: sleep?.score?.sleep_consistency_percentage ?? null,
+        respiratory_rate: sleep?.score?.respiratory_rate ?? null,
+        total_in_bed_ms: sleep?.score?.stage_summary?.total_in_bed_time_milli ?? null,
+        total_awake_ms: sleep?.score?.stage_summary?.total_awake_time_milli ?? null,
+        total_no_data_ms: sleep?.score?.stage_summary?.total_no_data_time_milli ?? null,
+        light_sleep_ms: sleep?.score?.stage_summary?.total_light_sleep_time_milli ?? null,
+        deep_sleep_ms: sleep?.score?.stage_summary?.total_slow_wave_sleep_time_milli ?? null,
+        rem_sleep_ms: sleep?.score?.stage_summary?.total_rem_sleep_time_milli ?? null,
+        sleep_cycle_count: sleep?.score?.stage_summary?.sleep_cycle_count ?? null,
+        disturbance_count: sleep?.score?.stage_summary?.disturbance_count ?? null,
+        sleep_need_baseline_ms: sleep?.score?.sleep_needed?.baseline_milli ?? null,
+        sleep_need_debt_ms: sleep?.score?.sleep_needed?.need_from_sleep_debt_milli ?? null,
+        sleep_need_strain_ms: sleep?.score?.sleep_needed?.need_from_recent_strain_milli ?? null,
+        sleep_need_nap_ms: sleep?.score?.sleep_needed?.need_from_recent_nap_milli ?? null,
+        raw: { cycle, recovery, sleep },
+        synced_at: new Date().toISOString(),
+      });
+    }
+
+    const recoveryRows = [...rowsByDate.values()];
     const { error: recErr } = await sb
       .from("whoop_recovery")
-      .upsert(recoveryRow, { onConflict: "user_id,date" });
+      .upsert(recoveryRows, { onConflict: "user_id,date" });
     if (recErr) console.error("whoop_recovery upsert failed", recErr.message);
 
     const workoutRows = workouts.map((w: any) => ({
@@ -206,7 +242,18 @@ export async function runWhoopSync(
     const { error: profErr } = await sb.from("whoop_profile").upsert(profileRow);
     if (profErr) console.error("whoop_profile upsert failed", profErr.message);
 
-    return { connected: true, recovery: recoveryRow, workouts: workoutRows, profile: profileRow };
+    const latest = recoveryRows.reduce((a, b) => (a.date > b.date ? a : b));
+    const latestCycle = latest.raw.cycle;
+    const latestWorkouts = workoutRows.filter((w: any) =>
+      w.start >= latestCycle.start && (!latestCycle.end || w.start < latestCycle.end));
+
+    return {
+      connected: true,
+      recovery: latest,
+      recoveries: recoveryRows,
+      workouts: latestWorkouts,
+      profile: profileRow,
+    };
   } catch (e) {
     console.error("whoop sync fetch failed", (e as Error).message);
     return { connected: true, error: "whoop_unreachable" };

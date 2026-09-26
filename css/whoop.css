@@ -146,6 +146,21 @@
   flex-direction: column;
   gap: 2px;
 }
+.whoop-detail-section {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.whoop-detail-section:not(:first-child) { margin-top: 8px; }
+.whoop-detail-section span {
+  color: var(--text-tertiary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
 .whoop-detail-label {
   color: var(--text-tertiary);
   font-size: 11px;
