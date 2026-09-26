@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="css/jobs.css?v=93">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
-<link rel="stylesheet" href="css/diet.css?v=6">
+<link rel="stylesheet" href="css/diet.css?v=12">
 <link rel="stylesheet" href="css/mobility.css?v=6">
 <link rel="stylesheet" href="css/whoop.css?v=1">
 <link rel="stylesheet" href="css/finance.css?v=3">
@@ -422,56 +422,15 @@
 
   <!-- Tab: Diet -->
   <div class="tab-panel" id="tab-diet">
+    <div class="diet-view-bar" role="tablist" aria-label="Diet">
+      <button type="button" class="diet-view-btn active" data-diet-view="meals" role="tab" aria-selected="true">Meals</button>
+      <button type="button" class="diet-view-btn" data-diet-view="supplements" role="tab" aria-selected="false">Supplements</button>
+    </div>
+
+    <div id="dietViewMeals">
     <div class="section">
       <div class="section-title">Log a Meal</div>
-      <div class="card">
-        <div class="diet-form">
-          <div class="diet-import-row">
-            <button class="btn-polish" id="dietImportBtn" type="button">⬆ Import from screenshot</button>
-            <input type="file" id="dietImportFile" accept="image/*" hidden>
-            <span class="polish-status" id="dietImportStatus"></span>
-          </div>
-          <div class="diet-form-row">
-            <input type="date" class="habit-date-input" id="dietDate">
-            <input type="time" class="habit-date-input" id="dietTime">
-            <input type="number" class="habit-date-input diet-cal-input" id="dietCalories"
-              placeholder="Calories (optional)" min="0" step="1">
-          </div>
-          <input type="text" class="task-input" id="dietDesc" placeholder="What did you eat?">
-          <div class="diet-field">
-            <span class="diet-field-label">Macros (optional, grams)</span>
-            <div class="diet-form-row diet-macro-row">
-              <input type="number" class="habit-date-input diet-macro-input" id="dietProtein" placeholder="Protein" min="0" step="1">
-              <input type="number" class="habit-date-input diet-macro-input" id="dietCarbs" placeholder="Carbs" min="0" step="1">
-              <input type="number" class="habit-date-input diet-macro-input" id="dietFats" placeholder="Fats" min="0" step="1">
-            </div>
-          </div>
-          <div class="diet-field">
-            <span class="diet-field-label">Category</span>
-            <div class="diet-cat-btns" id="dietCatBtns"></div>
-          </div>
-          <div class="diet-field">
-            <span class="diet-field-label">Healthy ingredients in this meal</span>
-            <div class="diet-chips" id="dietHealthyChips"></div>
-            <div class="diet-ingredient-add">
-              <input type="text" class="task-input" id="dietHealthyInput" placeholder="Add a healthy ingredient (e.g. Spinach)…">
-              <button class="btn-add" id="dietHealthyAdd" type="button">+ Add</button>
-            </div>
-          </div>
-          <div class="diet-field">
-            <span class="diet-field-label">Unhealthy foods in this meal</span>
-            <div class="diet-chips" id="dietUnhealthyChips"></div>
-            <div class="diet-ingredient-add">
-              <input type="text" class="task-input" id="dietUnhealthyInput" placeholder="Add an unhealthy food (e.g. Donut)…">
-              <button class="btn-add" id="dietUnhealthyAdd" type="button">+ Add</button>
-            </div>
-          </div>
-          <div class="diet-form-actions">
-            <button class="btn-add" id="dietAddBtn">+ Log meal</button>
-            <span class="polish-status" id="dietFormStatus"></span>
-          </div>
-        </div>
-      </div>
+      <button class="mob-add-cta" id="dietLogOpen" type="button">+ Log a meal</button>
     </div>
 
     <div class="section">
@@ -513,6 +472,22 @@
       <div class="card">
         <div class="diet-seg-bar" id="dietCatRange"></div>
         <div id="dietCatBreakdown"></div>
+      </div>
+    </div>
+    </div>
+
+    <div id="dietViewSupps" hidden>
+      <div class="section">
+        <div class="section-title">My Supplements</div>
+        <div class="card">
+          <div class="supp-shelf" id="suppShelf"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">Log</div>
+        <div class="card">
+          <div id="suppHistoryList"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -999,6 +974,143 @@
   </div>
 </div>
 
+<div id="dietModal" class="sr-modal">
+  <div class="sr-modal-card diet-modal-card" role="dialog" aria-modal="true" aria-labelledby="dietModalTitle">
+    <button id="dietModalClose" class="sr-modal-close" type="button" aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="dietModalTitle">Log a meal</h2>
+    <div class="diet-form">
+      <div class="diet-import-row">
+        <button class="btn-polish" id="dietImportBtn" type="button">⬆ Import from screenshot</button>
+        <input type="file" id="dietImportFile" accept="image/*" hidden>
+        <span class="polish-status" id="dietImportStatus"></span>
+      </div>
+      <div class="diet-form-row">
+        <input type="date" class="habit-date-input" id="dietDate">
+        <input type="time" class="habit-date-input" id="dietTime">
+        <input type="number" class="habit-date-input diet-cal-input" id="dietCalories"
+          placeholder="Calories (optional)" min="0" step="1">
+      </div>
+      <input type="text" class="task-input" id="dietDesc" placeholder="What did you eat?">
+      <div class="diet-field">
+        <span class="diet-field-label">Macros (optional, grams)</span>
+        <div class="diet-form-row diet-macro-row">
+          <input type="number" class="habit-date-input diet-macro-input" id="dietProtein" placeholder="Protein" min="0" step="1">
+          <input type="number" class="habit-date-input diet-macro-input" id="dietCarbs" placeholder="Carbs" min="0" step="1">
+          <input type="number" class="habit-date-input diet-macro-input" id="dietFats" placeholder="Fats" min="0" step="1">
+        </div>
+      </div>
+      <div class="diet-field">
+        <span class="diet-field-label">Category</span>
+        <div class="diet-cat-btns" id="dietCatBtns"></div>
+      </div>
+      <div class="diet-field">
+        <span class="diet-field-label">Healthy ingredients in this meal</span>
+        <div class="diet-chips" id="dietHealthyChips"></div>
+        <div class="diet-ingredient-add">
+          <input type="text" class="task-input" id="dietHealthyInput" placeholder="Add a healthy ingredient (e.g. Spinach)…">
+          <button class="btn-add" id="dietHealthyAdd" type="button">+ Add</button>
+        </div>
+      </div>
+      <div class="diet-field">
+        <span class="diet-field-label">Unhealthy foods in this meal</span>
+        <div class="diet-chips" id="dietUnhealthyChips"></div>
+        <div class="diet-ingredient-add">
+          <input type="text" class="task-input" id="dietUnhealthyInput" placeholder="Add an unhealthy food (e.g. Donut)…">
+          <button class="btn-add" id="dietUnhealthyAdd" type="button">+ Add</button>
+        </div>
+      </div>
+      <div class="diet-form-actions">
+        <button class="btn-add" id="dietAddBtn" type="button">+ Log meal</button>
+        <span class="polish-status" id="dietFormStatus"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="suppModal" class="sr-modal">
+  <div class="sr-modal-card supp-modal-card" role="dialog" aria-modal="true" aria-labelledby="suppModalTitle">
+    <button id="suppModalClose" class="sr-modal-close" type="button" aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="suppModalTitle">Log a supplement</h2>
+    <div class="supp-form">
+      <div class="diet-field">
+        <label class="diet-field-label" for="suppName">Supplement</label>
+        <input type="text" class="task-input" id="suppName" placeholder="Search yours, or type a new name" autocomplete="off">
+        <div class="diet-chips" id="suppPickChips"></div>
+        <div class="supp-picked" id="suppPickInfo" hidden></div>
+      </div>
+
+      <div class="supp-new" id="suppNewField" hidden>
+        <div class="supp-new-head">
+          <span class="diet-field-label">What's in one pill?</span>
+          <div class="diet-seg-bar" id="suppKindBar"></div>
+        </div>
+        <div class="diet-form-row" id="suppSingleField">
+          <input type="number" class="habit-date-input supp-amt" id="suppAmount" placeholder="Amount (optional)" min="0" step="any">
+          <select class="habit-date-input supp-unit" id="suppUnit" aria-label="Unit"></select>
+        </div>
+        <div class="diet-field" id="suppLabelField" hidden>
+          <div class="supp-scan-row">
+            <button class="btn-polish" id="suppScanBtn" type="button">📷 Scan supplement facts</button>
+            <input type="file" id="suppScanFile" accept="image/*" hidden>
+            <span class="polish-status" id="suppScanStatus"></span>
+          </div>
+          <div id="suppRows"></div>
+          <button class="diet-seg-btn supp-add-row" id="suppAddRow" type="button">+ Add ingredient</button>
+        </div>
+      </div>
+
+      <div class="supp-new" id="suppCycleField" hidden>
+        <div class="supp-new-head">
+          <span class="diet-field-label">Schedule</span>
+          <div class="diet-seg-bar" id="suppCycleBar"></div>
+        </div>
+        <div class="supp-cycle-body" id="suppCycleBody" hidden>
+          <div class="supp-cycle-row">
+            <span>On for</span>
+            <input type="number" class="habit-date-input supp-cyc-n" id="suppCycOn" min="1" step="1" aria-label="On length">
+            <select class="habit-date-input supp-unit" id="suppCycOnUnit" aria-label="On unit"><option value="7">weeks</option><option value="1">days</option></select>
+            <span>then off for</span>
+            <input type="number" class="habit-date-input supp-cyc-n" id="suppCycOff" min="1" step="1" aria-label="Off length">
+            <select class="habit-date-input supp-unit" id="suppCycOffUnit" aria-label="Off unit"><option value="7">weeks</option><option value="1">days</option></select>
+          </div>
+          <div class="supp-cycle-row">
+            <span>First on-day</span>
+            <input type="date" class="habit-date-input" id="suppCycStart" aria-label="Cycle start date">
+          </div>
+          <div class="supp-cycle-status" id="suppCycStatus"></div>
+        </div>
+      </div>
+
+      <div class="supp-dose">
+        <div class="diet-field">
+          <label class="diet-field-label" for="suppQty">How many</label>
+          <div class="supp-stepper">
+            <button type="button" data-supp-step="-1" aria-label="One fewer">−</button>
+            <input type="number" id="suppQty" value="1" min="0.5" step="0.5">
+            <button type="button" data-supp-step="1" aria-label="One more">+</button>
+            <span>pills</span>
+          </div>
+        </div>
+        <div class="diet-field">
+          <span class="diet-field-label">When</span>
+          <div class="diet-form-row">
+            <input type="date" class="habit-date-input" id="suppDate" aria-label="Date">
+            <input type="time" class="habit-date-input" id="suppTime" aria-label="Time">
+            <button type="button" class="diet-seg-btn" id="suppNowBtn">Now</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="supp-summary" id="suppSummary" hidden></div>
+
+      <div class="diet-form-actions">
+        <button class="btn-add" id="suppAddBtn" type="button">Log</button>
+        <span class="polish-status" id="suppFormStatus"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="mobModal" class="sr-modal">
   <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Add exercise">
     <button id="mobModalClose" class="sr-modal-close" aria-label="Close">×</button>
@@ -1057,7 +1169,7 @@
 <script src="js/techRankings.js?v=22"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
-<script src="js/diet.js?v=11"></script>
+<script src="js/diet.js?v=17"></script>
 <script src="js/finance.js?v=3"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>

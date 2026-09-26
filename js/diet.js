@@ -33,6 +33,14 @@ function saveHealthyIngredients(list) { MEM['diet_healthy_v1'] = list; _syncDiet
 function getUnhealthyFoods()          { return MEM['diet_unhealthy_v1'] || []; }
 function saveUnhealthyFoods(list)     { MEM['diet_unhealthy_v1'] = list; _syncDietFoods('unhealthy', list); }
 
+// ponytail: whole list in one settings row. Own table if the log gets long enough that rewriting it on every dose matters.
+function getSupplements()      { return MEM['diet_supplements_v1'] || []; }
+function saveSupplements(list) { MEM['diet_supplements_v1'] = list; _syncSetting('diet_supplements_v1', list); }
+
+// On/off cycles, keyed by lowercase supplement name: { on: days, off: days, start: 'YYYY-MM-DD' }.
+function getSuppCycles()      { return MEM['diet_supp_cycles_v1'] || {}; }
+function saveSuppCycles(map)  { MEM['diet_supp_cycles_v1'] = map; _syncSetting('diet_supp_cycles_v1', map); }
+
 // One-time move off the old model: priority foods + the healthy side of the old
 // combined list → Healthy Ingredients; the unhealthy side → Unhealthy Foods.
 function _dietMigrateFoodLists() {
@@ -71,6 +79,15 @@ let _dietHistoryCat    = 'all';          // 'all' | a DIET_CATEGORIES value
 let _dietFoodRange     = '30';           // '7' | '30' | 'all'
 let _dietCatRange      = '30';
 let _dietHistoryAll    = false;          // "show more" in the history list
+let _dietView         = 'meals';         // 'meals' | 'supplements'
+let _suppHistoryDays  = 7;             // day groups shown in the supplement log
+let _suppPick         = '';             // existing supplement selected in the modal
+let _suppCreating     = false;          // "+ New" chosen for the typed name
+let _suppKind         = 'single';       // 'single' | 'label'
+let _suppRows         = [];             // [{ name, amount, unit }] per pill, for 'label'
+let _suppCycleOn      = false;          // modal's Schedule toggle: every day vs cycle
+
+const SUPP_UNITS = ['mg', 'mcg', 'g', 'IU', 'CFU', 'mL'];
 
 const DIET_HISTORY_LIMIT = 8;
 
@@ -225,7 +242,7 @@ function addDietEntry() {
   _dietMealHealthy = [];
   _dietMealUnhealthy = [];
   renderDiet();
-  showStatus(status, 'Logged.', 'var(--success)', 2000);
+  closeDietModal();
 }
 
 
@@ -413,6 +430,443 @@ function renderDiet() {
   renderDietHistory();
   renderDietFoodPanel();
   renderDietCategoryPanel();
+  renderSupplements();
+}
+
+function _dietNowTime() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function _suppSorted() {
+  return [...getSupplements()].sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') ||
+    (b.time || '').localeCompare(a.time || '') ||
+    (b.id || '').localeCompare(a.id || ''));
+}
+
+// One entry per supplement name, from its most recent log — so re-logging a
+// name with new contents (or a new usual dose) updates the shelf and picker.
+function _suppCatalog() {
+  const seen = new Set();
+  const out = [];
+  _suppSorted().forEach(s => {
+    const k = (s.name || '').toLowerCase();
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    out.push({ name: s.name, contents: Array.isArray(s.contents) ? s.contents : [], qty: s.qty || 1, date: s.date });
+  });
+  return out;
+}
+function _suppFind(name) {
+  const k = String(name || '').trim().toLowerCase();
+  return k ? _suppCatalog().find(c => c.name.toLowerCase() === k) : null;
+}
+
+// ── On/off cycles ──
+// Day numbers in UTC so the math never trips over DST.
+function _suppDayNum(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
+}
+function _suppAddDays(ds, n) {
+  return new Date((_suppDayNum(ds) + n) * 86400000).toISOString().slice(0, 10);
+}
+
+function _suppCycleFor(name) {
+  return getSuppCycles()[String(name || '').trim().toLowerCase()] || null;
+}
+
+function _suppWriteCycle(name, cycle) {
+  const k = String(name || '').trim().toLowerCase();
+  if (!k) return;
+  const map = { ...getSuppCycles() };
+  if (cycle) map[k] = cycle; else delete map[k];
+  saveSuppCycles(map);
+}
+
+// Where `ds` falls in the cycle. on: { on, day, of, until = first off-day };
+// off: { on: false, until = next on-day }. Before the start date counts as off.
+function _suppCycleState(cycle, ds) {
+  const len = cycle.on + cycle.off;
+  const diff = _suppDayNum(ds) - _suppDayNum(cycle.start);
+  if (diff < 0) return { on: false, until: cycle.start };
+  const pos = diff % len;
+  if (pos < cycle.on) return { on: true, day: pos + 1, of: cycle.on, until: _suppAddDays(ds, cycle.on - pos) };
+  return { on: false, until: _suppAddDays(ds, len - pos) };
+}
+
+function _suppCycleLen(days) { return days % 7 === 0 ? `${days / 7} wk` : `${days} d`; }
+function _suppCycleLabel(cycle) { return `${_suppCycleLen(cycle.on)} on · ${_suppCycleLen(cycle.off)} off`; }
+function _suppCycleText(st) {
+  return st.on ? `On · day ${st.day} of ${st.of}` : `Off · back ${_dietFmtDate(st.until)}`;
+}
+
+function _suppLoadCycle(cycle) {
+  _suppCycleOn = !!cycle;
+  const put = (days, nId, uId) => {
+    const weeks = days % 7 === 0;
+    document.getElementById(nId).value = weeks ? days / 7 : days;
+    document.getElementById(uId).value = weeks ? '7' : '1';
+  };
+  put(cycle ? cycle.on : 14, 'suppCycOn', 'suppCycOnUnit');
+  put(cycle ? cycle.off : 14, 'suppCycOff', 'suppCycOffUnit');
+  document.getElementById('suppCycStart').value = cycle ? cycle.start : _dietToday();
+}
+
+function _suppReadCycle() {
+  if (!_suppCycleOn) return null;
+  const days = (nId, uId) => Math.round(Number(document.getElementById(nId).value) * Number(document.getElementById(uId).value));
+  const on = days('suppCycOn', 'suppCycOnUnit');
+  const off = days('suppCycOff', 'suppCycOffUnit');
+  const start = document.getElementById('suppCycStart').value;
+  return on >= 1 && off >= 1 && start ? { on, off, start } : null;
+}
+
+function renderSuppCycle() {
+  document.getElementById('suppCycleBar').innerHTML =
+    _dietSegHTML([['daily', 'Every day'], ['cycle', 'Cycle on / off']], _suppCycleOn ? 'cycle' : 'daily', 'data-supp-cycle');
+  document.getElementById('suppCycleBody').hidden = !_suppCycleOn;
+  const cyc = _suppReadCycle();
+  const status = document.getElementById('suppCycStatus');
+  if (!_suppCycleOn) { status.textContent = ''; return; }
+  if (!cyc) { status.textContent = 'Enter how long each phase lasts.'; return; }
+  const today = _dietToday();
+  const st = _suppCycleState(cyc, today);
+  status.textContent = _suppCycleLabel(cyc) + ' — ' + (
+    cyc.start > today ? `starts ${_dietFmtDate(cyc.start)}`
+    : st.on ? `today is day ${st.day} of ${st.of}, off from ${_dietFmtDate(st.until)}`
+    : `off today, back on ${_dietFmtDate(st.until)}`);
+}
+
+function _suppDayLabel(ds) {
+  const n = daysBetween(ds, _dietToday());
+  if (n === 0) return 'Today';
+  if (n === 1) return 'Yesterday';
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// Sum of every ingredient across the day's doses, merged by name + unit.
+function _suppDayTotal(items) {
+  const m = new Map();
+  items.forEach(s => (s.contents || []).forEach(c => {
+    if (!c || !c.name || c.amount == null) return;
+    const k = c.name.toLowerCase() + '|' + (c.unit || '');
+    const cur = m.get(k) || { name: c.name, unit: c.unit, amount: 0 };
+    cur.amount += c.amount * (s.qty || 1);
+    m.set(k, cur);
+  }));
+  return _suppContentsText([...m.values()], 1);
+}
+
+function _suppFmtNum(n) {
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+// "Vitamin D3 25 mcg · Zinc 11 mg", each amount scaled by `qty`.
+function _suppContentsText(contents, qty) {
+  return (contents || [])
+    .filter(c => c && c.name)
+    .map(c => c.amount != null ? `${c.name} ${_suppFmtNum(c.amount * qty)} ${c.unit || ''}`.trim() : c.name)
+    .join(' · ');
+}
+
+function _suppUnitOptions(selected) {
+  const units = SUPP_UNITS.includes(selected) || !selected ? SUPP_UNITS : [...SUPP_UNITS, selected];
+  return units.map(u => `<option value="${_esc(u)}"${u === selected ? ' selected' : ''}>${_esc(u)}</option>`).join('');
+}
+
+function _suppNormUnit(u) {
+  const s = String(u || '').trim();
+  if (/^(?:µg|ug|mcg)/i.test(s)) return 'mcg';
+  if (/^iu$/i.test(s)) return 'IU';
+  if (/^ml$/i.test(s)) return 'mL';
+  if (/cfu/i.test(s)) return 'CFU';
+  return s.toLowerCase();
+}
+
+function renderSuppRows() {
+  const wrap = document.getElementById('suppRows');
+  wrap.innerHTML = _suppRows.length ? _suppRows.map((r, i) => `<div class="supp-row">
+      <input type="text" class="task-input" data-supp-row="${i}" data-supp-field="name" value="${_esc(r.name)}" placeholder="Ingredient">
+      <input type="number" class="habit-date-input supp-amt" data-supp-row="${i}" data-supp-field="amount" value="${r.amount ?? ''}" min="0" step="any" placeholder="Amount">
+      <select class="habit-date-input supp-unit" data-supp-row="${i}" data-supp-field="unit">${_suppUnitOptions(r.unit || 'mg')}</select>
+      <button type="button" class="diet-entry-del" data-supp-del-row="${i}" title="Remove">×</button>
+    </div>`).join('')
+    : '<span class="diet-hint">Scan the label, or add ingredients by hand.</span>';
+}
+
+function _dietSetView(view) {
+  _dietView = view === 'supplements' ? 'supplements' : 'meals';
+  document.getElementById('dietViewMeals').hidden = _dietView !== 'meals';
+  document.getElementById('dietViewSupps').hidden = _dietView !== 'supplements';
+  document.querySelectorAll('[data-diet-view]').forEach(b => {
+    const on = b.dataset.dietView === _dietView;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+// ── Supplement modal ──
+function _suppQty() {
+  const q = Number(document.getElementById('suppQty').value);
+  return q > 0 ? q : 0;
+}
+
+// The typed name is a new supplement when nothing is picked and either "+ New"
+// was chosen or nothing on the shelf matches what's typed.
+function _suppIsNew() {
+  const q = document.getElementById('suppName').value.trim().toLowerCase();
+  if (_suppPick || !q) return false;
+  return _suppCreating || !_suppCatalog().some(c => c.name.toLowerCase().includes(q));
+}
+
+// Per-pill contents of whatever the form currently describes.
+function _suppDraftContents() {
+  if (_suppPick) return (_suppFind(_suppPick) || {}).contents || [];
+  if (_suppKind === 'label') {
+    return _suppRows
+      .map(r => ({ name: (r.name || '').trim(), amount: r.amount > 0 ? Number(r.amount) : null, unit: r.unit || 'mg' }))
+      .filter(r => r.name);
+  }
+  const name = document.getElementById('suppName').value.trim();
+  const amt = Number(document.getElementById('suppAmount').value);
+  return name && amt > 0 ? [{ name, amount: amt, unit: document.getElementById('suppUnit').value }] : [];
+}
+
+function renderSuppSummary() {
+  const qty = _suppQty();
+  const txt = qty ? _suppContentsText(_suppDraftContents(), qty) : '';
+  const cyc = _suppReadCycle();
+  const doseDate = document.getElementById('suppDate').value;
+  const st = cyc && doseDate ? _suppCycleState(cyc, doseDate) : null;
+  const warn = st && !st.on ? `That day is in the off period. Next on-day: ${_dietFmtDate(st.until)}.` : '';
+  const el = document.getElementById('suppSummary');
+  el.hidden = !txt && !warn;
+  el.classList.toggle('warn', !!warn);
+  el.innerHTML = (txt ? `<span class="diet-field-label">This dose</span><span>${_esc(txt)}</span>` : '') +
+    (warn ? `<span class="supp-warn">${_esc(warn)}</span>` : '');
+  document.getElementById('suppAddBtn').textContent =
+    qty ? `Log ${_suppFmtNum(qty)} pill${qty === 1 ? '' : 's'}` : 'Log';
+}
+
+function renderSuppForm() {
+  const q = document.getElementById('suppName').value.trim();
+  const ql = q.toLowerCase();
+  const catalog = _suppCatalog();
+  const matches = ql ? catalog.filter(c => c.name.toLowerCase().includes(ql)) : catalog;
+  const exact = catalog.some(c => c.name.toLowerCase() === ql);
+  const isNew = _suppIsNew();
+
+  document.getElementById('suppPickChips').innerHTML = matches.map(c => {
+    const on = c.name.toLowerCase() === _suppPick.toLowerCase();
+    return `<button type="button" class="diet-chip${on ? ' active' : ''}" data-supp-pick="${_esc(c.name)}">${_esc(c.name)}</button>`;
+  }).join('') + (q && (!exact || isNew)
+    ? `<button type="button" class="diet-chip supp-chip-new${isNew ? ' active' : ''}" data-supp-create>${exact ? '✎ Updating' : '+ New'} “${_esc(q)}”</button>`
+    : '');
+
+  const picked = _suppPick && _suppFind(_suppPick);
+  const info = document.getElementById('suppPickInfo');
+  info.hidden = !picked;
+  if (picked) {
+    const per = _suppContentsText(picked.contents, 1);
+    info.innerHTML = `<span>${per ? 'Per pill: ' + _esc(per) : 'No amounts saved for this one.'}</span>
+      <button type="button" class="supp-link" id="suppEditContents">${per ? 'Edit contents' : 'Add amounts'}</button>`;
+  }
+
+  document.getElementById('suppNewField').hidden = !isNew;
+  document.getElementById('suppCycleField').hidden = !picked && !isNew;
+  renderSuppCycle();
+  document.getElementById('suppKindBar').innerHTML =
+    _dietSegHTML([['single', 'Single ingredient'], ['label', 'Multi-ingredient']], _suppKind, 'data-supp-kind');
+  document.getElementById('suppSingleField').hidden = _suppKind !== 'single';
+  document.getElementById('suppLabelField').hidden = _suppKind !== 'label';
+  if (_suppKind === 'label') renderSuppRows();
+  renderSuppSummary();
+}
+
+// Switch a picked supplement into the new-supplement editor, prefilled, so
+// the next log saves its updated contents.
+function _suppEditPicked() {
+  const hit = _suppFind(_suppPick);
+  if (!hit) return;
+  _suppPick = '';
+  _suppCreating = true;
+  const c = hit.contents;
+  if (c.length === 1 && c[0].name.toLowerCase() === hit.name.toLowerCase()) {
+    _suppKind = 'single';
+    document.getElementById('suppAmount').value = c[0].amount ?? '';
+    document.getElementById('suppUnit').innerHTML = _suppUnitOptions(c[0].unit || 'mg');
+  } else {
+    _suppKind = c.length ? 'label' : 'single';
+    _suppRows = c.map(x => ({ ...x }));
+  }
+  renderSuppForm();
+}
+
+function _suppPickName(name) {
+  const hit = _suppFind(name);
+  if (!hit) return;
+  _suppPick = hit.name;
+  _suppCreating = false;
+  document.getElementById('suppName').value = hit.name;
+  document.getElementById('suppQty').value = hit.qty;
+  _suppLoadCycle(_suppCycleFor(hit.name));
+  renderSuppForm();
+}
+
+
+// ── Supplements view: shelf + day-grouped log ──
+function renderSupplements() {
+  const shelf = document.getElementById('suppShelf');
+  if (!shelf) return;
+  const today = _dietToday();
+  const all = _suppSorted();
+  const catalog = _suppCatalog();
+  const week = [...Array(7)].map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return _localDateStr(d);
+  });
+
+  shelf.innerHTML = [...catalog].sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+    const k = c.name.toLowerCase();
+    const mine = all.filter(s => s.name.toLowerCase() === k);
+    const days = new Set(mine.map(s => s.date));
+    const todayDose = mine.find(s => s.date === today);
+    const last = todayDose
+      ? '✓ Today' + (todayDose.time ? ' · ' + _dietFmtTime(todayDose.time) : '')
+      : 'Last ' + _dietAgoLabel(c.date);
+    const per = _suppContentsText(c.contents, 1);
+    const n7 = week.filter(d => days.has(d)).length;
+    const cyc = _suppCycleFor(c.name);
+    const st = cyc && _suppCycleState(cyc, today);
+    const resting = st && !st.on;
+    const dot = d => {
+      const cls = [days.has(d) && 'on', cyc && !_suppCycleState(cyc, d).on && 'off'].filter(Boolean).join(' ');
+      return `<i${cls ? ` class="${cls}"` : ''}></i>`;
+    };
+    return `<div class="supp-tile${todayDose ? ' taken' : ''}${resting ? ' resting' : ''}" data-supp-open="${_esc(c.name)}" role="button" tabindex="0" aria-label="Log ${_esc(c.name)}">
+      <div class="supp-tile-head">
+        <span class="supp-tile-name">${_esc(c.name)}</span>
+        <span class="supp-tile-last">${_esc(last)}</span>
+      </div>
+      <div class="supp-tile-contents" title="${_esc(per)}">${per ? _esc(per) : 'No amounts saved'}</div>
+      ${st ? `<div class="supp-cycle-badge ${st.on ? 'on' : 'off'}" title="${_esc(_suppCycleLabel(cyc))}">⟳ ${_esc(_suppCycleText(st))}</div>` : ''}
+      <div class="supp-tile-foot">
+        <span class="supp-dots" title="Taken ${n7} of the last 7 days${cyc ? ' · rings are off-days' : ''}">${week.map(dot).join('')}</span>
+        <button type="button" class="supp-take" data-supp-take="${_esc(c.name)}">${resting ? 'Off' : '+ Take ' + _suppFmtNum(c.qty)}</button>
+      </div>
+    </div>`;
+  }).join('') + `<button type="button" class="supp-tile supp-tile-new" id="suppLogOpen">
+      <span class="supp-tile-plus">+</span>${catalog.length ? 'New supplement' : 'Log your first supplement'}
+    </button>`;
+
+  const wrap = document.getElementById('suppHistoryList');
+  if (!all.length) {
+    wrap.innerHTML = '<div class="empty-state">Nothing logged yet. Once you log a supplement, it lands on your shelf above for one-tap logging.</div>';
+    return;
+  }
+  const groups = [];
+  all.forEach(s => {
+    let g = groups[groups.length - 1];
+    if (!g || g.date !== s.date) groups.push(g = { date: s.date, items: [] });
+    g.items.push(s);
+  });
+  wrap.innerHTML = groups.slice(0, _suppHistoryDays).map(g => {
+    const total = g.items.length > 1 ? _suppDayTotal(g.items) : '';
+    return `<div class="supp-day">
+      <div class="supp-day-head">
+        <span>${_suppDayLabel(g.date)}</span>
+        <span class="supp-day-count">${g.items.length} dose${g.items.length === 1 ? '' : 's'}</span>
+      </div>
+      ${g.items.map(s => {
+        const qty = s.qty || 1;
+        const amt = _suppContentsText(s.contents, qty);
+        return `<div class="supp-log-row">
+          <span class="supp-log-time">${s.time ? _dietFmtTime(s.time) : '—'}</span>
+          <span class="supp-log-name">${_esc(s.name)}<b>× ${_suppFmtNum(qty)}</b></span>
+          <span class="supp-log-amt" title="${_esc(amt)}">${_esc(amt)}</span>
+          <button type="button" class="diet-entry-del" data-del-supp="${s.id}" title="Delete" aria-label="Delete ${_esc(s.name)}">×</button>
+        </div>`;
+      }).join('')}
+      ${total ? `<div class="supp-day-total"><span>Day total</span>${_esc(total)}</div>` : ''}
+    </div>`;
+  }).join('') + (groups.length > _suppHistoryDays
+    ? '<div class="diet-history-more" id="suppHistoryMore">Show earlier days ▾</div>' : '');
+}
+
+function _suppSave(entry, title) {
+  saveSupplements([...getSupplements(), entry]);
+  renderSupplements();
+  _finToast(_esc(title), _esc(_suppContentsText(entry.contents, entry.qty)), () => {
+    saveSupplements(getSupplements().filter(x => x.id !== entry.id));
+    renderSupplements();
+  });
+}
+
+function suppQuickTake(name) {
+  const hit = _suppFind(name);
+  if (!hit) return;
+  const cyc = _suppCycleFor(hit.name);
+  const st = cyc && _suppCycleState(cyc, _dietToday());
+  if (st && !st.on && !confirm(`${hit.name} is in its off period (back on ${_dietFmtDate(st.until)}). Log it anyway?`)) return;
+  _suppSave({ id: _dietId(), name: hit.name, date: _dietToday(), time: _dietNowTime(), qty: hit.qty, contents: hit.contents },
+    `Took ${_suppFmtNum(hit.qty)} × ${hit.name}`);
+}
+
+function openSuppModal(name) {
+  const dateEl = document.getElementById('suppDate');
+  dateEl.value = _dietToday();
+  dateEl.max = _dietToday();
+  document.getElementById('suppTime').value = _dietNowTime();
+  document.getElementById('suppName').value = '';
+  document.getElementById('suppAmount').value = '';
+  document.getElementById('suppUnit').innerHTML = _suppUnitOptions('mg');
+  document.getElementById('suppQty').value = '1';
+  document.getElementById('suppFormStatus').textContent = '';
+  document.getElementById('suppScanStatus').textContent = '';
+  _suppPick = '';
+  _suppCreating = false;
+  _suppKind = 'single';
+  _suppRows = [];
+  _suppLoadCycle(null);
+  if (name) _suppPickName(name); else renderSuppForm();
+  const modal = document.getElementById('suppModal');
+  modal.classList.add('open');
+  modal.querySelector('.sr-modal-card').scrollTop = 0;
+  _mobLockBody();
+  if (!_suppPick) setTimeout(() => document.getElementById('suppName').focus(), 0);
+}
+
+function closeSuppModal() {
+  const modal = document.getElementById('suppModal');
+  if (!modal.classList.contains('open')) return;
+  modal.classList.remove('open');
+  _mobUnlockBodyIfClear();
+}
+
+function addSupplement() {
+  const dateEl = document.getElementById('suppDate');
+  const status = document.getElementById('suppFormStatus');
+  const typed = document.getElementById('suppName').value.trim();
+  if (!_suppPick && !_suppIsNew()) {
+    showStatus(status, typed ? 'Pick one from the list, or tap “+ New”.' : 'Pick or type a supplement.', 'var(--warning)');
+    return;
+  }
+  if (!dateEl.value) { showStatus(status, 'Pick a date first.', 'var(--warning)'); return; }
+  const qty = _suppQty();
+  if (!qty) { showStatus(status, 'Enter how many pills.', 'var(--warning)'); return; }
+
+  if (_suppCycleOn && !_suppReadCycle()) { showStatus(status, 'Finish the cycle lengths, or switch to Every day.', 'var(--warning)'); return; }
+
+  const known = _suppFind(_suppPick || typed);
+  const name = known ? known.name : typed;
+  const entry = { id: _dietId(), name, date: dateEl.value, time: document.getElementById('suppTime').value || '', qty, contents: _suppDraftContents() };
+  _suppWriteCycle(name, _suppReadCycle());
+  closeSuppModal();
+  _suppSave(entry, `Logged ${_suppFmtNum(qty)} × ${name}`);
 }
 
 
@@ -424,7 +878,79 @@ function _dietToggleMealTag(list, name) {
   if (i === -1) list.push(name); else list.splice(i, 1);
 }
 
-_dietPanel.addEventListener('click', e => {
+function openDietModal() {
+  renderDietForm();
+  const modal = document.getElementById('dietModal');
+  modal.classList.add('open');
+  modal.querySelector('.sr-modal-card').scrollTop = 0;
+  _mobLockBody();
+  document.getElementById('dietFormStatus').textContent = '';
+  setTimeout(() => document.getElementById('dietDesc').focus(), 0);
+}
+
+function closeDietModal() {
+  const modal = document.getElementById('dietModal');
+  if (!modal.classList.contains('open')) return;
+  modal.classList.remove('open');
+  _mobUnlockBodyIfClear();
+}
+
+function _dietOnClick(e) {
+  const view = e.target.closest('[data-diet-view]');
+  if (view) { _dietSetView(view.dataset.dietView); return; }
+
+  if (e.target.id === 'dietLogOpen') { openDietModal(); return; }
+  if (e.target.id === 'dietModalClose' || e.target.id === 'dietModal') { closeDietModal(); return; }
+  const take = e.target.closest('[data-supp-take]');
+  if (take) { suppQuickTake(take.dataset.suppTake); return; }
+  if (e.target.closest('#suppLogOpen')) { openSuppModal(); return; }
+  const tile = e.target.closest('[data-supp-open]');
+  if (tile) { openSuppModal(tile.dataset.suppOpen); return; }
+  if (e.target.id === 'suppModalClose' || e.target.id === 'suppModal') { closeSuppModal(); return; }
+  if (e.target.id === 'suppAddBtn') { addSupplement(); return; }
+  if (e.target.id === 'suppEditContents') { _suppEditPicked(); return; }
+  if (e.target.id === 'suppNowBtn') {
+    document.getElementById('suppDate').value = _dietToday();
+    document.getElementById('suppTime').value = _dietNowTime();
+    return;
+  }
+  const step = e.target.closest('[data-supp-step]');
+  if (step) {
+    const q = _suppQty() || 1;
+    document.getElementById('suppQty').value = Math.max(0.5, q + Number(step.dataset.suppStep));
+    renderSuppSummary();
+    return;
+  }
+
+  const cycleSeg = e.target.closest('[data-supp-cycle]');
+  if (cycleSeg) {
+    _suppCycleOn = cycleSeg.dataset.suppCycle === 'cycle';
+    renderSuppCycle();
+    renderSuppSummary();
+    _suppSavePickedCycle();
+    return;
+  }
+  const pick = e.target.closest('[data-supp-pick]');
+  if (pick) { _suppPickName(pick.dataset.suppPick); return; }
+  if (e.target.closest('[data-supp-create]')) {
+    _suppCreating = true;
+    _suppPick = '';
+    renderSuppForm();
+    document.getElementById(_suppKind === 'single' ? 'suppAmount' : 'suppName').focus();
+    return;
+  }
+  const kind = e.target.closest('[data-supp-kind]');
+  if (kind) { _suppKind = kind.dataset.suppKind === 'label' ? 'label' : 'single'; renderSuppForm(); return; }
+  if (e.target.id === 'suppAddRow') {
+    _suppRows.push({ name: '', amount: null, unit: 'mg' });
+    renderSuppRows();
+    document.querySelector(`[data-supp-row="${_suppRows.length - 1}"][data-supp-field="name"]`).focus();
+    return;
+  }
+  const delRow = e.target.closest('[data-supp-del-row]');
+  if (delRow) { _suppRows.splice(Number(delRow.dataset.suppDelRow), 1); renderSuppRows(); renderSuppSummary(); return; }
+  if (e.target.id === 'suppScanBtn') { document.getElementById('suppScanFile').click(); return; }
+
   const cat = e.target.closest('[data-cat]');
   if (cat) { _dietCategory = cat.dataset.cat; renderDietForm(); return; }
 
@@ -438,12 +964,26 @@ _dietPanel.addEventListener('click', e => {
   if (histCat) { _dietHistoryCat = histCat.dataset.histcat; _dietHistoryAll = false; renderDietHistory(); return; }
 
   if (e.target.id === 'dietHistoryMore') { _dietHistoryAll = !_dietHistoryAll; renderDietHistory(); return; }
+  if (e.target.id === 'suppHistoryMore') { _suppHistoryDays += 14; renderSupplements(); return; }
 
   const foodRange = e.target.closest('[data-foodrange]');
   if (foodRange) { _dietFoodRange = foodRange.dataset.foodrange; renderDietFoodPanel(); return; }
 
   const catRange = e.target.closest('[data-catrange]');
   if (catRange) { _dietCatRange = catRange.dataset.catrange; renderDietCategoryPanel(); return; }
+
+  const delSupp = e.target.closest('[data-del-supp]');
+  if (delSupp) {
+    const row = getSupplements().find(x => x.id === delSupp.dataset.delSupp);
+    if (!row) return;
+    saveSupplements(getSupplements().filter(x => x.id !== row.id));
+    renderSupplements();
+    _finToast(`Deleted ${_esc(row.name)}`, _esc(_suppDayLabel(row.date) + (row.time ? ' · ' + _dietFmtTime(row.time) : '')), () => {
+      saveSupplements([...getSupplements(), row]);
+      renderSupplements();
+    });
+    return;
+  }
 
   const delEntry = e.target.closest('[data-del-entry]');
   if (delEntry) {
@@ -481,7 +1021,10 @@ _dietPanel.addEventListener('click', e => {
   if (e.target.id === 'dietHealthyListAdd')  { _dietAddFood('healthy', 'dietHealthyListInput', false); return; }
   if (e.target.id === 'dietUnhealthyListAdd'){ _dietAddFood('unhealthy', 'dietUnhealthyListInput', false); return; }
   if (e.target.id === 'dietImportBtn')       { document.getElementById('dietImportFile').click(); return; }
-});
+}
+_dietPanel.addEventListener('click', _dietOnClick);
+document.getElementById('dietModal').addEventListener('click', _dietOnClick);
+document.getElementById('suppModal').addEventListener('click', _dietOnClick);
 
 // Add a name to a master list. `selectForMeal` also tags it on the meal being
 // entered (used by the form inputs, not the manage-list inputs).
@@ -502,18 +1045,71 @@ function _dietAddFood(kind, inputId, selectForMeal) {
   renderDiet();
 }
 
-_dietPanel.addEventListener('keydown', e => {
+function _dietOnKey(e) {
+  if (e.key === 'Escape') { closeDietModal(); closeSuppModal(); return; }
   if (e.key !== 'Enter') return;
+  if (e.target.dataset && e.target.dataset.suppOpen) { openSuppModal(e.target.dataset.suppOpen); return; }
+  if (e.target.id === 'suppName') {
+    const q = e.target.value.trim().toLowerCase();
+    const matches = q ? _suppCatalog().filter(c => c.name.toLowerCase().includes(q)) : [];
+    if (!_suppPick && matches.length === 1) _suppPickName(matches[0].name);
+    else addSupplement();
+    return;
+  }
+  if (['suppAmount', 'suppQty'].includes(e.target.id)) { addSupplement(); return; }
   if (e.target.id === 'dietDesc' || e.target.id === 'dietCalories') { addDietEntry(); }
   else if (e.target.id === 'dietHealthyInput')       { _dietAddFood('healthy', 'dietHealthyInput', true); }
   else if (e.target.id === 'dietUnhealthyInput')     { _dietAddFood('unhealthy', 'dietUnhealthyInput', true); }
   else if (e.target.id === 'dietHealthyListInput')   { _dietAddFood('healthy', 'dietHealthyListInput', false); }
   else if (e.target.id === 'dietUnhealthyListInput') { _dietAddFood('unhealthy', 'dietUnhealthyListInput', false); }
-});
+}
+_dietPanel.addEventListener('keydown', _dietOnKey);
+document.getElementById('dietModal').addEventListener('keydown', _dietOnKey);
+document.getElementById('suppModal').addEventListener('keydown', _dietOnKey);
 
-// Re-render when the tab is opened (mirrors the Areas tab).
+// A picked supplement already exists, so its schedule saves as soon as it's
+// valid. A new one's is saved with its first log.
+function _suppSavePickedCycle() {
+  if (!_suppPick) return;
+  const cyc = _suppReadCycle();
+  if (_suppCycleOn && !cyc) return;
+  _suppWriteCycle(_suppPick, cyc);
+  renderSupplements();
+  showStatus(document.getElementById('suppFormStatus'), 'Schedule saved.', 'var(--success)', 2000);
+}
+
+function _suppOnInput(e) {
+  if (e.target.closest('#suppCycleField')) {
+    renderSuppCycle();
+    renderSuppSummary();
+    if (e.type === 'change') _suppSavePickedCycle();
+    return;
+  }
+  if (e.target.id === 'suppName') {
+    const hit = _suppFind(e.target.value);
+    _suppPick = hit && !_suppCreating ? hit.name : '';
+    if (!e.target.value.trim()) _suppCreating = false;
+    renderSuppForm();
+    return;
+  }
+  const el = e.target.closest('[data-supp-row]');
+  if (el) {
+    const row = _suppRows[Number(el.dataset.suppRow)];
+    if (row) {
+      const f = el.dataset.suppField;
+      row[f] = f === 'amount' ? (el.value === '' ? null : Number(el.value)) : el.value;
+    }
+  }
+  renderSuppSummary();
+}
+document.getElementById('suppModal').addEventListener('input', _suppOnInput);
+document.getElementById('suppModal').addEventListener('change', _suppOnInput);
+
+// Re-render when the tab is opened (mirrors the Areas tab). Leaving the tab
+// closes the meal modal so it doesn't sit over another section.
 document.querySelectorAll('.tab-btn').forEach(btn => {
   if (btn.dataset.tab === 'diet') btn.addEventListener('click', renderDiet);
+  else btn.addEventListener('click', () => { closeDietModal(); closeSuppModal(); });
 });
 
 
@@ -805,4 +1401,84 @@ document.getElementById('dietImportFile').addEventListener('change', e => {
   const file = e.target.files[0];
   e.target.value = '';        // allow re-picking the same file
   dietImport(file);
+});
+
+
+// ── Supplement Facts label → per-pill contents ──
+const _SUPP_ROW_RE = /^(.*?[a-z].*?)\s+(\d[\d,]*(?:\.\d+)?)\s*(mcg(?:\s*(?:DFE|RAE))?|µg|ug|mg|g|IU|(?:billion\s*|million\s*)?CFU|mL)\b/i;
+const _SUPP_SKIP_RE = /serving|servings|amount\s*per|daily\s*value|calories|other\s*ingredients|supplement\s*facts|^%/i;
+
+// Rows of a Supplement Facts panel: "Vitamin D3 (as cholecalciferol) 25 mcg 125%".
+// OCR often splits the name and amount columns into separate lines, so lines
+// sharing a baseline are joined left-to-right before matching. Amounts are per
+// serving; when the label's serving is N pills they're divided down to one pill.
+function _suppParseLabel(ocr) {
+  const lines = [...(ocr.lines || [])].sort((a, b) => a.top - b.top || a.left - b.left);
+  const rows = [];
+  lines.forEach(l => {
+    const row = rows.find(r => Math.abs(r.top - l.top) <= 10);
+    if (row) row.parts.push(l); else rows.push({ top: l.top, parts: [l] });
+  });
+  let texts = rows.map(r => r.parts.sort((a, b) => a.left - b.left).map(p => p.text).join(' '));
+  if (!texts.length) texts = (ocr.text || '').split(/\n+/);
+
+  const joined = texts.join('\n');
+  const serving = joined.match(/serving\s*size[^\d\n]{0,12}(\d+(?:\.\d+)?)/i);
+  const perServing = serving ? Number(serving[1]) : 1;
+  const div = perServing > 0 ? perServing : 1;
+
+  const out = [];
+  texts.forEach(t => {
+    const s = t.replace(/\s+/g, ' ').trim();
+    if (!s || _SUPP_SKIP_RE.test(s)) return;
+    const m = s.match(_SUPP_ROW_RE);
+    if (!m) return;
+    const name = m[1].replace(/\(.*$/, '').replace(/[†*‡.:•·]+$/g, '').replace(/[†*‡]/g, '').trim();
+    if (name.length < 2) return;
+    let amount = Number(m[2].replace(/,/g, ''));
+    let unit = m[3];
+    if (/billion/i.test(unit)) { amount *= 1e9; unit = 'CFU'; }
+    else if (/million/i.test(unit)) { amount *= 1e6; unit = 'CFU'; }
+    out.push({ name, amount: Math.round((amount / div) * 100) / 100, unit: _suppNormUnit(unit) });
+  });
+  return { rows: out, perServing: div };
+}
+
+async function suppScan(file) {
+  const status = document.getElementById('suppScanStatus');
+  if (!file) return;
+  if (!/^image\//.test(file.type) && !/\.(png|jpe?g|webp|gif|bmp|tiff?|heic|heif)$/i.test(file.name)) {
+    showStatus(status, 'Pick an image file.', 'var(--warning)');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) { showStatus(status, 'Image is over 20 MB — use a smaller photo.', 'var(--warning)', 5000); return; }
+
+  const btn = document.getElementById('suppScanBtn');
+  btn.disabled = true;
+  btn.textContent = '📷 Reading…';
+  try {
+    const dataUrl = (await _dietNormalizeImage(file)) || (await _dietFileToDataUrl(file));
+    const { rows, perServing } = _suppParseLabel(await _dietOcr(dataUrl));
+    if (!rows.length) throw new Error("couldn't find ingredient amounts on that label");
+    _suppRows = rows;
+    renderSuppRows();
+    renderSuppSummary();
+    showStatus(status,
+      `Found ${rows.length} ingredient${rows.length === 1 ? '' : 's'}` +
+        (perServing > 1 ? ` (label serving is ${perServing} pills — amounts divided to 1 pill)` : '') +
+        ' — review before logging.',
+      'var(--success)', 7000);
+  } catch (err) {
+    console.error('[diet] supplement scan failed:', err);
+    showStatus(status, 'Scan failed: ' + (err.message || 'try again') + ' — or add them by hand.', 'var(--danger)', 9000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📷 Scan supplement facts';
+  }
+}
+
+document.getElementById('suppScanFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  suppScan(file);
 });
