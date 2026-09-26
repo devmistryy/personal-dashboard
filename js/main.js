@@ -1452,8 +1452,20 @@ document.querySelectorAll('#tabBar .tab-btn').forEach(btn => {
     // Tabs share one scrolling page, so without this a new tab opens wherever
     // the last one was scrolled to — often halfway down.
     window.scrollTo({ top: 0, behavior: 'instant' });
+    document.getElementById('mobileTabTitle').textContent = btn.title;
+    setMobileDrawer(false);
   });
 });
+
+// ── Phone drawer: the sidebar slides in from the hamburger in .mobile-bar ──
+// The .open class only has an effect inside the mobile @media block.
+function setMobileDrawer(open) {
+  document.getElementById('sidebar').classList.toggle('open', open);
+  document.getElementById('mobileMenuBtn').setAttribute('aria-expanded', open);
+}
+document.getElementById('mobileMenuBtn').addEventListener('click', () => setMobileDrawer(true));
+document.getElementById('sidebarScrim').addEventListener('click', () => setMobileDrawer(false));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setMobileDrawer(false); });
 
 // ── Sidebar collapse toggle ──
 // Persists across reloads (UI-only preference, not synced data).

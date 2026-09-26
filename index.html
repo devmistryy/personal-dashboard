@@ -11,12 +11,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Dashboard">
 <meta name="theme-color" content="#050506">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Stylesheets - load order matters: main.css defines :root tokens and ends with
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
-<link rel="stylesheet" href="css/main.css?v=37">
+<link rel="stylesheet" href="css/main.css?v=39">
 <link rel="stylesheet" href="css/todo.css?v=31">
 <link rel="stylesheet" href="css/habits.css?v=63">
 <link rel="stylesheet" href="css/jobs.css?v=93">
@@ -77,9 +77,19 @@
       </button>
     </div>
   </aside>
+  <!-- Phones only: tap-outside-to-close backdrop for the drawer sidebar -->
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
 
   <main class="main-content">
   <div class="page-wrap">
+
+  <!-- Phones only: opens the sidebar as a drawer, shows the current tab name -->
+  <div class="mobile-bar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <span class="mobile-bar-title" id="mobileTabTitle">To Do</span>
+  </div>
 
   <!-- Shown by _syncFailed() when a write to Supabase is rejected: the change is
        in memory only and a reload will silently revert it. Click to dismiss. -->
@@ -961,6 +971,6 @@
 <script src="js/diet.js?v=10"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
-<script src="js/main.js?v=55"></script>
+<script src="js/main.js?v=56"></script>
 </body>
 </html>

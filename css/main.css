@@ -471,6 +471,29 @@
 
   .sidebar-signout { width: 100%; margin-top: 4px; }
 
+  /* Phone-only drawer chrome — shown in the mobile @media block below */
+  .sidebar-scrim { display: none; }
+  .mobile-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .mobile-menu-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 9px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .mobile-menu-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+  .mobile-bar-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   /* Responsive */
@@ -484,27 +507,63 @@
     .card { padding: 14px; }
     .section-title { margin-bottom: 8px; }
 
-    /* Phones stay in the icon-only rail permanently — there isn't room for
-       an inline expanded sidebar, so the toggle is hidden and labels never
-       show, regardless of the .collapsed class / localStorage preference. */
-    .sidebar {
-      width: 56px !important;
-      padding: max(14px, env(safe-area-inset-top)) 6px 12px max(6px, env(safe-area-inset-left));
+    /* Phones: the sidebar becomes an off-canvas drawer opened from the
+       hamburger in .mobile-bar, always fully expanded (labels shown)
+       regardless of the desktop .collapsed preference. */
+    .sidebar, .sidebar.collapsed {
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
+      height: auto;
+      width: 240px;
+      z-index: 300;
+      background: #111113;
+      transform: translateX(-100%);
+      transition: transform 0.25s cubic-bezier(0.22,1,0.36,1);
     }
+    .sidebar.open { transform: none; }
     .sidebar-toggle { display: none; }
-    .sidebar-title { display: none; }
-    .tab-btn { justify-content: center; padding: 9px 0; gap: 0; }
-    .tab-btn-label { display: none; }
+    .sidebar.collapsed .sidebar-title { display: block; }
+    .sidebar.collapsed .sidebar-head { justify-content: space-between; }
+    .sidebar.collapsed .tab-btn { justify-content: flex-start; padding: 9px 10px; gap: 11px; }
+    .sidebar.collapsed .tab-btn-label { display: inline; }
+    .tab-btn { font-size: 14px; padding: 11px 10px; }
+
+    .sidebar-scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 299;
+      background: rgba(0,0,0,0.55);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .sidebar.open + .sidebar-scrim { opacity: 1; pointer-events: auto; }
+
+    .mobile-bar { display: flex; }
 
     .top-pin { position: static; margin-top: 0; padding-top: 0; }
     .top-pin { padding-bottom: 0; margin-bottom: 12px; }
-    .day-strip { gap: 14px; padding: 14px; }
-    .day-ring-svg-wrap { width: 96px; height: 96px; }
-    .day-ring-clock { font-size: 21px; }
-    .day-ring-phase, .day-ring-ampm { font-size: 8.5px; }
-    .day-ring-status { font-size: 14px; }
-    .day-ring-range { font-size: 12px; }
-    .sky-row { flex-wrap: wrap; row-gap: 6px; }
-    .sky-text { white-space: normal; }
+    /* Day strip, compact: ring + day info on top, then a single weather
+       row (sky tile stretches, temp/sun event beside it), then the quote. */
+    .day-strip { gap: 12px 14px; padding: 14px; }
+    .day-ring-svg-wrap { width: 84px; height: 84px; }
+    .day-ring-clock { font-size: 19px; }
+    .day-ring-phase, .day-ring-ampm { font-size: 8px; }
+    .day-strip-mid { gap: 5px; }
+    .day-strip-date { font-size: 10px; letter-spacing: 0.14em; }
+    .day-ring-status { font-size: 15px; }
+    .day-ring-range { font-size: 11.5px; line-height: 1.5; }
+    .day-strip > .sky-row { gap: 12px; }
+    .day-strip > .sky-row .sky { flex: 1; width: auto; height: 40px; }
+    .day-strip > .sky-row .sky-text { font-size: 12.5px; }
+    .day-strip > .sky-row .sky-temp { font-size: 19px; }
+    .quote-col { gap: 5px; padding-top: 12px; }
+    .quote-eyebrow { font-size: 9.5px; }
     .quote-text { font-size: 14px; }
+    .quote-author { font-size: 11px; }
+
+    /* iOS Safari zooms the page when focusing a field under 16px and
+       doesn't zoom back out, so every text control is at least 16px here. */
+    input, select, textarea { font-size: 16px !important; }
   }
