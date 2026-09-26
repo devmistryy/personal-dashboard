@@ -43,10 +43,12 @@ function _habitVoidedOn(habitId, ds) {
 function getHabitCounts(dateStr)         { return MEM['habits:count:' + dateStr] || (MEM['habits:count:' + dateStr] = {}); }
 function getHabitCount(dateStr, habitId) { return getHabitCounts(dateStr)[habitId] || 0; }
 function _isIncrementHabit(habit)        { return habit.trackType === 'increment'; }
-function _habitTarget(habit)             { return Math.max(1, habit.target || 1); }
+// `targets` holds per-date overrides ({ 'YYYY-MM-DD': n }) of the default
+// `target`; pass `ds` to get that day's effective target.
+function _habitTarget(habit, ds)         { return Math.max(1, (ds && habit.targets && habit.targets[ds]) || habit.target || 1); }
 
 function setHabitCount(dateStr, habit, count) {
-  const clamped = Math.max(0, Math.min(count, _habitTarget(habit)));
+  const clamped = Math.max(0, Math.min(count, _habitTarget(habit, dateStr)));
   const counts  = getHabitCounts(dateStr);
   if (clamped > 0) counts[habit.id] = clamped; else delete counts[habit.id];
   MEM['habits:count:' + dateStr] = counts;
@@ -54,7 +56,7 @@ function setHabitCount(dateStr, habit, count) {
 
   const log = getHabitLog(dateStr);
   const wasDone = log.includes(habit.id);
-  const isDone  = clamped >= _habitTarget(habit);
+  const isDone  = clamped >= _habitTarget(habit, dateStr);
   if (isDone && !wasDone) log.push(habit.id);
   else if (!isDone && wasDone) log.splice(log.indexOf(habit.id), 1);
   if (isDone !== wasDone) saveHabitLog(dateStr, log);
@@ -66,7 +68,7 @@ function setHabitCount(dateStr, habit, count) {
 // from the done-ness everything else reads off the log.
 function _toggleHabitDone(ds, habit) {
   if (_isIncrementHabit(habit)) {
-    setHabitCount(ds, habit, _habitDoneOn(habit, ds) ? 0 : _habitTarget(habit));
+    setHabitCount(ds, habit, _habitDoneOn(habit, ds) ? 0 : _habitTarget(habit, ds));
     return;
   }
   const log = getHabitLog(ds);
@@ -523,7 +525,7 @@ function buildHabitRow(habit, allHabits, opts) {
   const brokenN   = (!weekly && !doneToday && streak === 0) ? _habitRecentlyBroken(habit) : 0;
   const dormant   = (!weekly && !doneToday && streak === 0 && brokenN === 0) ? _habitDormantDays(habit) : null;
   const isIncrement = _isIncrementHabit(habit);
-  const target    = _habitTarget(habit);
+  const target    = _habitTarget(habit, today);
   const count     = isIncrement ? getHabitCount(today, habit.id) : 0;
 
   const isTimed   = !!habit.endDate;
@@ -1330,7 +1332,7 @@ function renderHabitDetailPage(habit, allHabits) {
   const isExpired = isTimed && today > habit.endDate;
   const isArchived = !!habit.archived;
   const isIncrement = _isIncrementHabit(habit);
-  const target = _habitTarget(habit);
+  const target = _habitTarget(habit, today);
   const todayCount = isIncrement ? getHabitCount(today, habit.id) : 0;
   const routine = _habitRoutine(habit);
   const sched = _habitSchedule(habit);
@@ -1447,8 +1449,13 @@ function renderHabitDetailPage(habit, allHabits) {
         ${_hdSeg('routine', HABIT_ROUTINES, routine)}</div>
       <div class="hd-set"><span class="hd-set-k">Tracking</span><div class="at-row">
         ${_hdSeg('track', [['checkbox', 'Check off'], ['increment', 'Count']], isIncrement ? 'increment' : 'checkbox')}
-        ${isIncrement ? `<span class="at-row"><input type="number" min="1" step="1" class="task-date-input hab-num" id="habitTargetInput" value="${target}" aria-label="Target per day"><span class="at-none">a day</span></span>` : ''}
+        ${isIncrement ? `<span class="at-row"><input type="number" min="1" step="1" class="task-date-input hab-num" id="habitTargetInput" value="${_habitTarget(habit)}" aria-label="Target per day"><span class="at-none">a day</span></span>` : ''}
       </div></div>
+      ${isIncrement ? `<div class="hd-set"><span class="hd-set-k">Target on</span><div class="at-row">
+        <input type="date" class="task-date-input" id="hdTargetDate" value="${today}" min="${startDate}" aria-label="Day to change the target for">
+        <input type="number" min="1" step="1" class="task-date-input hab-num" id="hdTargetDay" value="${target}" aria-label="Target that day">
+        <span class="at-none" id="hdTargetNote">${habit.targets && habit.targets[today] ? 'that day only' : 'default'}</span>
+      </div></div>` : ''}
       <div class="hd-set"><span class="hd-set-k">Schedule</span><div class="at-row">
         ${_hdSeg('sched', [['daily', 'Every day'], ['days', 'Pick days'], ['weekly', '× a week']], sched ? sched.type : 'daily')}
         ${sched && sched.type === 'days' ? `<span class="hab-daypick" id="hdDays">${_hdDayPicker(days)}</span>` : ''}
@@ -1560,6 +1567,29 @@ function renderHabitDetailPage(habit, allHabits) {
       setHabitCount(today, habit, getHabitCount(today, habit.id));
       renderHabits();
     });
+    // One-day override of the target. Setting it back to the default clears it.
+    const tDate = document.getElementById('hdTargetDate');
+    const tDay  = document.getElementById('hdTargetDay');
+    if (tDate && tDay) {
+      const showDay = () => {
+        tDay.value = _habitTarget(habit, tDate.value);
+        document.getElementById('hdTargetNote').textContent =
+          habit.targets && habit.targets[tDate.value] ? 'that day only' : 'default';
+      };
+      tDate.addEventListener('change', () => { if (tDate.value) showDay(); });
+      numInput('hdTargetDay', v => {
+        const ds = tDate.value;
+        if (!ds) return;
+        const t = Math.max(1, v || 1);
+        if (t === _habitTarget(habit, ds)) return;
+        const targets = { ...(habit.targets || {}) };
+        if (t === _habitTarget(habit)) delete targets[ds]; else targets[ds] = t;
+        if (Object.keys(targets).length) habit.targets = targets; else delete habit.targets;
+        saveHabits(allHabits);
+        setHabitCount(ds, habit, getHabitCount(ds, habit.id));
+        renderHabits();
+      });
+    }
 
     document.getElementById('hdAreas').addEventListener('click', e => {
       const b = e.target.closest('button[data-area]');
@@ -1657,7 +1687,6 @@ function renderHabitHistoryGrid(habit) {
   const isArchived = !!habit.archived;
   const isIncrement = _isIncrementHabit(habit);
   const weekly = _habitIsWeekly(habit);
-  const target = isIncrement ? _habitTarget(habit) : 0;
 
   const lastWeek = _shiftDay(_weekStart(today), -7 * _detailWeekOffset);
   const first = _shiftDay(lastWeek, -7 * (_HD_WEEKS - 1));
@@ -1704,7 +1733,7 @@ function renderHabitHistoryGrid(habit) {
       else if (ds === today || weekly) { title += ds === today ? ' — today' : ''; }
       else { cls += ' miss'; title += ' — missed'; }
       if (ds === today) cls += ' today';
-      if (isIncrement && !isFuture && !isBeforeStart && !isRetired) title += ` · ${getHabitCount(ds, habit.id)}/${target}`;
+      if (isIncrement && !isFuture && !isBeforeStart && !isRetired) title += ` · ${getHabitCount(ds, habit.id)}/${_habitTarget(habit, ds)}`;
       // An archived habit is a frozen record, and a count habit only changes
       // through its stepper — so neither gets clickable squares.
       const clickable = !isFuture && !isBeforeStart && !isRetired && !isArchived && !isIncrement;
@@ -1856,7 +1885,7 @@ function renderDayDetail(ds) {
       : '';
     const isIncrement = _isIncrementHabit(h);
     const count  = isIncrement ? getHabitCount(ds, h.id) : 0;
-    const target = isIncrement ? _habitTarget(h) : 0;
+    const target = isIncrement ? _habitTarget(h, ds) : 0;
     // Any day (not just today) gets its own exact count here — the stepper
     // writes straight through setHabitCount(ds, ...), same as the "Today's
     // check-in" card on the habit's own detail page.
