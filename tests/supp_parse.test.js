@@ -73,4 +73,19 @@ assert.deepStrictEqual(names(two), ['Zinc', 'Magnesium', '']);
 _suppPadRows(two);
 assert.strictEqual(two.length, 3);
 
+// A second photo adds to the list: blanks dropped, repeated names skipped, edits kept.
+const { _suppMergeRows } = ctx;
+const list = [{ name: 'Vitamin C', amount: 50, unit: 'mg' }, { name: '', amount: null, unit: 'mg' }];
+const added = _suppMergeRows(list, [{ name: 'vitamin c', amount: 45, unit: 'mg' }, { name: 'Zinc', amount: 5, unit: 'mg' }]);
+assert.strictEqual(added, 1);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(list)), [
+  { name: 'Vitamin C', amount: 50, unit: 'mg' },
+  { name: 'Zinc', amount: 5, unit: 'mg' },
+]);
+
+// The back half of a 2-gummy label has no serving line; the first photo's serving still applies.
+r = _suppParseLabel({ lines: [], text: 'Zinc 10 mg' }, 2);
+assert.strictEqual(r.servingFound, false);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(r.rows)), [{ name: 'Zinc', amount: 5, unit: 'mg' }]);
+
 console.log('supp_parse ok');

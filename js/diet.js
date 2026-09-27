@@ -84,6 +84,7 @@ let _suppHistoryDays  = 7;             // day groups shown in the supplement log
 let _suppPick         = '';             // existing supplement selected in the modal
 let _suppCreating     = false;          // "+ New" chosen for the typed name
 let _suppRows         = [];             // [{ name, amount, unit }] per pill; a trailing blank is the next entry
+let _suppScanServing  = 0;              // serving size read from an earlier photo of the same label
 let _suppCycleOn      = false;          // modal's Schedule toggle: every day vs cycle
 
 const SUPP_UNITS = ['mg', 'mcg', 'g', 'IU', 'CFU', 'mL'];
@@ -824,6 +825,7 @@ function openSuppModal(name) {
   _suppPick = '';
   _suppCreating = false;
   _suppRows = [];
+  _suppScanServing = 0;
   _suppLoadCycle(null);
   if (name) _suppPickName(name); else renderSuppForm();
   const modal = document.getElementById('suppModal');
@@ -1406,7 +1408,9 @@ const _SUPP_SKIP_RE = /serving|servings|amount\s*per|daily\s*value|calories|othe
 // OCR often splits the name and amount columns into separate lines, so lines
 // sharing a baseline are joined left-to-right before matching. Amounts are per
 // serving; when the label's serving is N pills they're divided down to one pill.
-function _suppParseLabel(ocr) {
+// `fallbackServing` covers a second photo of the same label that doesn't show
+// the serving size line.
+function _suppParseLabel(ocr, fallbackServing) {
   const lines = [...(ocr.lines || [])].sort((a, b) => a.top - b.top || a.left - b.left);
   const rows = [];
   lines.forEach(l => {
@@ -1418,7 +1422,7 @@ function _suppParseLabel(ocr) {
 
   const joined = texts.join('\n');
   const serving = joined.match(/serving\s*size[^\d\n]{0,12}(\d+(?:\.\d+)?)/i);
-  const perServing = serving ? Number(serving[1]) : 1;
+  const perServing = serving ? Number(serving[1]) : (fallbackServing || 1);
   const div = perServing > 0 ? perServing : 1;
 
   const out = [];
@@ -1435,7 +1439,22 @@ function _suppParseLabel(ocr) {
     else if (/million/i.test(unit)) { amount *= 1e6; unit = 'CFU'; }
     out.push({ name, amount: Math.round((amount / div) * 100) / 100, unit: _suppNormUnit(unit) });
   });
-  return { rows: out, perServing: div };
+  return { rows: out, perServing: div, servingFound: !!serving };
+}
+
+// Add scanned rows to what's already entered, skipping names already listed
+// (overlapping photos) so earlier edits aren't overwritten. Returns how many were added.
+function _suppMergeRows(existing, incoming) {
+  const have = new Set(existing.map(r => String(r.name || '').trim().toLowerCase()).filter(Boolean));
+  const kept = existing.filter(r => String(r.name || '').trim());
+  const added = incoming.filter(r => {
+    const k = r.name.trim().toLowerCase();
+    if (have.has(k)) return false;
+    have.add(k);
+    return true;
+  });
+  existing.splice(0, existing.length, ...kept, ...added);
+  return added.length;
 }
 
 async function suppScan(file) {
@@ -1452,13 +1471,15 @@ async function suppScan(file) {
   btn.textContent = '📷 Reading…';
   try {
     const dataUrl = (await _dietNormalizeImage(file)) || (await _dietFileToDataUrl(file));
-    const { rows, perServing } = _suppParseLabel(await _dietOcr(dataUrl));
+    const { rows, perServing, servingFound } = _suppParseLabel(await _dietOcr(dataUrl), _suppScanServing);
     if (!rows.length) throw new Error("couldn't find ingredient amounts on that label");
-    const n = rows.length;
-    _suppRows = rows;
+    if (servingFound) _suppScanServing = perServing;
+    const n = _suppMergeRows(_suppRows, rows);
+    const total = _suppRows.length;
     renderSuppForm();
     showStatus(status,
-      `Found ${n} ingredient${n === 1 ? '' : 's'}` +
+      (n ? `Added ${n} ingredient${n === 1 ? '' : 's'}` : 'No new ingredients in that photo') +
+        (total > n ? ` (${total} total)` : '') +
         (perServing > 1 ? ` (label serving is ${perServing} pills — amounts divided to 1 pill)` : '') +
         ' — review before logging.',
       'var(--success)', 7000);
