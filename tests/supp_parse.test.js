@@ -56,4 +56,21 @@ assert.deepStrictEqual(st('2026-08-30'), { on: false, until: '2026-09-01' });   
 assert.deepStrictEqual(st('2026-11-09'), { on: true, day: 14, of: 14, until: '2026-11-10' });
 assert.deepStrictEqual(st('2026-11-10'), { on: false, until: '2026-11-24' });
 
+const { _suppPadRows } = ctx;
+const names = rows => rows.map(r => r.name);
+const empty = [];
+_suppPadRows(empty);
+assert.deepStrictEqual(names(empty), ['']);
+const zinc = [{ name: 'Zinc', amount: 11, unit: 'mg' }];
+_suppPadRows(zinc);
+assert.deepStrictEqual(names(zinc), ['Zinc', '']);
+zinc[0].name = '  ';
+_suppPadRows(zinc);
+assert.deepStrictEqual(names(zinc), ['  ']);
+const two = [{ name: 'Zinc', amount: 1, unit: 'mg' }, { name: 'Magnesium', amount: 2, unit: 'mg' }];
+_suppPadRows(two);
+assert.deepStrictEqual(names(two), ['Zinc', 'Magnesium', '']);
+_suppPadRows(two);
+assert.strictEqual(two.length, 3);
+
 console.log('supp_parse ok');

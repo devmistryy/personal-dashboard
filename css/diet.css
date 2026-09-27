@@ -130,7 +130,6 @@
   .supp-row .supp-amt { width: 90px; }
   .supp-row .supp-unit { width: 78px; }
   .supp-row .diet-entry-del { opacity: 1; }
-  .supp-add-row { align-self: flex-start; }
   .supp-dose { display: flex; gap: 22px; flex-wrap: wrap; }
   .supp-stepper { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
   .supp-stepper button {

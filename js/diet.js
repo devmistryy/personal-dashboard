@@ -83,8 +83,7 @@ let _dietView         = 'meals';         // 'meals' | 'supplements'
 let _suppHistoryDays  = 7;             // day groups shown in the supplement log
 let _suppPick         = '';             // existing supplement selected in the modal
 let _suppCreating     = false;          // "+ New" chosen for the typed name
-let _suppKind         = 'single';       // 'single' | 'label'
-let _suppRows         = [];             // [{ name, amount, unit }] per pill, for 'label'
+let _suppRows         = [];             // [{ name, amount, unit }] per pill; a trailing blank is the next entry
 let _suppCycleOn      = false;          // modal's Schedule toggle: every day vs cycle
 
 const SUPP_UNITS = ['mg', 'mcg', 'g', 'IU', 'CFU', 'mL'];
@@ -586,15 +585,29 @@ function _suppNormUnit(u) {
   return s.toLowerCase();
 }
 
+// One blank row at the end, so the next ingredient appears once this one is named.
+function _suppPadRows(rows) {
+  const named = r => !!(r && String(r.name || '').trim());
+  const before = rows.length;
+  if (!rows.length) rows.push({ name: '', amount: null, unit: 'mg' });
+  else {
+    while (rows.length > 1 && !named(rows[rows.length - 1]) && !named(rows[rows.length - 2])) rows.pop();
+    if (named(rows[rows.length - 1])) rows.push({ name: '', amount: null, unit: 'mg' });
+  }
+  return rows.length !== before;
+}
+
 function renderSuppRows() {
-  const wrap = document.getElementById('suppRows');
-  wrap.innerHTML = _suppRows.length ? _suppRows.map((r, i) => `<div class="supp-row">
+  _suppPadRows(_suppRows);
+  document.getElementById('suppRows').innerHTML = _suppRows.map((r, i) => {
+    const trailing = i === _suppRows.length - 1 && !(r.name || '').trim();
+    return `<div class="supp-row">
       <input type="text" class="task-input" data-supp-row="${i}" data-supp-field="name" value="${_esc(r.name)}" placeholder="Ingredient">
       <input type="number" class="habit-date-input supp-amt" data-supp-row="${i}" data-supp-field="amount" value="${r.amount ?? ''}" min="0" step="any" placeholder="Amount">
       <select class="habit-date-input supp-unit" data-supp-row="${i}" data-supp-field="unit">${_suppUnitOptions(r.unit || 'mg')}</select>
-      <button type="button" class="diet-entry-del" data-supp-del-row="${i}" title="Remove">×</button>
-    </div>`).join('')
-    : '<span class="diet-hint">Scan the label, or add ingredients by hand.</span>';
+      ${trailing ? '' : `<button type="button" class="diet-entry-del" data-supp-del-row="${i}" title="Remove">×</button>`}
+    </div>`;
+  }).join('');
 }
 
 function _dietSetView(view) {
@@ -625,14 +638,9 @@ function _suppIsNew() {
 // Per-pill contents of whatever the form currently describes.
 function _suppDraftContents() {
   if (_suppPick) return (_suppFind(_suppPick) || {}).contents || [];
-  if (_suppKind === 'label') {
-    return _suppRows
-      .map(r => ({ name: (r.name || '').trim(), amount: r.amount > 0 ? Number(r.amount) : null, unit: r.unit || 'mg' }))
-      .filter(r => r.name);
-  }
-  const name = document.getElementById('suppName').value.trim();
-  const amt = Number(document.getElementById('suppAmount').value);
-  return name && amt > 0 ? [{ name, amount: amt, unit: document.getElementById('suppUnit').value }] : [];
+  return _suppRows
+    .map(r => ({ name: (r.name || '').trim(), amount: r.amount > 0 ? Number(r.amount) : null, unit: r.unit || 'mg' }))
+    .filter(r => r.name);
 }
 
 function renderSuppSummary() {
@@ -678,11 +686,7 @@ function renderSuppForm() {
   document.getElementById('suppNewField').hidden = !isNew;
   document.getElementById('suppCycleField').hidden = !picked && !isNew;
   renderSuppCycle();
-  document.getElementById('suppKindBar').innerHTML =
-    _dietSegHTML([['single', 'Single ingredient'], ['label', 'Multi-ingredient']], _suppKind, 'data-supp-kind');
-  document.getElementById('suppSingleField').hidden = _suppKind !== 'single';
-  document.getElementById('suppLabelField').hidden = _suppKind !== 'label';
-  if (_suppKind === 'label') renderSuppRows();
+  renderSuppRows();
   renderSuppSummary();
 }
 
@@ -693,15 +697,7 @@ function _suppEditPicked() {
   if (!hit) return;
   _suppPick = '';
   _suppCreating = true;
-  const c = hit.contents;
-  if (c.length === 1 && c[0].name.toLowerCase() === hit.name.toLowerCase()) {
-    _suppKind = 'single';
-    document.getElementById('suppAmount').value = c[0].amount ?? '';
-    document.getElementById('suppUnit').innerHTML = _suppUnitOptions(c[0].unit || 'mg');
-  } else {
-    _suppKind = c.length ? 'label' : 'single';
-    _suppRows = c.map(x => ({ ...x }));
-  }
+  _suppRows = (hit.contents || []).map(x => ({ name: x.name, amount: x.amount ?? null, unit: x.unit || 'mg' }));
   renderSuppForm();
 }
 
@@ -822,14 +818,11 @@ function openSuppModal(name) {
   dateEl.max = _dietToday();
   document.getElementById('suppTime').value = _dietNowTime();
   document.getElementById('suppName').value = '';
-  document.getElementById('suppAmount').value = '';
-  document.getElementById('suppUnit').innerHTML = _suppUnitOptions('mg');
   document.getElementById('suppQty').value = '1';
   document.getElementById('suppFormStatus').textContent = '';
   document.getElementById('suppScanStatus').textContent = '';
   _suppPick = '';
   _suppCreating = false;
-  _suppKind = 'single';
   _suppRows = [];
   _suppLoadCycle(null);
   if (name) _suppPickName(name); else renderSuppForm();
@@ -936,15 +929,7 @@ function _dietOnClick(e) {
     _suppCreating = true;
     _suppPick = '';
     renderSuppForm();
-    document.getElementById(_suppKind === 'single' ? 'suppAmount' : 'suppName').focus();
-    return;
-  }
-  const kind = e.target.closest('[data-supp-kind]');
-  if (kind) { _suppKind = kind.dataset.suppKind === 'label' ? 'label' : 'single'; renderSuppForm(); return; }
-  if (e.target.id === 'suppAddRow') {
-    _suppRows.push({ name: '', amount: null, unit: 'mg' });
-    renderSuppRows();
-    document.querySelector(`[data-supp-row="${_suppRows.length - 1}"][data-supp-field="name"]`).focus();
+    document.querySelector('#suppRows [data-supp-row="0"][data-supp-field="name"]').focus();
     return;
   }
   const delRow = e.target.closest('[data-supp-del-row]');
@@ -1056,7 +1041,7 @@ function _dietOnKey(e) {
     else addSupplement();
     return;
   }
-  if (['suppAmount', 'suppQty'].includes(e.target.id)) { addSupplement(); return; }
+  if (e.target.id === 'suppQty') { addSupplement(); return; }
   if (e.target.id === 'dietDesc' || e.target.id === 'dietCalories') { addDietEntry(); }
   else if (e.target.id === 'dietHealthyInput')       { _dietAddFood('healthy', 'dietHealthyInput', true); }
   else if (e.target.id === 'dietUnhealthyInput')     { _dietAddFood('unhealthy', 'dietUnhealthyInput', true); }
@@ -1098,6 +1083,15 @@ function _suppOnInput(e) {
     if (row) {
       const f = el.dataset.suppField;
       row[f] = f === 'amount' ? (el.value === '' ? null : Number(el.value)) : el.value;
+      if (_suppPadRows(_suppRows)) {
+        const i = el.dataset.suppRow, pos = el.selectionStart;
+        renderSuppRows();
+        const next = document.querySelector(`#suppRows [data-supp-row="${i}"][data-supp-field="${f}"]`);
+        if (next) {
+          next.focus();
+          if (f === 'name' && pos != null) next.setSelectionRange(pos, pos);
+        }
+      }
     }
   }
   renderSuppSummary();
@@ -1460,11 +1454,11 @@ async function suppScan(file) {
     const dataUrl = (await _dietNormalizeImage(file)) || (await _dietFileToDataUrl(file));
     const { rows, perServing } = _suppParseLabel(await _dietOcr(dataUrl));
     if (!rows.length) throw new Error("couldn't find ingredient amounts on that label");
+    const n = rows.length;
     _suppRows = rows;
-    renderSuppRows();
-    renderSuppSummary();
+    renderSuppForm();
     showStatus(status,
-      `Found ${rows.length} ingredient${rows.length === 1 ? '' : 's'}` +
+      `Found ${n} ingredient${n === 1 ? '' : 's'}` +
         (perServing > 1 ? ` (label serving is ${perServing} pills — amounts divided to 1 pill)` : '') +
         ' — review before logging.',
       'var(--success)', 7000);
@@ -1473,7 +1467,7 @@ async function suppScan(file) {
     showStatus(status, 'Scan failed: ' + (err.message || 'try again') + ' — or add them by hand.', 'var(--danger)', 9000);
   } finally {
     btn.disabled = false;
-    btn.textContent = '📷 Scan supplement facts';
+    btn.textContent = '📷 Nutrition facts photo';
   }
 }
 
