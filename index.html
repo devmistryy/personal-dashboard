@@ -25,7 +25,7 @@
 <link rel="stylesheet" href="css/diet.css?v=12">
 <link rel="stylesheet" href="css/mobility.css?v=6">
 <link rel="stylesheet" href="css/whoop.css?v=1">
-<link rel="stylesheet" href="css/finance.css?v=3">
+<link rel="stylesheet" href="css/finance.css?v=4">
 </head>
 <body>
 <div class="app-shell">
@@ -511,6 +511,17 @@
         <button type="button" class="btn-add" id="finScanBtn">📷 Scan receipt</button>
         <input type="file" id="finScanFile" accept="image/*" hidden>
       </div>
+    </div>
+
+    <div class="card fin-habits">
+      <div class="fin-card-head">
+        <div><div class="fin-card-title">Money habits</div><div class="fin-card-sub" id="finHabitsSub"></div></div>
+      </div>
+      <div class="fin-habit-list" id="finHabits"></div>
+      <form class="fin-habit-add" id="finHabitAdd">
+        <input class="task-input" id="finHabitInput" placeholder="Add a habit, e.g. Only drinking coffee from home" maxlength="80" autocomplete="off" aria-label="New habit">
+        <button type="submit" class="btn-add">Add habit</button>
+      </form>
     </div>
 
     <div class="fin-grid">
@@ -1170,7 +1181,7 @@
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=17"></script>
-<script src="js/finance.js?v=3"></script>
+<script src="js/finance.js?v=4"></script>
 <script src="js/mobility.js?v=7"></script>
 <script src="js/whoop.js?v=2"></script>
 <script src="js/main.js?v=58"></script>

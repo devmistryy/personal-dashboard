@@ -52,6 +52,20 @@
 .fin-card-sub { font-size: 11.5px; color: var(--text-tertiary); font-weight: 400; }
 .fin-card-head .fin-link { font-size: 12px; }
 
+/* ── Habits (full width, above the grid) ── */
+.fin-habits { margin-bottom: 14px; padding: 22px 24px; }
+.fin-habits .fin-card-title { font-size: 17px; }
+.fin-habit-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+.fin-habit {
+  display: flex; align-items: center; gap: 14px; padding: 18px 16px 18px 20px; border-radius: 14px;
+  background: var(--fin-soft); border: 1px solid var(--fin-line); border-left: 3px solid var(--success);
+}
+.fin-habit-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.fin-habit-del { opacity: 0.5; }
+.fin-habit:hover .fin-habit-del, .fin-habit-del:focus-visible { opacity: 1; }
+.fin-habit-add { display: flex; gap: 8px; margin-top: 14px; }
+.fin-habit-add .task-input { flex: 1; min-width: 0; }
+
 /* ── Hero ── */
 .fin-hero { display: grid; grid-template-columns: 1.3fr 1fr; gap: 26px; align-items: center; }
 .fin-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-tertiary); }
@@ -374,6 +388,10 @@ input[type="date"].task-input { color-scheme: dark; }
   .fin-seg button { flex: 1; }
   .fin-hero { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .fin-big { font-size: 38px; }
+  .fin-habits { padding: 18px 16px; }
+  .fin-habit-list { grid-template-columns: minmax(0, 1fr); }
+  .fin-habit { padding: 14px 12px 14px 16px; }
+  .fin-habit-del { opacity: 1; }
   .fin-tx-meta .fin-badge.scan, .fin-tx-note { display: none; }
   .fin-tx { grid-template-columns: 34px minmax(0,1fr) auto; }
   .fin-tx-more { display: none; }

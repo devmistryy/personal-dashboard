@@ -7,6 +7,7 @@
 //   receipts     → finance_receipts via _finPutReceipt / _finGetReceipt / _finDeleteReceipt
 //                  (image + parsed line items; fetched only when a transaction is opened)
 //   budgets      → settings row 'finance_budgets_v1' ({ category: monthlyLimit })
+//   habits       → settings row 'finance_habits_v1' ([{ id, name }]) — a written list, separate from the Habits tab
 // Amounts are always positive; category 'Income' marks money in.
 
 const FIN_CATEGORIES = [
@@ -233,6 +234,8 @@ function getFinTransactions()      { return MEM['finance_tx_v1'] || []; }
 function saveFinTransactions(list) { MEM['finance_tx_v1'] = list; _syncFinance(list); }
 function getFinBudgets()           { return MEM['finance_budgets_v1'] || {}; }
 function saveFinBudgets(b)         { MEM['finance_budgets_v1'] = b; _syncSetting('finance_budgets_v1', b); }
+function getFinHabits()            { return MEM['finance_habits_v1'] || []; }
+function saveFinHabits(list)       { MEM['finance_habits_v1'] = list; _syncSetting('finance_habits_v1', list); }
 
 const _finReceiptCache = new Map();
 async function _finReceipt(id) {
@@ -374,6 +377,7 @@ function renderFinance() {
   const s = _finSummary(r);
   const p = _finPace(r, s);
   renderFinHeader(r);
+  renderFinHabits();
   renderFinHero(r, s, p);
   renderFinChart(r, s, p);
   renderFinTx(r, s);
@@ -462,6 +466,28 @@ function renderFinHero(r, s, p) {
         review ? `<span class="warn">${review} need${review === 1 ? 's' : ''} review</span>` : `<span class="fin-muted">${scanned ? 'All reviewed' : 'None scanned'}</span>`)}
     </div>
   </div>`;
+}
+
+
+// ── Habits ──
+function renderFinHabits() {
+  const list = getFinHabits();
+  document.getElementById('finHabitsSub').textContent = list.length
+    ? `${list.length} habit${list.length === 1 ? '' : 's'}` : 'The small choices that keep the budget on track';
+  document.getElementById('finHabits').innerHTML = list.length
+    ? list.map(h => `<div class="fin-habit">
+        <span class="fin-habit-name">${_esc(h.name)}</span>
+        <button type="button" class="fin-icon-btn fin-habit-del" data-fin-habit-del="${h.id}" aria-label="Remove “${_esc(h.name)}”">×</button>
+      </div>`).join('')
+    : '<div class="fin-empty">No habits yet. Write one below, e.g. “Only drinking coffee from home”.</div>';
+}
+
+function _finDeleteHabit(id) {
+  const list = getFinHabits(), h = list.find(x => x.id === id);
+  if (!h) return;
+  saveFinHabits(list.filter(x => x.id !== id));
+  renderFinHabits();
+  _finToast(`Removed “${_esc(h.name)}”`, '', () => { saveFinHabits(list); renderFinHabits(); });
 }
 
 
@@ -1252,6 +1278,7 @@ if (typeof document !== 'undefined') {
       document.getElementById('finSearch').value = '';
       rerender(); return;
     }
+    if (t.dataset.finHabitDel) { _finDeleteHabit(t.dataset.finHabitDel); return; }
     if (t.hasAttribute('data-fin-more')) { _finTxAll = !_finTxAll; rerender(); return; }
     if (t.dataset.finEdit) { finOpenEdit(t.dataset.finEdit); return; }
     if (t.dataset.finLog) { _finLogRecurring(t.dataset.finLog, t.dataset.finDue); return; }
@@ -1265,6 +1292,16 @@ if (typeof document !== 'undefined') {
         if (first && matchMedia('(pointer: fine)').matches) first.focus();
       }
     }
+  });
+
+  document.getElementById('finHabitAdd').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = document.getElementById('finHabitInput');
+    const name = input.value.trim();
+    if (!name) return;
+    saveFinHabits([...getFinHabits(), { id: _finId(), name }]);
+    input.value = '';
+    renderFinHabits();
   });
 
   panel.addEventListener('input', e => {
