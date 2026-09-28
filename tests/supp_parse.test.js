@@ -5,7 +5,7 @@ const path = require('path');
 const vm = require('vm');
 
 const el = { addEventListener() {} };
-const ctx = { document: { getElementById: () => el, querySelectorAll: () => [] }, MEM: {}, console };
+const ctx = { document: { getElementById: () => el, querySelectorAll: () => [] }, MEM: {}, console, _syncSetting() {} };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/diet.js'), 'utf8'), ctx);
 const { _suppParseLabel } = ctx;
@@ -87,5 +87,18 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(list)), [
 r = _suppParseLabel({ lines: [], text: 'Zinc 10 mg' }, 2);
 assert.strictEqual(r.servingFound, false);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(r.rows)), [{ name: 'Zinc', amount: 5, unit: 'mg' }]);
+
+// Contents saved without logging win over the latest log's contents.
+ctx.MEM.diet_supplements_v1 = [{ id: 'a', name: 'Multi', date: '2026-09-20', qty: 1, contents: [{ name: 'Zinc', amount: 5, unit: 'mg' }] }];
+assert.strictEqual(ctx._suppFind('multi').contents[0].amount, 5);
+ctx._suppWriteContents('Multi', [{ name: 'Zinc', amount: 8, unit: 'mg' }]);
+assert.strictEqual(ctx._suppFind('multi').contents[0].amount, 8);
+
+// Notes: trimmed, case-insensitive name, cleared when emptied, no rewrite when unchanged.
+assert.strictEqual(ctx._suppWriteNote('Multi', '  Take with food '), true);
+assert.strictEqual(ctx._suppNoteFor('multi'), 'Take with food');
+assert.strictEqual(ctx._suppWriteNote('MULTI', 'Take with food'), false);
+ctx._suppWriteNote('Multi', '');
+assert.strictEqual('multi' in ctx.MEM.diet_supp_notes_v1, false);
 
 console.log('supp_parse ok');

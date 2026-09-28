@@ -41,6 +41,24 @@ function saveSupplements(list) { MEM['diet_supplements_v1'] = list; _syncSetting
 function getSuppCycles()      { return MEM['diet_supp_cycles_v1'] || {}; }
 function saveSuppCycles(map)  { MEM['diet_supp_cycles_v1'] = map; _syncSetting('diet_supp_cycles_v1', map); }
 
+// Per-pill contents edited without logging, keyed by lowercase name. Wins over the latest log's contents.
+function getSuppContents()     { return MEM['diet_supp_contents_v1'] || {}; }
+function saveSuppContents(map) { MEM['diet_supp_contents_v1'] = map; _syncSetting('diet_supp_contents_v1', map); }
+
+// Free-text note per supplement ("take with food"), keyed by lowercase name.
+function getSuppNotes()        { return MEM['diet_supp_notes_v1'] || {}; }
+function saveSuppNotes(map)    { MEM['diet_supp_notes_v1'] = map; _syncSetting('diet_supp_notes_v1', map); }
+function _suppNoteFor(name)    { return getSuppNotes()[String(name || '').trim().toLowerCase()] || ''; }
+function _suppWriteNote(name, text) {
+  const k = String(name || '').trim().toLowerCase();
+  const t = String(text || '').trim();
+  if (!k || t === _suppNoteFor(name)) return false;
+  const map = { ...getSuppNotes() };
+  if (t) map[k] = t; else delete map[k];
+  saveSuppNotes(map);
+  return true;
+}
+
 // One-time move off the old model: priority foods + the healthy side of the old
 // combined list → Healthy Ingredients; the unhealthy side → Unhealthy Foods.
 function _dietMigrateFoodLists() {
@@ -85,6 +103,7 @@ let _suppPick         = '';             // existing supplement selected in the m
 let _suppCreating     = false;          // "+ New" chosen for the typed name
 let _suppRows         = [];             // [{ name, amount, unit }] per pill; a trailing blank is the next entry
 let _suppScanServing  = 0;              // serving size read from an earlier photo of the same label
+let _suppNoteKey      = '';             // supplement whose saved note is loaded in the modal
 let _suppCycleOn      = false;          // modal's Schedule toggle: every day vs cycle
 
 const SUPP_UNITS = ['mg', 'mcg', 'g', 'IU', 'CFU', 'mL'];
@@ -450,13 +469,20 @@ function _suppSorted() {
 function _suppCatalog() {
   const seen = new Set();
   const out = [];
+  const edited = getSuppContents();
   _suppSorted().forEach(s => {
     const k = (s.name || '').toLowerCase();
     if (!k || seen.has(k)) return;
     seen.add(k);
-    out.push({ name: s.name, contents: Array.isArray(s.contents) ? s.contents : [], qty: s.qty || 1, date: s.date });
+    const contents = Array.isArray(edited[k]) ? edited[k] : Array.isArray(s.contents) ? s.contents : [];
+    out.push({ name: s.name, contents, qty: s.qty || 1, date: s.date });
   });
   return out;
+}
+
+function _suppWriteContents(name, contents) {
+  const k = String(name || '').trim().toLowerCase();
+  if (k) saveSuppContents({ ...getSuppContents(), [k]: contents });
 }
 function _suppFind(name) {
   const k = String(name || '').trim().toLowerCase();
@@ -685,7 +711,16 @@ function renderSuppForm() {
   }
 
   document.getElementById('suppNewField').hidden = !isNew;
+  document.getElementById('suppSaveBtn').hidden = !(isNew && exact);
   document.getElementById('suppCycleField').hidden = !picked && !isNew;
+  document.getElementById('suppNoteField').hidden = !picked && !isNew;
+  // Load the saved note when the form lands on a different existing supplement;
+  // a brand-new name keeps whatever's been typed.
+  const noteKey = (_suppPick || (exact ? q : '')).toLowerCase();
+  if (noteKey && noteKey !== _suppNoteKey) {
+    document.getElementById('suppNote').value = _suppNoteFor(noteKey);
+    _suppNoteKey = noteKey;
+  }
   renderSuppCycle();
   renderSuppRows();
   renderSuppSummary();
@@ -736,6 +771,7 @@ function renderSupplements() {
       ? '✓ Today' + (todayDose.time ? ' · ' + _dietFmtTime(todayDose.time) : '')
       : 'Last ' + _dietAgoLabel(c.date);
     const per = _suppContentsText(c.contents, 1);
+    const note = _suppNoteFor(c.name);
     const n7 = week.filter(d => days.has(d)).length;
     const cyc = _suppCycleFor(c.name);
     const st = cyc && _suppCycleState(cyc, today);
@@ -750,6 +786,7 @@ function renderSupplements() {
         <span class="supp-tile-last">${_esc(last)}</span>
       </div>
       <div class="supp-tile-contents" title="${_esc(per)}">${per ? _esc(per) : 'No amounts saved'}</div>
+      ${note ? `<div class="supp-tile-note" title="${_esc(note)}">${_esc(note)}</div>` : ''}
       ${st ? `<div class="supp-cycle-badge ${st.on ? 'on' : 'off'}" title="${_esc(_suppCycleLabel(cyc))}">⟳ ${_esc(_suppCycleText(st))}</div>` : ''}
       <div class="supp-tile-foot">
         <span class="supp-dots" title="Taken ${n7} of the last 7 days${cyc ? ' · rings are off-days' : ''}">${week.map(dot).join('')}</span>
@@ -826,6 +863,8 @@ function openSuppModal(name) {
   _suppCreating = false;
   _suppRows = [];
   _suppScanServing = 0;
+  _suppNoteKey = '';
+  document.getElementById('suppNote').value = '';
   _suppLoadCycle(null);
   if (name) _suppPickName(name); else renderSuppForm();
   const modal = document.getElementById('suppModal');
@@ -859,9 +898,30 @@ function addSupplement() {
   const known = _suppFind(_suppPick || typed);
   const name = known ? known.name : typed;
   const entry = { id: _dietId(), name, date: dateEl.value, time: document.getElementById('suppTime').value || '', qty, contents: _suppDraftContents() };
+  if (known && !_suppPick) _suppWriteContents(name, entry.contents);
   _suppWriteCycle(name, _suppReadCycle());
+  _suppWriteNote(name, document.getElementById('suppNote').value);
   closeSuppModal();
   _suppSave(entry, `Logged ${_suppFmtNum(qty)} × ${name}`);
+}
+
+// Save an existing supplement's edited contents and schedule without logging a dose.
+function saveSuppEdits() {
+  const status = document.getElementById('suppFormStatus');
+  const hit = !_suppPick && _suppFind(document.getElementById('suppName').value);
+  if (!hit) return;
+  if (_suppCycleOn && !_suppReadCycle()) { showStatus(status, 'Finish the cycle lengths, or switch to Every day.', 'var(--warning)'); return; }
+  const before = getSuppContents(), notesBefore = getSuppNotes();
+  _suppWriteContents(hit.name, _suppDraftContents());
+  _suppWriteCycle(hit.name, _suppReadCycle());
+  _suppWriteNote(hit.name, document.getElementById('suppNote').value);
+  closeSuppModal();
+  renderSupplements();
+  _finToast(`Updated ${_esc(hit.name)}`, _esc(_suppContentsText(_suppDraftContents(), 1) || 'No amounts'), () => {
+    saveSuppContents(before);
+    saveSuppNotes(notesBefore);
+    renderSupplements();
+  });
 }
 
 
@@ -903,6 +963,7 @@ function _dietOnClick(e) {
   if (tile) { openSuppModal(tile.dataset.suppOpen); return; }
   if (e.target.id === 'suppModalClose' || e.target.id === 'suppModal') { closeSuppModal(); return; }
   if (e.target.id === 'suppAddBtn') { addSupplement(); return; }
+  if (e.target.id === 'suppSaveBtn') { saveSuppEdits(); return; }
   if (e.target.id === 'suppEditContents') { _suppEditPicked(); return; }
   if (e.target.id === 'suppNowBtn') {
     document.getElementById('suppDate').value = _dietToday();
@@ -1066,6 +1127,14 @@ function _suppSavePickedCycle() {
 }
 
 function _suppOnInput(e) {
+  if (e.target.id === 'suppNote') {
+    // A picked supplement's note saves when the field loses focus, like its schedule.
+    if (e.type === 'change' && _suppPick && _suppWriteNote(_suppPick, e.target.value)) {
+      renderSupplements();
+      showStatus(document.getElementById('suppFormStatus'), 'Note saved.', 'var(--success)', 2000);
+    }
+    return;
+  }
   if (e.target.closest('#suppCycleField')) {
     renderSuppCycle();
     renderSuppSummary();

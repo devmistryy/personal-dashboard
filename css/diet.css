@@ -130,6 +130,11 @@
   .supp-row .supp-amt { width: 90px; }
   .supp-row .supp-unit { width: 78px; }
   .supp-row .diet-entry-del { opacity: 1; }
+  .supp-note { resize: vertical; min-height: 44px; font: 13px/1.45 var(--font-body); }
+  .supp-tile-note {
+    font-size: 11px; font-style: italic; color: var(--text-tertiary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .supp-dose { display: flex; gap: 22px; flex-wrap: wrap; }
   .supp-stepper { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
   .supp-stepper button {
