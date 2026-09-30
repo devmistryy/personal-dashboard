@@ -440,8 +440,10 @@ create table if not exists mobility_exercises (
   hold_seconds integer,                             -- set when measure = 'hold'
   reps         integer,                             -- set when measure = 'reps'
   frequency    integer not null default 3,          -- times per week, 1..7
+  group_name   text,                                -- optional; same-group exercises share days
   created_at   timestamptz default now()
 );
+alter table mobility_exercises add column if not exists group_name text;
 create index if not exists mobility_exercises_user_idx
   on mobility_exercises (user_id);
 alter table mobility_exercises enable row level security;

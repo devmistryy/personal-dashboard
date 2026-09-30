@@ -1129,7 +1129,7 @@ async function _syncMobExercises(list) {
       id: ex.id, user_id: uid, name: ex.name,
       session: ex.session || 'morning', measure: ex.measure || 'hold',
       sets: ex.sets || 1, hold_seconds: ex.holdSeconds ?? null, reps: ex.reps ?? null,
-      frequency: ex.frequency || 3,
+      frequency: ex.frequency || 3, group_name: ex.group || null,
       created_at: new Date(ex.createdAt || Date.now()).toISOString(),
     })), { onConflict: 'id' });
     if (error) _syncFailed('mobility_exercises upsert failed', error);
@@ -1469,7 +1469,7 @@ async function loadFromSupabase() {
   MEM['mobility_exercises_v1'] = mobEx.map(r => ({
     id: r.id, name: r.name, session: r.session, measure: r.measure,
     sets: r.sets, holdSeconds: r.hold_seconds, reps: r.reps,
-    frequency: r.frequency, createdAt: Date.parse(r.created_at),
+    frequency: r.frequency, group: r.group_name || '', createdAt: Date.parse(r.created_at),
   }));
   mobLogs.forEach(r => {
     const k = 'mobility_progress:' + r.exercise_id;

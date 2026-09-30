@@ -107,6 +107,8 @@
   }
   .mob-wd-label:hover .mob-wd-open { color: #7FBBFF; }
   .mob-wd-open { letter-spacing: 0.04em; color: var(--text-tertiary); font-weight: 600; }
+  .mob-scard-row[data-mobdetail], .mob-wd-row[data-mobdetail] { cursor: pointer; border-radius: 8px; transition: background 0.15s; }
+  .mob-scard-row[data-mobdetail]:hover, .mob-wd-row[data-mobdetail]:hover { background: rgba(255,255,255,0.06); }
   .mob-wd-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     font-size: 12.5px; color: var(--text-secondary);
@@ -172,6 +174,17 @@
     word-break: break-word; border-bottom: 1px solid transparent; transition: border-color 0.15s;
   }
   .mob-row-name:hover { border-bottom-color: rgba(255,255,255,0.35); }
+  .mob-row[draggable] { cursor: pointer; }
+  .mob-row.is-dragging { opacity: 0.4; }
+  .mob-row.is-drop, .mob-group-head.is-drop { border-color: rgba(74,158,255,0.7); background: rgba(74,158,255,0.12); }
+  .mob-group-head {
+    margin: 14px 0 6px; padding: 4px 8px; border: 1px dashed transparent; border-radius: 8px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .mob-ungrouped { border-radius: 12px; transition: background 0.15s; }
+  .mob-ungrouped:empty { min-height: 56px; margin-bottom: 6px; border: 1px dashed rgba(255,255,255,0.12); }
+  .mob-ungrouped.is-drop { background: rgba(74,158,255,0.08); box-shadow: 0 0 0 1px rgba(74,158,255,0.7); }
   .mob-row-from { color: var(--text-tertiary); }
 
   .mob-tag {
