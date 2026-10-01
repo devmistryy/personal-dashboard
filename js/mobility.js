@@ -383,6 +383,23 @@ function renderMobToday(schedule) {
 }
 
 
+// Names for the selected day; a group's exercises sit together in parentheses.
+function _mobWeekItemsHTML(list, date) {
+  const item = ex => `<button type="button" class="mob-wd-item${_mobLoggedOn(ex.id, date) ? ' done' : ''}" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>`;
+  const chunks = [];
+  list.forEach(ex => {
+    const g = _mobGroupKey(ex.group), last = chunks[chunks.length - 1];
+    if (g && last && last.g === g) last.list.push(ex);
+    else chunks.push({ g, group: ex.group, list: [ex] });
+  });
+  // Each name is one unbreakable token carrying its own "(" / ")" and the dot after it,
+  // so a line can only wrap after a dot — never between a parenthesis and its name.
+  const paren = p => `<span class="mob-wd-paren">${p}</span>`;
+  const tokens = chunks.flatMap(c => c.list.map((ex, i) =>
+    (c.g && i === 0 ? paren('(') : '') + item(ex) + (c.g && i === c.list.length - 1 ? paren(')') : '')));
+  return tokens.map((t, i) => `<span class="mob-wd-tok">${t}${i < tokens.length - 1 ? '<span class="mob-wd-dot">·</span>' : ''}</span>`).join('<wbr>');
+}
+
 // ── Render: week strip (logged share per session so far) + selected day ──
 function renderMobWeek(schedule) {
   const grid = document.getElementById('mobWeekGrid');
@@ -412,7 +429,7 @@ function renderMobWeek(schedule) {
     const r = sel <= ti ? _mobSessionRows(date, tod, schedule.days) : schedule.days[sel][tod];
     return `<div class="mob-wd-col">
       <div class="mob-wd-h ${tod}"><span>${label} · ${r.length}</span>${sel <= ti && r.length ? `<button class="mob-link" type="button" data-mobweek-open="${tod}">open ›</button>` : ''}</div>
-      <div class="mob-wd-items">${r.map(ex => `<button type="button" class="mob-wd-item${_mobLoggedOn(ex.id, date) ? ' done' : ''}" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>`).join('') || '<span class="mob-wd-empty">—</span>'}</div>
+      <div class="mob-wd-items">${_mobWeekItemsHTML(r, date) || '<span class="mob-wd-empty">—</span>'}</div>
     </div>`;
   };
   const detail = document.getElementById('mobWeekDetail');
@@ -611,9 +628,13 @@ function closeMobSession() {
 // Groups choose how their sets are ordered (settings key mobility_group_flow_v1):
 //   'circuit' — every exercise once, then again: 1,2,3,1,2,3
 //   'pairs'   — the same inside each run of two: 1,2,1,2,3,4,3,4 (an odd one out goes alone)
+//   'straight'— every set of one exercise before the next: 1,1,2,2,3,3
 // A group that hasn't picked yet runs as a circuit. An exercise with no group is straight sets.
 function _mobGroupKey(g) { return (g || '').trim().toLowerCase(); }
 function _mobFlowOf(g) { return (MEM['mobility_group_flow_v1'] || {})[_mobGroupKey(g)] || null; }
+// Whether this exercise's group moves between exercises set by set (so switching
+// is the break) rather than finishing each exercise first.
+function _mobRotates(ex) { return !!ex.group && _mobFlowOf(ex.group) !== 'straight'; }
 function _mobSetFlow(g, flow) {
   const all = { ...(MEM['mobility_group_flow_v1'] || {}), [_mobGroupKey(g)]: flow };
   MEM['mobility_group_flow_v1'] = all; _syncSetting('mobility_group_flow_v1', all);
@@ -636,7 +657,10 @@ function _mobUnits(items) {
     byKey.get(k).items.push(it);
   });
   units.forEach(u => {
-    if (u.group && _mobFlowOf(u.group) === 'pairs') {
+    const flow = u.group && _mobFlowOf(u.group);
+    if (flow === 'straight') {
+      u.steps = u.items.flatMap(it => Array.from({ length: it.n }, (_, i) => ({ ex: it.ex, i, it })));
+    } else if (flow === 'pairs') {
       u.steps = [];
       for (let k = 0; k < u.items.length; k += 2) u.steps.push(..._mobPasses(u.items.slice(k, k + 2)));
     } else u.steps = _mobPasses(u.items);
@@ -693,7 +717,7 @@ function renderMobSession() {
       <td class="mob-tlast">${Array.from({ length: Math.max(it.n, it.prev.length) }, (_, i) => fmt(it.prev[i])).join(' · ')}</td>
       ${cells}
       <td><button class="mob-tadd" type="button" data-mobaddset="${ex.id}" title="Add a set">+</button></td>
-      <td>${ex.group ? '' : `<label class="mob-restsel" title="Rest between this exercise's sets">⏱
+      <td>${_mobRotates(ex) ? '' : `<label class="mob-restsel" title="Rest between this exercise's sets">⏱
         <select data-mobrest="${ex.id}">${MOB_REST_OPTS.map(s => `<option value="${s}"${s === rest ? ' selected' : ''}>${s ? _mobRestLabel(s) : 'No rest'}</option>`).join('')}</select></label>`}</td>
     </tr>`;
   };
@@ -721,7 +745,7 @@ function renderMobSession() {
         ${rows.length ? `<span class="mob-sprog"><b>${doneSets}</b>/${totalSets} sets · <b>${exDone}</b>/${rows.length} exercises</span>` : ''}
       </div>
       ${rows.length ? `<div class="mob-sbar"><i style="width:${totalSets ? doneSets / totalSets * 100 : 0}%"></i></div>
-      <div class="mob-snext" id="mobNextStrip">${_mobNextStripHTML(next, units.some(u => u.group))}</div>` : ''}
+      <div class="mob-snext" id="mobNextStrip">${_mobNextStripHTML(next, units.some(u => u.group && _mobFlowOf(u.group) !== 'straight'))}</div>` : ''}
     </div>
     ${rows.length ? `<div class="mob-tcard"><table class="mob-table">
       <thead><tr><th>Exercise</th><th class="mob-tlast">Last time</th>${Array.from({ length: cols }, (_, i) => `<th>Set ${i + 1}</th>`).join('')}<th></th><th>Rest</th></tr></thead>
@@ -759,7 +783,7 @@ function _mobRingHTML(f) {
 
 function _mobFlowSeg(group, flow) {
   const b = (v, label, tip) => `<button type="button" class="${flow === v ? 'on' : ''}" data-mobflow="${_esc(group)}" data-v="${v}" title="${tip}">${label}</button>`;
-  return `<span class="mob-flow">${b('circuit', 'Circuit', 'Every exercise in a row, then again: 1, 2, 3, 1, 2, 3')}${b('pairs', 'Pairs', 'Alternate in twos: 1, 2, 1, 2, then 3, 4, 3, 4')}</span>`;
+  return `<span class="mob-flow">${b('circuit', 'Circuit', 'Every exercise in a row, then again: 1, 2, 3, 1, 2, 3')}${b('pairs', 'Pairs', 'Alternate in twos: 1, 2, 1, 2, then 3, 4, 3, 4')}${b('straight', 'Straight', 'All sets of one exercise, then the next: 1, 1, 2, 2, 3, 3')}</span>`;
 }
 
 function _mobNextStripHTML(next, hasGroups) {
@@ -775,8 +799,8 @@ function _mobNextStripHTML(next, hasGroups) {
       <span class="mob-spacer"></span><button class="mob-btn" type="button" data-mobrestadd>+15s</button>
       <button class="mob-link" type="button" data-mobrestskip>Skip</button>`;
   }
-  return `<span class="mob-snext-tag">${next.ex.group ? '⇄ Up next' : 'Up next'}</span><span>${where}</span>
-    <span class="mob-spacer"></span>${next.ex.group ? '<span class="mob-snext-hint">Switching exercise is your break</span>' : ''}${roundSel}`;
+  return `<span class="mob-snext-tag">${_mobRotates(next.ex) ? '⇄ Up next' : 'Up next'}</span><span>${where}</span>
+    <span class="mob-spacer"></span>${_mobRotates(next.ex) ? '<span class="mob-snext-hint">Switching exercise is your break</span>' : ''}${roundSel}`;
 }
 
 // Per-set values of a log entry: its own list, or — for entries logged before
@@ -848,7 +872,7 @@ function _mobAfterSet(exId, i) {
   const steps = _mobUnits(_mobSessionRows(date, _mobSessionTod).map(e => _mobSessionItem(e, date))).flatMap(u => u.steps);
   const next = steps.find(s => !_mobSetDone(s, date));
   if (!ex || !next) { _mobStopRest(false); return; }
-  if (!ex.group) {
+  if (!_mobRotates(ex)) {
     if (next.ex.id === ex.id && _mobRestFor(ex.id)) _mobStartRest(date, _mobRestFor(ex.id), false);
     else _mobStopRest(false);
   } else if (MEM['mobility_round_rest_v1'] && _mobSameGroup(next.ex.group, ex.group) && next.i > i) {
@@ -1186,6 +1210,7 @@ function _mobUnlockBodyIfClear() {
 // Onto a grouped row, it lands just before or after that row (top / bottom half). ──
 let _mobDragId = null;
 let _mobDropAfter = false;
+let _mobDropBeside = false;   // pointer is in a row's reorder zone (any grouped row; edges of an ungrouped one)
 
 function _mobDropTarget(e) { return e.target.closest('[data-mobgroup], [data-mobrow]'); }
 
@@ -1220,7 +1245,7 @@ function _mobDrop(target) {
   if (target.dataset.mobgroup !== undefined) return _mobGroupExercise(ex.id, target.dataset.mobgroup);
   const other = list.find(x => x.id === target.dataset.mobrow);
   if (!other || other.id === ex.id) return;
-  if (other.group) return _mobGroupExercise(ex.id, other.group, other.id, _mobDropAfter);
+  if (other.group || _mobDropBeside) return _mobGroupExercise(ex.id, other.group || '', other.id, _mobDropAfter);
   // Dropped on another ungrouped exercise: start a new group with both.
   if (ex.session !== other.session) { alert('Only exercises in the same session can share a group.'); return; }
   openMobGroupModal(ex, other);
@@ -1293,8 +1318,14 @@ _mobList.addEventListener('dragover', e => {
   if (!t || !_mobDragId || t.dataset.mobrow === _mobDragId) return;
   e.preventDefault();
   // Grouped rows show where the exercise will land; everything else highlights as a whole.
-  const beside = t.dataset.mobrow && t.classList.contains('in-group');
-  if (beside) { const r = t.getBoundingClientRect(); _mobDropAfter = e.clientY > r.top + r.height / 2; }
+  // Ungrouped rows only reorder at their top / bottom edge; the middle still starts a group.
+  let beside = false;
+  if (t.dataset.mobrow) {
+    const r = t.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+    beside = t.classList.contains('in-group') || y < 0.3 || y > 0.7;
+    _mobDropAfter = y > 0.5;
+  }
+  _mobDropBeside = beside;
   _mobList.querySelectorAll('.is-drop, .drop-before, .drop-after').forEach(x => x !== t && x.classList.remove('is-drop', 'drop-before', 'drop-after'));
   t.classList.toggle('is-drop', !beside);
   t.classList.toggle('drop-before', !!beside && !_mobDropAfter);

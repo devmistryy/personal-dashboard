@@ -147,7 +147,9 @@
   }
   .mob-wd-item:hover { color: var(--text-primary); text-decoration: underline; }
   .mob-wd-item.done { color: var(--success); }
-  .mob-wd-item + .mob-wd-item::before { content: '·'; margin: 0 6px 0 2px; color: var(--text-tertiary); }
+  .mob-wd-tok { white-space: nowrap; }
+  .mob-wd-dot { margin: 0 7px; color: var(--text-tertiary); }
+  .mob-wd-paren { color: var(--text-tertiary); }
   .mob-wd-empty { color: var(--text-tertiary); }
 
   /* ── Add-exercise modal form ── */
