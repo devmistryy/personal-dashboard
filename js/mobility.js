@@ -145,7 +145,14 @@ function _mobBaseDays(f) {
 function compileMobSchedule(exercises) {
   const days   = Array.from({ length: 7 }, () => ({ morning: [], night: [] }));
   const dayFor = new Map();
-  const totals = new Array(7).fill(0);   // exercises placed per day (both sessions)
+  // Exercises placed per day, per session — balanced separately so morning and
+  // night each stay even (a combined total let 5 morning + 1 night pass as "6").
+  const totals = { morning: new Array(7).fill(0), night: new Array(7).fill(0) };
+  const sessOf = ex => ex.session === 'night' ? 'night' : 'morning';
+  const spread = t => {
+    const mean = t.reduce((s, n) => s + n, 0) / 7;
+    return (Math.max(...t) - Math.min(...t)) * 100 + t.reduce((s, n) => s + (n - mean) * (n - mean), 0);
+  };
 
   // A group is scheduled as one unit; ungrouped exercises are units of one.
   // ponytail: members inherit the group's highest frequency; per-member frequency is ignored while grouped.
@@ -159,28 +166,27 @@ function compileMobSchedule(exercises) {
   });
   const uFreq = u => Math.max(...u.map(e => e.frequency || 1));
   const uMade = u => Math.min(...u.map(e => e.createdAt || 0));
-  units.sort((a, b) => uFreq(b) - uFreq(a) || uMade(a) - uMade(b));
+  // Heaviest units first (members × days) — big groups are the hardest to fit, so
+  // they claim days before the singles fill in around them.
+  units.sort((a, b) => uFreq(b) * b.length - uFreq(a) * a.length || uFreq(b) - uFreq(a) || uMade(a) - uMade(b));
 
   units.forEach(unit => {
     const base = _mobBaseDays(uFreq(unit));
 
     let bestOff = 0, bestScore = Infinity;
     for (let off = 0; off < 7; off++) {
-      const t = totals.slice();
-      base.forEach(d => { t[(d + off) % 7] += unit.length; });
-      const max  = Math.max(...t);
-      const min  = Math.min(...t);
-      const mean = t.reduce((s, n) => s + n, 0) / 7;
-      const varc = t.reduce((s, n) => s + (n - mean) * (n - mean), 0);
-      const score = (max - min) * 100 + varc;
+      const t = { morning: totals.morning.slice(), night: totals.night.slice() };
+      unit.forEach(ex => base.forEach(d => { t[sessOf(ex)][(d + off) % 7]++; }));
+      const both  = t.morning.map((n, i) => n + t.night[i]);
+      const score = spread(t.morning) + spread(t.night) + spread(both) / 10;
       if (score < bestScore) { bestScore = score; bestOff = off; }
     }
 
     const placed = base.map(d => (d + bestOff) % 7).sort((a, b) => a - b);
     unit.forEach(ex => {
-      const session = ex.session === 'night' ? 'night' : 'morning';
+      const session = sessOf(ex);
       dayFor.set(ex.id, placed);
-      placed.forEach(d => { days[d][session].push(ex); totals[d]++; });
+      placed.forEach(d => { days[d][session].push(ex); totals[session][d]++; });
     });
   });
 
