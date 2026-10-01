@@ -1539,6 +1539,26 @@ document.getElementById('mobileMenuBtn').addEventListener('click', () => setMobi
 document.getElementById('sidebarScrim').addEventListener('click', () => setMobileDrawer(false));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setMobileDrawer(false); });
 
+// Swipe right to open the drawer, left to close. Mostly-horizontal swipes only,
+// so vertical scrolling and sliders/text fields are left alone. Skipped while
+// a detail page is open (they lock body scroll), since those hold sideways-
+// scrolling content like the habit history grid.
+let swipeStart = null;
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  swipeStart = e.touches.length === 1 && document.body.style.overflow !== 'hidden'
+    && !e.target.closest('input, textarea, select')
+    ? { x: t.clientX, y: t.clientY } : null;
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!swipeStart || !matchMedia('(max-width: 480px)').matches) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStart.x, dy = t.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+  setMobileDrawer(dx > 0);
+});
+
 // ── Sidebar collapse toggle ──
 // Persists across reloads (UI-only preference, not synced data).
 const SIDEBAR_COLLAPSED_KEY = 'dashboard_sidebar_collapsed';
