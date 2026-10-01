@@ -28,6 +28,9 @@ const MOB_DAYS         = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MOB_DAYS_LONG    = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const MOB_DAY_INITIAL  = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MOB_DOSE_COLOR   = { hold: '#7FBBFF', reps: '#BCA6FB' };
+// 'dose' exercises grow their hold time / reps; 'fixed' ones (e.g. child's pose)
+// stay at the same dose — no bump nudges, no gains.
+const MOB_PROGRESS     = [['dose', 'Increase over time'], ['fixed', 'Keep the same']];
 
 // ── Store: exercises ──
 // MEM keeps the flat blob shape; persistence goes to the mobility_exercises /
@@ -46,7 +49,8 @@ function saveMobLog(id, list) {
 function _mobUpsertEntry(id, date, vals) {
   const log = getMobLog(id).filter(e => e.date !== date);
   log.push({ id: _mobLogId(), date, sets: vals.sets, measure: vals.measure,
-             holdSeconds: vals.holdSeconds, reps: vals.reps });
+             holdSeconds: vals.holdSeconds, reps: vals.reps,
+             setValues: vals.setValues || null, note: vals.note || '' });
   saveMobLog(id, log);
 }
 function _mobDeleteEntry(id, date) {
@@ -72,11 +76,14 @@ function _mobLogId() { return 'mp_' + Date.now().toString(36) + Math.random().to
 let _mobFormSession = 'morning';
 let _mobFormMeasure = 'hold';
 let _mobFormFreq    = 3;
-let _mobEditId      = null;     // exercise open in the modal for editing, or null
-let _mobOpenDay     = null;     // week-grid column expanded, or null
+let _mobFormProgress = 'dose';
+let _mobDraft       = null;     // unsaved edits on the exercise detail page
+let _mobOpenDay     = null;     // week-strip day selected, or null for today
 let _mobSessionDate = null;     // 'YYYY-MM-DD' of the open session page
 let _mobSessionTod  = 'morning';
 let _mobDetailId    = null;     // exercise id open in the detail page, or null
+let _mobFilter      = 'all';    // list filter: 'all' | 'morning' | 'night'
+let _mobQuery       = '';       // list search text
 
 
 // ── Dose label ──
@@ -93,6 +100,30 @@ function _mobDose(o) {
 }
 function _mobDoseFor(ex)     { return _mobDose(_mobCurrent(ex)); }
 function _mobMeasureClass(o) { return o.measure === 'reps' ? 'reps' : 'hold'; }
+
+
+// ── Name shortcuts ──
+// "Couch stretch 2x60s night 4/wk #hips fixed" → { name: 'Couch stretch', fields: {...} }.
+// The first word is always name, so "Night walk" stays a name.
+function _mobParseName(str) {
+  const f = {};
+  const m0 = String(str || '').match(/^\s*\S+/);
+  if (!m0) return { name: '', fields: f };
+  let rest = ' ' + str.slice(m0[0].length) + ' ';
+  const take = (re, fn) => { rest = rest.replace(re, (...m) => { fn(m); return ' '; }); };
+  take(/\s(\d+)\s*[x×]\s*(\d+)\s*(s|secs?)?(?=\s)/i, m => {
+    f.sets = +m[1];
+    if (m[3]) { f.measure = 'hold'; f.holdSeconds = +m[2]; } else { f.measure = 'reps'; f.reps = +m[2]; }
+  });
+  take(/\s(\d+)\s*(?:s|secs?)(?=\s)/i, m => { f.measure = 'hold'; f.holdSeconds = +m[1]; });
+  take(/\s(\d+)\s*reps?(?=\s)/i,      m => { f.measure = 'reps'; f.reps = +m[1]; });
+  take(/\s(?:am|morning)(?=\s)/i,       () => { f.session = 'morning'; });
+  take(/\s(?:pm|night)(?=\s)/i,         () => { f.session = 'night'; });
+  take(/\s([1-7])\s*\/\s*w(?:k|eek)?(?=\s)/i, m => { f.frequency = +m[1]; });
+  take(/\s#(\S+)(?=\s)/,                m => { f.group = m[1]; });
+  take(/\sfixed(?=\s)/i,                 () => { f.progress = 'fixed'; });
+  return { name: (m0[0] + rest).replace(/\s+/g, ' ').trim(), fields: f };
+}
 
 
 // ── Schedule compiler ──
@@ -155,11 +186,28 @@ function compileMobSchedule(exercises) {
 
   const cmp = (a, b) =>
     (a.group || '').localeCompare(b.group || '') ||
+    _mobByOrder(a, b) ||
     (b.frequency || 1) - (a.frequency || 1) ||
     (a.createdAt || 0) - (b.createdAt || 0);
   days.forEach(d => { d.morning.sort(cmp); d.night.sort(cmp); });
 
   return { days, dayFor };
+}
+
+// Manual order inside a group (set by dragging). Exercises never reordered have
+// no `order` and follow the ordered ones.
+function _mobByOrder(a, b) {
+  const ao = a.order ?? null, bo = b.order ?? null;
+  if (ao != null && bo != null) return ao - bo;
+  return (ao == null) - (bo == null);
+}
+function _mobListCmp(a, b) {
+  return (a.group ? 1 : 0) - (b.group ? 1 : 0) ||
+    (a.group || '').localeCompare(b.group || '') ||
+    _mobByOrder(a, b) ||
+    (a.session === 'night' ? 1 : 0) - (b.session === 'night' ? 1 : 0) ||
+    (b.frequency || 1) - (a.frequency || 1) ||
+    (a.createdAt || 0) - (b.createdAt || 0);
 }
 
 // Monday-indexed weekday (0 = Mon … 6 = Sun) of an ISO date string.
@@ -180,158 +228,338 @@ function renderMobForm() {
     `<button class="mob-seg-btn${String(v) === String(active) ? ' active' : ''}" ${attr}="${v}">${l}</button>`).join('');
 
   document.getElementById('mobSessionBtns').innerHTML = seg(MOB_SESSIONS, _mobFormSession, 'data-mobsession');
-  const me = _mobEditId && getMobExercises().find(x => x.id === _mobEditId);
-  const mates = me && me.group ? getMobExercises().filter(x => x.id !== me.id && _mobSameGroup(x.group, me.group)).length : 0;
-  const hint = document.getElementById('mobSessionHint');
-  hint.textContent = mates && _mobFormSession !== me.session
-    ? `This will also move the ${mates} other exercise${mates > 1 ? 's' : ''} in "${me.group}".` : '';
   // Suggest only groups in the chosen session — groups never span morning and night.
   document.getElementById('mobGroupList').innerHTML =
     [...new Map(getMobExercises().filter(e => e.group && (e.session === 'night') === (_mobFormSession === 'night'))
       .map(e => [e.group.toLowerCase(), e.group])).values()]
       .map(g => `<option value="${_esc(g)}">`).join('');
   document.getElementById('mobMeasureBtns').innerHTML = seg(MOB_MEASURES, _mobFormMeasure, 'data-mobmeasure');
+  document.getElementById('mobProgressBtns').innerHTML = seg(MOB_PROGRESS, _mobFormProgress, 'data-mobprogress');
+  document.getElementById('mobProgressHint').textContent = _mobFormProgress === 'fixed'
+    ? 'Stays at this dose. No progress tracking or nudges to go up.'
+    : 'Hold longer or do more reps over time. You get a nudge when it\'s time to go up.';
   document.getElementById('mobFreqBtns').innerHTML    =
     seg([1, 2, 3, 4, 5, 6, 7].map(n => [n, n]), _mobFormFreq, 'data-mobfreq');
 
   document.getElementById('mobHoldField').hidden = _mobFormMeasure !== 'hold';
   document.getElementById('mobRepsField').hidden = _mobFormMeasure !== 'reps';
-
-  document.getElementById('mobModalTitle').textContent = _mobEditId ? 'Edit exercise' : 'Add exercise';
-  document.getElementById('mobAddBtn').textContent     = _mobEditId ? 'Save changes' : '+ Add exercise';
 }
 
 
-// ── Render: today's routine (entry-point cards) ──
-function _mobSessionCardHTML(tod, list, date) {
-  if (!list.length) {
-    return `<div class="empty-state">No ${tod} mobility work scheduled today.</div>`;
+// ── History helpers ──
+function _mobLoggedOn(id, date) { return getMobLog(id).some(e => e.date === date); }
+function _mobDaysBetween(a, b) {
+  const t = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+  return Math.round((t(b) - t(a)) / 86400000);
+}
+function _mobAgo(date, today) {
+  const n = _mobDaysBetween(date, today);
+  return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n}d ago`;
+}
+// Everything due on a date (both sessions) and how much of it was logged.
+function _mobDayStat(date, days) {
+  const rows = [..._mobSessionRows(date, 'morning', days), ..._mobSessionRows(date, 'night', days)];
+  return { n: rows.length, done: rows.filter(ex => _mobLoggedOn(ex.id, date)).length };
+}
+
+// Dose to log next. A bump accepted from the nudge wins until a session after it is logged.
+function _mobNext(ex) {
+  const b = (MEM['mobility_bumps_v1'] || {})[ex.id];
+  const last = getMobLog(ex.id).slice(-1)[0];
+  return b && (!last || last.date < b.since) ? b : _mobCurrent(ex);
+}
+
+function _mobIsFixed(ex) { return ex.progress === 'fixed'; }
+
+// Baseline → current change of the measured value; null when unchanged, the
+// measure differs, or the exercise doesn't track progress.
+function _mobGain(ex) {
+  if (_mobIsFixed(ex)) return null;
+  const cur = _mobCurrent(ex);
+  const a = ex.measure === 'reps' ? ex.reps : ex.holdSeconds;
+  const b = cur.measure === 'reps' ? cur.reps : cur.holdSeconds;
+  if (!a || !b || a === b || cur.measure !== ex.measure) return null;
+  return { a, b, d: b - a, pct: Math.round((b - a) / a * 100), unit: ex.measure === 'reps' ? '' : 's' };
+}
+
+// ponytail: rough time estimate — 3s per rep, 10s between sets; no real timing data.
+function _mobSecs(ex) {
+  const d = _mobNext(ex);
+  return (d.sets || 1) * ((d.measure === 'reps' ? (d.reps || 10) * 3 : d.holdSeconds || 30) + 10);
+}
+function _mobMins(list) { return Math.max(1, Math.round(list.reduce((s, ex) => s + _mobSecs(ex), 0) / 60)); }
+
+// Scheduled days in a row with everything logged, back from today (today counts
+// once it's complete, and doesn't break the streak while it's still open).
+function _mobStreak(days, today) {
+  let n = 0, d = today;
+  for (let i = 0; i < 400; i++, d = _shiftDay(d, -1)) {
+    const s = _mobDayStat(d, days);
+    if (!s.n) { if (!getMobExercises().some(ex => _localDateStr(new Date(ex.createdAt || 0)) <= d)) break; continue; }
+    if (s.done < s.n) { if (d === today) continue; break; }
+    n++;
   }
-  const logged = list.filter(ex => getMobLog(ex.id).some(e => e.date === date)).length;
-  const rows = list.map(ex => {
-    const cur = _mobCurrent(ex);
-    const done = getMobLog(ex.id).some(e => e.date === date);
-    return `<div class="mob-scard-row${done ? ' is-logged' : ''}" data-mobdetail="${ex.id}">
-      <span>${done ? '<span class="mob-scard-tick">✓</span>' : ''}${_esc(ex.name)}</span>
-      <span class="mob-dose mob-dose-${_mobMeasureClass(cur)}">${_esc(_mobDose(cur))}</span>
-    </div>`;
+  return n;
+}
+
+// Progression nudge: the first exercise due today whose last 3 sessions used the same dose.
+function _mobNudge(list, today) {
+  const skip = MEM['mobility_nudge_skip_v1'] || {};
+  for (const ex of list) {
+    if (_mobIsFixed(ex)) continue;
+    const log = getMobLog(ex.id).slice(-3);
+    if (log.length < 3 || _mobLoggedOn(ex.id, today) || skip[ex.id] === log[2].date) continue;
+    if (new Set(log.map(_mobDose)).size !== 1 || _mobDose(_mobNext(ex)) !== _mobDose(log[2])) continue;
+    const e = log[2], to = { sets: e.sets, measure: e.measure, holdSeconds: e.holdSeconds, reps: e.reps };
+    if (e.measure === 'reps') { if (!e.reps) continue; to.reps += 1; }
+    else { if (!e.holdSeconds) continue; to.holdSeconds += 5; }
+    return { ex, from: e, to };
+  }
+  return null;
+}
+
+
+// ── Render: today (header, nudge, the two session cards) ──
+function _mobSessionCardHTML(tod, list, date) {
+  const label = tod === 'night' ? '☾ Night' : '☀ Morning';
+  const done  = list.filter(ex => _mobLoggedOn(ex.id, date)).length;
+  const rows  = list.map(ex => {
+    const logged = _mobLoggedOn(ex.id, date);
+    const d = logged ? getMobLog(ex.id).find(e => e.date === date) : _mobNext(ex);
+    const bumped = !logged && _mobDose(d) !== _mobDose(_mobCurrent(ex));
+    // Read-only status; logging happens on the session page the row opens.
+    return `<button class="mob-trow${logged ? ' done' : ''}" type="button" data-mobsession-open="${tod}">
+      <span class="mob-status" aria-label="${logged ? 'Done' : 'Not done yet'}">${logged ? '✓' : ''}</span>
+      <span class="mob-tname">${_esc(ex.name)}${ex.group ? `<span class="mob-tgroup">${_esc(ex.group)}</span>` : ''}</span>
+      ${bumped ? `<span class="mob-tcue" title="New dose, up from ${_esc(_mobDose(_mobCurrent(ex)))}">↑</span>` : ''}
+      <span class="mob-dose mob-dose-${_mobMeasureClass(d)}">${_esc(_mobDose(d))}</span>
+    </button>`;
   }).join('');
-  return `<button class="mob-session-card" type="button" data-mobsession-open="${tod}">
-    <div class="mob-scard-items">${rows}</div>
-    <div class="mob-scard-foot">
-      <span>${logged} of ${list.length} logged</span>
-      <span class="mob-scard-go">Open ›</span>
+  return `<div class="mob-sess-head">
+      <span class="mob-sess-label ${tod}">${label}</span>
+      <span class="mob-sess-meta">${list.length ? `${done}/${list.length} · ~${_mobMins(list)} min` : ''}</span>
+      ${list.length ? `<button class="mob-btn" type="button" data-mobsession-open="${tod}" title="Open the session to adjust sets and doses">▶ Start</button>` : ''}
     </div>
-  </button>`;
+    <div class="mob-sess-bar"><i style="width:${list.length ? done / list.length * 100 : 0}%"></i></div>
+    <div class="mob-sess-list">${rows || '<div class="mob-empty">Rest — nothing scheduled.</div>'}</div>`;
 }
 
 function renderMobToday(schedule) {
   const dayEl = document.getElementById('mobTodayDay');
   if (!dayEl) return;
-
-  const idx   = _mobTodayIdx();
-  const day   = schedule.days[idx];
-  const total = day.morning.length + day.night.length;
   const today = getActiveDateString();
+  const am = _mobSessionRows(today, 'morning', schedule.days);
+  const pm = _mobSessionRows(today, 'night', schedule.days);
+  const all = [...am, ...pm];
+  const left = all.filter(ex => !_mobLoggedOn(ex.id, today));
+  const done = all.length - left.length;
 
-  dayEl.textContent = MOB_DAYS_LONG[idx];
-  document.getElementById('mobTodaySub').textContent =
-    getMobExercises().length ? `${total} exercise${total === 1 ? '' : 's'} today` : '';
-  document.getElementById('mobTodayMorning').innerHTML = _mobSessionCardHTML('morning', day.morning, today);
-  document.getElementById('mobTodayNight').innerHTML   = _mobSessionCardHTML('night', day.night, today);
+  dayEl.textContent = MOB_DAYS_LONG[_mobTodayIdx()];
+  const C = 169.6;   // 2πr for r = 27
+  document.getElementById('mobRing').innerHTML = `<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--success)" stroke-width="5" stroke-linecap="round"
+        stroke-dasharray="${C}" stroke-dashoffset="${all.length ? C * (1 - done / all.length) : C}"/>
+    </svg><span class="mob-ring-txt">${done}/${all.length}</span>`;
+
+  const streak = getMobExercises().length ? _mobStreak(schedule.days, today) : 0;
+  document.getElementById('mobTodaySub').innerHTML = !getMobExercises().length ? 'Add exercises to build your routines.' : [
+    !all.length ? 'Rest day' : left.length ? `${left.length} left today` : 'All done today',
+    streak ? `<span class="mob-ok">🔥 ${streak}-day streak</span>` : '',
+    left.length ? `~${_mobMins(left)} min` : '',
+  ].filter(Boolean).join('<span class="mob-sep">·</span>');
+
+  const nudge = _mobNudge(all, today);
+  document.getElementById('mobNudge').innerHTML = nudge ? `<div class="mob-nudge">
+      <span class="mob-nudge-ic">↑</span>
+      <span><b>${_esc(nudge.ex.name)}</b> — ${_esc(_mobDose(nudge.from))} for your last 3 sessions. Try <b>${_esc(_mobDose(nudge.to))}</b> today?</span>
+      <span class="mob-spacer"></span>
+      <button class="mob-btn" type="button" data-mobbump="${nudge.ex.id}">Bump to ${_esc(_mobDose(nudge.to))}</button>
+      <button class="mob-link" type="button" data-mobskip="${nudge.ex.id}">Not yet</button>
+    </div>` : '';
+
+  document.getElementById('mobTodayMorning').innerHTML = _mobSessionCardHTML('morning', am, today);
+  document.getElementById('mobTodayNight').innerHTML   = _mobSessionCardHTML('night', pm, today);
 }
 
 
-// ── Render: week overview ──
+// ── Render: week strip (logged share per session so far) + selected day ──
 function renderMobWeek(schedule) {
   const grid = document.getElementById('mobWeekGrid');
   if (!grid) return;
-  const today = _mobTodayIdx();
+  const ti = _mobTodayIdx(), mon = _mobThisWeekMonday();
+  const sel = _mobOpenDay == null ? ti : _mobOpenDay;
+  // Share of a session logged; null when nothing was due.
+  const share = (date, tod) => {
+    const r = _mobSessionRows(date, tod, schedule.days);
+    return r.length ? r.filter(ex => _mobLoggedOn(ex.id, date)).length / r.length : null;
+  };
 
   grid.innerHTML = schedule.days.map((d, i) => {
-    const tot = d.morning.length + d.night.length;
-    return `<button class="mob-day${i === today ? ' is-today' : ''}${i === _mobOpenDay ? ' is-open' : ''}${tot ? '' : ' is-empty'}" data-mobday="${i}">
-      <span class="mob-day-name">${MOB_DAYS[i]}</span>
-      <span class="mob-day-count">${tot || '·'}</span>
-      <span class="mob-day-split">${d.morning.length} · ${d.night.length}</span>
+    const date = _shiftDay(mon, i);
+    const am = i <= ti ? share(date, 'morning') : 0, pm = i <= ti ? share(date, 'night') : 0;
+    const miss = i < ti && ((am != null && am < 1) || (pm != null && pm < 1));
+    const pip = (tod, v, n) => `<span class="mob-pip ${tod}${n ? '' : ' none'}"><i style="width:${n ? v * 100 : 0}%"></i></span>`;
+    return `<button class="mob-day${i === ti ? ' is-today' : ''}${i === sel ? ' is-open' : ''}${miss ? ' is-miss' : ''}" type="button" data-mobday="${i}">
+      <span class="mob-day-top"><span class="mob-day-name">${MOB_DAYS[i]}</span><span class="mob-day-sep">-</span><span class="mob-day-num">${Number(date.slice(8))}</span></span>
+      <span class="mob-day-pips">${pip('am', am, d.morning.length)}${pip('pm', pm, d.night.length)}</span>
+      <span class="mob-day-count"><b>${d.morning.length}</b><span class="mob-ic morning">☀</span> <b>${d.night.length}</b><span class="mob-ic night">☾</span></span>
     </button>`;
   }).join('');
 
+  const date = _shiftDay(mon, sel);
+  const col = (tod, label) => {
+    const r = sel <= ti ? _mobSessionRows(date, tod, schedule.days) : schedule.days[sel][tod];
+    return `<div class="mob-wd-col">
+      <div class="mob-wd-h ${tod}"><span>${label} · ${r.length}</span>${sel <= ti && r.length ? `<button class="mob-link" type="button" data-mobweek-open="${tod}">open ›</button>` : ''}</div>
+      <div class="mob-wd-items">${r.map(ex => `<button type="button" class="mob-wd-item${_mobLoggedOn(ex.id, date) ? ' done' : ''}" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>`).join('') || '<span class="mob-wd-empty">—</span>'}</div>
+    </div>`;
+  };
   const detail = document.getElementById('mobWeekDetail');
-  if (_mobOpenDay == null) { detail.hidden = true; detail.innerHTML = ''; return; }
-
-  const d = schedule.days[_mobOpenDay];
-  const weekDate = _shiftDay(_mobThisWeekMonday(), _mobOpenDay);
-  const col = (tod, label, arr) => `<div class="mob-wd-col">
-    <button class="mob-wd-label" type="button" data-mobweek-open="${tod}">${label} <span class="mob-wd-open">open ›</span></button>
-    ${arr.length
-      ? arr.map(ex => `<div class="mob-wd-row" data-mobdetail="${ex.id}"><span>${_esc(ex.name)}</span><span class="mob-dose mob-dose-${_mobMeasureClass(_mobCurrent(ex))}">${_esc(_mobDoseFor(ex))}</span></div>`).join('')
-      : '<div class="mob-wd-empty">—</div>'}
-  </div>`;
-
-  detail.hidden = false;
-  detail.dataset.weekDate = weekDate;
-  detail.innerHTML = `<div class="mob-wd-title">${MOB_DAYS_LONG[_mobOpenDay]}
-      <span class="mob-wd-legend">count shown as morning · night</span></div>
-    <div class="mob-wd-cols">${col('morning', 'Morning', d.morning)}${col('night', 'Night', d.night)}</div>`;
+  detail.dataset.weekDate = date;
+  detail.innerHTML = col('morning', 'Morning') + col('night', 'Night');
 }
 
 
-// ── Render: exercise list ──
+// ── Render: exercise list (one line per exercise) ──
 function renderMobList() {
   const el = document.getElementById('mobList');
   if (!el) return;
   const list = getMobExercises();
+  document.getElementById('mobListCols').hidden = !list.length;
 
   if (!list.length) {
-    el.innerHTML = `<div class="empty-state">No exercises yet — add stretches and mobility drills and the
+    el.innerHTML = `<div class="mob-empty">No exercises yet — add stretches and mobility drills and the
       morning and night routines build themselves from this list.</div>`;
     return;
   }
 
   const { dayFor } = compileMobSchedule(list);
-  const sorted = [...list].sort((a, b) =>
-    (a.group ? 1 : 0) - (b.group ? 1 : 0) ||
-    (a.group || '').localeCompare(b.group || '') ||
-    (a.session === 'night' ? 1 : 0) - (b.session === 'night' ? 1 : 0) ||
-    (b.frequency || 1) - (a.frequency || 1) ||
-    (a.createdAt || 0) - (b.createdAt || 0));
+  const today = getActiveDateString(), mon = _mobThisWeekMonday(), ti = _mobTodayIdx();
+  const q = _mobQuery.trim().toLowerCase();
+  const sorted = list.filter(ex =>
+      (_mobFilter === 'all' || (ex.session === 'night' ? 'night' : 'morning') === _mobFilter) &&
+      (!q || ex.name.toLowerCase().includes(q) || (ex.group || '').toLowerCase().includes(q)))
+    .sort(_mobListCmp);
+  if (!sorted.length) { el.innerHTML = '<div class="mob-empty">No matches.</div>'; return; }
+
+  const row = ex => {
+    const placed = dayFor.get(ex.id) || [];
+    const dayStr = MOB_DAY_INITIAL.map((ini, i) => {
+      const done = i <= ti && _mobLoggedOn(ex.id, _shiftDay(mon, i));
+      return `<span class="mob-di${placed.includes(i) ? ' on' : ''}${done ? ' done' : ''}">${ini}</span>`;
+    }).join('');
+    const cur  = _mobCurrent(ex);
+    const gain = _mobGain(ex);
+    const last = getMobLog(ex.id).slice(-1)[0];
+    // Stale once it's gone about twice its usual gap without a session.
+    const stale = !last || _mobDaysBetween(last.date, today) >= Math.ceil(14 / (ex.frequency || 1));
+    const tod = ex.session === 'night' ? 'night' : 'morning';
+    return `<div class="mob-row${ex.group ? ' in-group' : ''}" draggable="true" data-mobrow="${ex.id}">
+      <span class="mob-grip" aria-hidden="true">⋮⋮</span>
+      <span class="mob-name"><span class="mob-sdot ${tod}" title="${tod === 'night' ? 'Night' : 'Morning'}"></span><button class="mob-row-name" type="button" data-mobdetail="${ex.id}">${_esc(ex.name)}</button></span>
+      <span class="mob-dosecell"><span class="mob-dose mob-dose-${_mobMeasureClass(cur)}">${_esc(_mobDose(cur))}</span>${_mobIsFixed(ex) ? '<span class="mob-fixedchip" title="Keeps the same dose — no progress tracking">fixed</span>'
+        : gain && gain.d > 0 ? `<span class="mob-up" title="Up from ${_esc(_mobDose(ex))}">↑+${gain.d}${gain.unit}</span>` : ''}</span>
+      <span class="mob-freq">${ex.frequency || 1}×/wk</span>
+      <span class="mob-row-days">${dayStr}</span>
+      <span class="mob-last${stale ? ' stale' : ''}">${last ? _mobAgo(last.date, today) : 'never'}</span>
+      <span class="mob-row-actions">
+        <button class="mob-row-btn" type="button" data-mobedit="${ex.id}" title="Edit">✎</button>
+        <button class="mob-row-btn mob-row-del" type="button" data-mobdel="${ex.id}" title="Remove">×</button>
+      </span>
+    </div>`;
+  };
 
   // Ungrouped exercises sit in an untitled zone; dropping an exercise anywhere in it removes it from its group.
-  const hasGroups = sorted.some(e => e.group);
-  let lastKey = '', zoneOpen = hasGroups;
-  el.innerHTML = (hasGroups ? '<div class="mob-ungrouped" data-mobgroup="">' : '') + sorted.map(ex => {
-    const key = (ex.group || '').trim().toLowerCase();
-    let head = '';
-    if (key && key !== lastKey) {
-      head = `<div class="mob-group-head" data-mobgroup="${_esc(ex.group)}">${_esc(ex.group)}</div>`;
-      if (zoneOpen) { head = '</div>' + head; zoneOpen = false; }
+  const solo = sorted.filter(ex => !ex.group);
+  const groups = new Map();
+  sorted.filter(ex => ex.group).forEach(ex => {
+    const k = ex.group.trim().toLowerCase();
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(ex);
+  });
+  el.innerHTML = (groups.size ? `<div class="mob-ungrouped" data-mobgroup="">${solo.map(row).join('')}</div>` : solo.map(row).join('')) +
+    [...groups.values()].map(m => {
+      const days = (dayFor.get(m[0].id) || []).map(i => MOB_DAYS[i]).join(' ');
+      return `<div class="mob-group-head" data-mobgroup="${_esc(m[0].group)}">${_esc(m[0].group)}
+          <span class="mob-group-meta">${m.length} · ${days}</span>${_mobFlowSeg(m[0].group, _mobFlowOf(m[0].group))}<span class="mob-group-line"></span></div>` + m.map(row).join('');
+    }).join('');
+}
+
+
+// ── Render: side column (consistency, gains, misses) ──
+function renderMobRail(schedule) {
+  const rail = document.getElementById('mobRail');
+  if (!rail) return;
+  const exs = getMobExercises();
+  rail.hidden = !exs.length;
+  if (!exs.length) return;
+  const today = getActiveDateString(), days = schedule.days;
+
+  // Five Monday-aligned weeks ending this week. Today counts only what's logged so far.
+  const start = _shiftDay(_mobThisWeekMonday(), -28);
+  const rate = (from, count) => {
+    let n = 0, done = 0;
+    for (let i = 0; i < count; i++) {
+      const d = _shiftDay(from, i);
+      if (d > today) break;
+      const s = _mobDayStat(d, days);
+      n += d === today ? s.done : s.n; done += s.done;
     }
-    lastKey = key;
-    const placed = dayFor.get(ex.id) || [];
-    const dayStr = MOB_DAY_INITIAL.map((ini, i) =>
-      `<span class="mob-di${placed.includes(i) ? ' on' : ''}">${ini}</span>`).join('');
-    const cur  = _mobCurrent(ex);
-    const grew = getMobLog(ex.id).length && _mobDose(cur) !== _mobDose(ex);
-    return `${head}<div class="mob-row${ex.id === _mobEditId ? ' is-editing' : ''}" draggable="true" data-mobrow="${ex.id}">
-      <div class="mob-row-main">
-        <div class="mob-row-head">
-          <button class="mob-row-name" type="button" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>
-          <span class="mob-tag mob-tag-${ex.session === 'night' ? 'night' : 'morning'}">${ex.session === 'night' ? 'Night' : 'Morning'}</span>
-          <span class="mob-dose mob-dose-${_mobMeasureClass(cur)}">${_esc(_mobDose(cur))}</span>
-        </div>
-        <div class="mob-row-meta">
-          <span class="mob-row-freq">${ex.frequency || 1}× / week</span>
-          ${grew ? `<span class="mob-row-from">from ${_esc(_mobDose(ex))}</span>` : ''}
-          <span class="mob-row-days">${dayStr}</span>
-        </div>
-      </div>
-      <div class="mob-row-actions">
-        <button class="mob-row-btn" data-mobedit="${ex.id}" title="Edit">✎</button>
-        <button class="mob-row-btn mob-row-del" data-mobdel="${ex.id}" title="Remove">×</button>
-      </div>
+    return { n, done };
+  };
+  let cells = '';
+  for (let i = 0; i < 35; i++) {
+    const d = _shiftDay(start, i);
+    if (d > today) { cells += '<i class="future"></i>'; continue; }
+    const s = _mobDayStat(d, days);
+    const lv = !s.n ? 'rest' : !s.done ? '' : s.done < s.n / 2 ? 'l1' : s.done < s.n ? 'l2' : 'l3';
+    cells += `<i class="${lv}${d === today ? ' now' : ''}" title="${_fullDateLabel(d)} — ${s.n ? `${s.done} of ${s.n}` : 'rest day'}"></i>`;
+  }
+  const cur = rate(start, 35), prev = rate(_shiftDay(start, -35), 35);
+  const pct = cur.n ? Math.round(cur.done / cur.n * 100) : 0;
+  const delta = prev.n && cur.n ? pct - Math.round(prev.done / prev.n * 100) : null;
+
+  const gains = exs.map(ex => ({ ex, g: _mobGain(ex) })).filter(x => x.g && x.g.d > 0)
+    .sort((a, b) => b.g.pct - a.g.pct).slice(0, 4);
+
+  // Misses over the last 7 days, not counting today.
+  const miss = new Map();
+  for (let i = 7; i >= 1; i--) {
+    const d = _shiftDay(today, -i);
+    ['morning', 'night'].forEach(tod => _mobSessionRows(d, tod, days).forEach(ex => {
+      if (_mobLoggedOn(ex.id, d)) return;
+      const m = miss.get(ex.id) || { ex, n: 0 };
+      m.n++; m.d = d; miss.set(ex.id, m);
+    }));
+  }
+  const missed = [...miss.values()].sort((a, b) => b.n - a.n).slice(0, 5);
+
+  rail.innerHTML = `
+    <div class="card mob-rail-card">
+      <div class="mob-rail-h"><span>Last 5 weeks</span><b>${pct}%</b></div>
+      <div class="mob-heat-d">${MOB_DAY_INITIAL.map(c => `<span>${c}</span>`).join('')}</div>
+      <div class="mob-heat">${cells}</div>
+      <div class="mob-rail-foot"><span>${cur.done} of ${cur.n} logged</span>${delta ? `<span class="${delta > 0 ? 'mob-ok' : 'mob-warn'}">${delta > 0 ? '↑' : '↓'} ${Math.abs(delta)}% vs prior</span>` : ''}</div>
+    </div>
+    <div class="card mob-rail-card">
+      <div class="mob-rail-h"><span>Biggest gains</span><span>since start</span></div>
+      ${gains.length ? gains.map(({ ex, g }) => `<button class="mob-gain" type="button" data-mobdetail="${ex.id}">
+          <span class="mob-gain-nm">${_esc(ex.name)}</span><span class="mob-gain-pct">+${g.pct}%</span>
+          <span class="mob-gain-fr">${g.a}${g.unit}<span class="mob-gain-bar"><i class="${ex.measure === 'reps' ? 'reps' : 'hold'}" style="width:${Math.min(100, g.pct)}%"></i></span>${g.b}${g.unit}</span>
+        </button>`).join('') : '<div class="mob-empty">Log a few sessions to see progress here.</div>'}
+    </div>
+    <div class="card mob-rail-card">
+      <div class="mob-rail-h"><span>Falling behind</span><span>last 7 days</span></div>
+      ${missed.length ? missed.map(({ ex, n, d }) => {
+        const last = getMobLog(ex.id).slice(-1)[0];
+        return `<button class="mob-behind" type="button" data-mobdetail="${ex.id}">
+          <span class="mob-sdot ${ex.session === 'night' ? 'night' : 'morning'}"></span>
+          <span class="mob-behind-nm">${_esc(ex.name)}</span>
+          <span class="mob-behind-why">${n > 1 ? `missed ${n}×` : `missed ${MOB_DAYS[_mobDateIdx(d)]}`} · ${last ? _mobAgo(last.date, today) : 'never done'}</span>
+        </button>`;
+      }).join('') : '<div class="mob-empty">Nothing missed in the last 7 days.</div>'}
     </div>`;
-  }).join('') + (zoneOpen ? '</div>' : '');
 }
 
 
@@ -342,6 +570,7 @@ function renderMobility() {
   renderMobToday(schedule);
   renderMobWeek(schedule);
   renderMobList();
+  renderMobRail(schedule);
 }
 
 
@@ -351,10 +580,9 @@ function renderMobility() {
 // (minus any created after the date), plus any that already have an entry for
 // exactly that date. The compile isn't stable over time, so the entry set is what
 // keeps past sessions editable.
-function _mobSessionRows(date, tod) {
+function _mobSessionRows(date, tod, days = compileMobSchedule(getMobExercises()).days) {
   const exs   = getMobExercises();
-  const idx   = _mobDateIdx(date);
-  const sched = compileMobSchedule(exs).days[idx][tod]
+  const sched = days[_mobDateIdx(date)][tod]
     .filter(ex => _localDateStr(new Date(ex.createdAt || 0)) <= date);
   const seen  = new Set(sched.map(e => e.id));
   const extra = exs.filter(ex =>
@@ -374,62 +602,291 @@ function openMobSession(date, tod) {
   _mobLockBody();
 }
 function closeMobSession() {
+  clearInterval(_mobRestTimer); _mobRest = null;
   document.getElementById('mobSessionPage').classList.remove('open');
   _mobUnlockBodyIfClear();
 }
 
+// ── Set order ──
+// Groups choose how their sets are ordered (settings key mobility_group_flow_v1):
+//   'circuit' — every exercise once, then again: 1,2,3,1,2,3
+//   'pairs'   — the same inside each run of two: 1,2,1,2,3,4,3,4 (an odd one out goes alone)
+// A group that hasn't picked yet runs as a circuit. An exercise with no group is straight sets.
+function _mobGroupKey(g) { return (g || '').trim().toLowerCase(); }
+function _mobFlowOf(g) { return (MEM['mobility_group_flow_v1'] || {})[_mobGroupKey(g)] || null; }
+function _mobSetFlow(g, flow) {
+  const all = { ...(MEM['mobility_group_flow_v1'] || {}), [_mobGroupKey(g)]: flow };
+  MEM['mobility_group_flow_v1'] = all; _syncSetting('mobility_group_flow_v1', all);
+}
+
+// items: [{ ex, n }] (n = set rows) → steps [{ ex, i }] going through every item once per pass.
+function _mobPasses(items) {
+  const steps = [], rounds = Math.max(0, ...items.map(it => it.n));
+  for (let r = 0; r < rounds; r++) items.forEach(it => { if (r < it.n) steps.push({ ex: it.ex, i: r, it }); });
+  return steps;
+}
+// Session rows → units in list order: a group is one unit (placed where its first
+// exercise is), an ungrouped exercise is its own unit. Each unit knows its steps.
+function _mobUnits(items) {
+  const units = [], byKey = new Map();
+  items.forEach(it => {
+    const k = _mobGroupKey(it.ex.group);
+    if (!k) return units.push({ group: '', items: [it] });
+    if (!byKey.has(k)) { const u = { group: it.ex.group, items: [] }; byKey.set(k, u); units.push(u); }
+    byKey.get(k).items.push(it);
+  });
+  units.forEach(u => {
+    if (u.group && _mobFlowOf(u.group) === 'pairs') {
+      u.steps = [];
+      for (let k = 0; k < u.items.length; k += 2) u.steps.push(..._mobPasses(u.items.slice(k, k + 2)));
+    } else u.steps = _mobPasses(u.items);
+  });
+  return units;
+}
+
+
+// ── Session page: one table, a row per exercise and a column per set ──
 function renderMobSession() {
   const body = document.getElementById('mobSessionBody');
   if (!body || !_mobSessionDate) return;
   const date = _mobSessionDate, tod = _mobSessionTod;
-  const rows = _mobSessionRows(date, tod);
-  const logged = rows.filter(ex => getMobLog(ex.id).some(e => e.date === date)).length;
+  const rows = _mobSessionRows(date, tod).map(ex => _mobSessionItem(ex, date));
+  const units = _mobUnits(rows);
+  const steps = units.flatMap(u => u.steps);
+  const next = steps.find(s => !_mobSetDone(s, date)) || null;
+  const totalSets = steps.length, doneSets = steps.length - steps.filter(s => !_mobSetDone(s, date)).length;
+  const exDone = rows.filter(it => it.vals.filter(v => v != null).length >= it.n).length;
+  const cols = Math.max(1, ...rows.map(it => it.n));
 
   const prevDisabled = date <= _dayDetailFloor();
   const nextDisabled = date >= getActiveDateString();
-
   const todBtns = MOB_SESSIONS.map(([v, l]) =>
     `<button class="mob-seg-btn${v === tod ? ' active' : ''}" data-mobtod="${v}">${l}</button>`).join('');
 
-  const rowsHTML = rows.length ? rows.map(ex => {
-    const pre  = _mobEntryAsOf(ex.id, date) || { sets: ex.sets, holdSeconds: ex.holdSeconds, reps: ex.reps };
-    const done = getMobLog(ex.id).some(e => e.date === date);
-    const doseField = ex.measure === 'reps'
-      ? `<label class="mob-srow-f">reps <input type="number" min="1" step="1" data-mobf="reps" data-ex="${ex.id}" value="${pre.reps != null ? pre.reps : ''}"></label>`
-      : `<label class="mob-srow-f">hold <input type="number" min="1" step="5" data-mobf="hold" data-ex="${ex.id}" value="${pre.holdSeconds != null ? pre.holdSeconds : ''}"><span>s</span></label>`;
-    return `<div class="mob-srow${done ? ' is-logged' : ''}">
-      <label class="habit-cb-wrap">
-        <input type="checkbox" data-mobrowcheck="${ex.id}"${done ? ' checked' : ''}>
-        <span class="habit-cb-box"></span>
-      </label>
-      <div class="mob-srow-body">
-        <button class="mob-srow-name" type="button" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>
-        <div class="mob-srow-inputs">
-          <label class="mob-srow-f">sets <input type="number" min="1" step="1" data-mobf="sets" data-ex="${ex.id}" value="${pre.sets || 1}"></label>
-          ${doseField}
+  const rowHTML = it => {
+    const { ex } = it, reps = ex.measure === 'reps';
+    const fmt = v => v == null ? '–' : reps ? `${v}` : `${v}s`;
+    const cells = Array.from({ length: cols }, (_, i) => {
+      if (i >= it.n) return '<td></td>';
+      const done = it.vals[i] != null;
+      const val = done ? it.vals[i] : it.draft.vals[i] ?? '';
+      const isNext = next && next.ex === ex && next.i === i;
+      return `<td><div class="mob-cell${isNext ? ' next' : ''}${done ? ' done' : ''}">
+        <input class="mob-set-in" type="number" min="1" step="${reps ? 1 : 5}" inputmode="numeric"
+          data-mobset="${ex.id}" data-i="${i}" value="${val}" placeholder="${it.goal ?? 0}" aria-label="${_esc(ex.name)} set ${i + 1}">
+        <button class="mob-set-ok" type="button" data-mobsetok="${ex.id}" data-i="${i}" aria-label="${done ? 'Undo' : 'Done'} set ${i + 1}">✓</button>
+      </div></td>`;
+    }).join('');
+    const rest = _mobRestFor(ex.id);
+    const bumped = it.goal != null && !it.entry && it.target !== it.before && it.before && _mobDose(it.target) !== _mobDose(it.before);
+    return `<tr class="${next && next.ex === ex ? 'is-now' : ''}${ex.group ? ' in-group' : ''}">
+      <td><div class="mob-tex">
+        ${_mobRingHTML(it.vals.filter(v => v != null).length / it.n)}
+        <div class="mob-tex-main">
+          <button class="mob-tex-name" type="button" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>
+          <div class="mob-tex-sub"><span>${it.n} × ${fmt(it.goal)}</span>
+            ${bumped ? `<span class="mob-up">↑ from ${_esc(fmt(reps ? it.before.reps : it.before.holdSeconds))}</span>` : ''}
+            ${_mobIsFixed(ex) ? '<span class="mob-fixedchip">fixed</span>' : ''}</div>
+          <input class="mob-tex-note" data-mobnote="${ex.id}" value="${_esc(it.entry ? it.entry.note || '' : it.draft.note || '')}" placeholder="+ note" maxlength="300">
         </div>
-      </div>
-    </div>`;
-  }).join('') : `<div class="empty-state">Nothing scheduled for this session.</div>`;
+      </div></td>
+      <td class="mob-tlast">${Array.from({ length: Math.max(it.n, it.prev.length) }, (_, i) => fmt(it.prev[i])).join(' · ')}</td>
+      ${cells}
+      <td><button class="mob-tadd" type="button" data-mobaddset="${ex.id}" title="Add a set">+</button></td>
+      <td>${ex.group ? '' : `<label class="mob-restsel" title="Rest between this exercise's sets">⏱
+        <select data-mobrest="${ex.id}">${MOB_REST_OPTS.map(s => `<option value="${s}"${s === rest ? ' selected' : ''}>${s ? _mobRestLabel(s) : 'No rest'}</option>`).join('')}</select></label>`}</td>
+    </tr>`;
+  };
+
+  const table = units.map(u => {
+    if (!u.group) return rowHTML(u.items[0]);
+    const flow = _mobFlowOf(u.group);
+    return `<tr class="mob-tgrp"><td colspan="${cols + 4}"><div class="mob-tgrp-line">
+        <span class="mob-tgrp-name">${_esc(u.group)}</span>
+        ${_mobFlowSeg(u.group, flow)}
+        ${u.steps.map(s => `<span class="mob-step${_mobSetDone(s, date) ? ' done' : next && next.ex === s.ex && next.i === s.i ? ' now' : ''}">${_esc(s.ex.name)}</span>`).join('<span class="mob-step-arrow">→</span>')}
+      </div></td></tr>` + u.items.map(rowHTML).join('');
+  }).join('');
 
   body.innerHTML = `
-    <div class="day-detail-head">
-      <button class="hcal-nav-btn" id="mobSessionPrev"${prevDisabled ? ' disabled' : ''}>‹</button>
-      <h2 class="habit-detail-name day-detail-date">${_fullDateLabel(date)}</h2>
-      <button class="hcal-nav-btn" id="mobSessionNext"${nextDisabled ? ' disabled' : ''}>›</button>
+    <div class="mob-shead">
+      <div class="mob-shead-row">
+        <div class="day-detail-head mob-sdate">
+          <button class="hcal-nav-btn" id="mobSessionPrev"${prevDisabled ? ' disabled' : ''}>‹</button>
+          <h2 class="habit-detail-name day-detail-date">${_fullDateLabel(date)}</h2>
+          <button class="hcal-nav-btn" id="mobSessionNext"${nextDisabled ? ' disabled' : ''}>›</button>
+        </div>
+        <div class="mob-seg" id="mobSessionTodBtns">${todBtns}</div>
+        <span class="mob-spacer"></span>
+        ${rows.length ? `<span class="mob-sprog"><b>${doneSets}</b>/${totalSets} sets · <b>${exDone}</b>/${rows.length} exercises</span>` : ''}
+      </div>
+      ${rows.length ? `<div class="mob-sbar"><i style="width:${totalSets ? doneSets / totalSets * 100 : 0}%"></i></div>
+      <div class="mob-snext" id="mobNextStrip">${_mobNextStripHTML(next, units.some(u => u.group))}</div>` : ''}
     </div>
-    <div class="mob-session-sub">
-      <div class="mob-seg" id="mobSessionTodBtns">${todBtns}</div>
-      <span class="mob-session-count">${rows.length ? `${logged} of ${rows.length} logged` : ''}</span>
-    </div>
-    <div class="mob-srow-list">${rowsHTML}</div>
+    ${rows.length ? `<div class="mob-tcard"><table class="mob-table">
+      <thead><tr><th>Exercise</th><th class="mob-tlast">Last time</th>${Array.from({ length: cols }, (_, i) => `<th>Set ${i + 1}</th>`).join('')}<th></th><th>Rest</th></tr></thead>
+      <tbody>${table}</tbody>
+    </table></div>` : '<div class="empty-state">Nothing scheduled for this session.</div>'}
   `;
+}
+
+// Everything the table needs about one exercise on one date.
+function _mobSessionItem(ex, date) {
+  const entry  = getMobLog(ex.id).find(e => e.date === date);
+  const draft  = _mobSetDraftFor(ex.id, date);
+  const before = [...getMobLog(ex.id)].reverse().find(e => e.date < date);
+  // The plan for this session: a pending bump today, else the last session before it, else the baseline.
+  const target = (date === getActiveDateString() && !entry ? _mobNext(ex) : before)
+    || { sets: ex.sets, measure: ex.measure, holdSeconds: ex.holdSeconds, reps: ex.reps };
+  const vals = _mobSetVals(entry);
+  // Row count sticks once shown, so logging set 1 doesn't hide the planned set 2.
+  const n = draft.rows = Math.max(draft.rows || 0, vals.length, entry && !Array.isArray(entry.setValues) ? 0 : target.sets || 1, 1);
+  return { ex, entry, draft, before, target, vals, n,
+           goal: ex.measure === 'reps' ? target.reps : target.holdSeconds, prev: _mobSetVals(before) };
+}
+function _mobSetDone(step, date) {
+  const e = getMobLog(step.ex.id).find(x => x.date === date);
+  return _mobSetVals(e)[step.i] != null;
+}
+
+function _mobRingHTML(f) {
+  const C = 69.1;
+  return `<span class="mob-sring"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+    <circle cx="13" cy="13" r="11" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+    <circle cx="13" cy="13" r="11" fill="none" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - Math.min(1, f))}"/>
+  </svg><span>${f >= 1 ? '✓' : ''}</span></span>`;
+}
+
+function _mobFlowSeg(group, flow) {
+  const b = (v, label, tip) => `<button type="button" class="${flow === v ? 'on' : ''}" data-mobflow="${_esc(group)}" data-v="${v}" title="${tip}">${label}</button>`;
+  return `<span class="mob-flow">${b('circuit', 'Circuit', 'Every exercise in a row, then again: 1, 2, 3, 1, 2, 3')}${b('pairs', 'Pairs', 'Alternate in twos: 1, 2, 1, 2, then 3, 4, 3, 4')}</span>`;
+}
+
+function _mobNextStripHTML(next, hasGroups) {
+  const roundRest = MEM['mobility_round_rest_v1'] || 0;
+  const roundSel = hasGroups ? `<label class="mob-restsel">Rest between group rounds:
+    <select data-mobroundrest>${MOB_REST_OPTS.map(s => `<option value="${s}"${s === roundRest ? ' selected' : ''}>${s ? _mobRestLabel(s) : 'none'}</option>`).join('')}</select></label>` : '';
+  if (!next) return `<span class="mob-snext-tag done">All done</span><span>Every set is logged for this session.</span>`;
+  const reps = next.ex.measure === 'reps', goal = next.it.goal;
+  const where = `<b>${_esc(next.ex.name)}</b> · set ${next.i + 1}${goal ? ` · ${goal}${reps ? '' : 's'}` : ''}${next.ex.group ? ` <span class="mob-tgroup">${_esc(next.ex.group)}</span>` : ''}`;
+  if (_mobRest && _mobRest.date === _mobSessionDate && _mobRestLeft()) {
+    return `<span class="mob-snext-tag rest">${_mobRest.round ? 'Round done' : 'Rest'}</span>
+      <span class="mob-clock" id="mobRestLeft">${_mobClock(_mobRestLeft())}</span><span>then ${where}</span>
+      <span class="mob-spacer"></span><button class="mob-btn" type="button" data-mobrestadd>+15s</button>
+      <button class="mob-link" type="button" data-mobrestskip>Skip</button>`;
+  }
+  return `<span class="mob-snext-tag">${next.ex.group ? '⇄ Up next' : 'Up next'}</span><span>${where}</span>
+    <span class="mob-spacer"></span>${next.ex.group ? '<span class="mob-snext-hint">Switching exercise is your break</span>' : ''}${roundSel}`;
+}
+
+// Per-set values of a log entry: its own list, or — for entries logged before
+// per-set tracking — `sets` copies of its single value. null = set not done.
+function _mobSetVals(e) {
+  if (!e) return [];
+  if (Array.isArray(e.setValues)) return e.setValues;
+  const v = e.measure === 'reps' ? e.reps : e.holdSeconds;
+  return Array.from({ length: e.sets || 1 }, () => v || 0);
+}
+
+// Unsaved per-session UI: extra rows added, values typed into undone sets, a note
+// typed before any set is done. Kept in memory so re-renders don't lose it.
+const _mobSetDrafts = {};
+function _mobSetDraftFor(id, date) {
+  return _mobSetDrafts[date + '|' + id] || (_mobSetDrafts[date + '|' + id] = { rows: 0, vals: [], note: '' });
+}
+
+// Write a session's per-set values. The entry's sets / hold / reps summarise the
+// done sets (count and best value), so progress, nudges and history keep working.
+function _mobWriteSets(ex, date, vals, note) {
+  const done = vals.filter(v => v != null);
+  if (!done.length) {
+    _mobSetDraftFor(ex.id, date).note = note || '';
+    _mobDeleteEntry(ex.id, date);
+    return;
+  }
+  const best = Math.max(...done);
+  _mobUpsertEntry(ex.id, date, {
+    sets: done.length, measure: ex.measure,
+    holdSeconds: ex.measure === 'reps' ? null : best, reps: ex.measure === 'reps' ? best : null,
+    setValues: vals, note: note || '',
+  });
+}
+
+// Tick / untick one set. Returns true when a set was just completed.
+function _mobToggleSet(exId, date, i) {
+  const ex = getMobExercises().find(x => x.id === exId);
+  if (!ex) return false;
+  const entry = getMobLog(exId).find(e => e.date === date);
+  const draft = _mobSetDraftFor(exId, date);
+  const vals  = _mobSetVals(entry).slice();
+  while (vals.length <= i) vals.push(null);
+  let completed = false;
+  if (vals[i] != null) {
+    if (vals.filter(v => v != null).length === 1 && date !== getActiveDateString() &&
+        !confirm("Remove this session's log entry?")) return false;
+    draft.vals[i] = vals[i];
+    vals[i] = null;
+  } else {
+    const input = document.querySelector(`#mobSessionBody [data-mobset="${exId}"][data-i="${i}"]`);
+    const v = Math.round(Number(input && (input.value || input.placeholder)));
+    vals[i] = v > 0 ? v : 1;
+    delete draft.vals[i];
+    completed = true;
+  }
+  draft.rows = Math.max(draft.rows, vals.length);
+  _mobWriteSets(ex, date, vals, entry ? entry.note : draft.note);
+  return completed;
+}
+
+// After a set is done (today only): ungrouped exercises rest before their own next
+// set; inside a group there's no wait — switching exercise is the break — except the
+// optional rest once a whole round of the group is done.
+function _mobAfterSet(exId, i) {
+  const date = _mobSessionDate;
+  if (date !== getActiveDateString()) return;
+  const ex = getMobExercises().find(x => x.id === exId);
+  const steps = _mobUnits(_mobSessionRows(date, _mobSessionTod).map(e => _mobSessionItem(e, date))).flatMap(u => u.steps);
+  const next = steps.find(s => !_mobSetDone(s, date));
+  if (!ex || !next) { _mobStopRest(false); return; }
+  if (!ex.group) {
+    if (next.ex.id === ex.id && _mobRestFor(ex.id)) _mobStartRest(date, _mobRestFor(ex.id), false);
+    else _mobStopRest(false);
+  } else if (MEM['mobility_round_rest_v1'] && _mobSameGroup(next.ex.group, ex.group) && next.i > i) {
+    _mobStartRest(date, MEM['mobility_round_rest_v1'], true);
+  } else _mobStopRest(false);
+}
+
+// ── Rest timer (one per session; lengths stored in settings) ──
+const MOB_REST_OPTS = [0, 15, 30, 45, 60, 90, 120, 180];
+let _mobRest = null;   // { date, end, round } while a rest countdown runs
+let _mobRestTimer = null;
+function _mobRestFor(id) { const r = (MEM['mobility_rest_v1'] || {})[id]; return r == null ? 30 : r; }
+function _mobRestLabel(s) { return s < 60 ? `${s}s` : `${Math.floor(s / 60)}min${s % 60 ? ` ${s % 60}s` : ''}`; }
+function _mobClock(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+function _mobRestLeft() { return _mobRest ? Math.max(0, Math.ceil((_mobRest.end - Date.now()) / 1000)) : 0; }
+function _mobStartRest(date, secs, round) {
+  _mobRest = { date, end: Date.now() + secs * 1000, round };
+  clearInterval(_mobRestTimer);
+  _mobRestTimer = setInterval(() => {
+    const left = _mobRestLeft();
+    const el = document.getElementById('mobRestLeft');
+    if (el) el.textContent = _mobClock(left);
+    if (!left) { if (navigator.vibrate) navigator.vibrate(200); _mobStopRest(); }
+  }, 250);
+}
+function _mobStopRest(rerender = true) {
+  clearInterval(_mobRestTimer);
+  _mobRest = null;
+  if (rerender) renderMobSession();
 }
 
 
 // ── Per-exercise detail page ──
 function openMobExerciseDetail(id) {
+  const ex = getMobExercises().find(x => x.id === id);
+  if (!ex) return;
   _mobDetailId = id;
+  _mobDraft = _mobFieldsOf(ex);
   renderMobExerciseDetail();
   const p = document.getElementById('mobExerciseDetailPage');
   p.scrollTop = 0;
@@ -437,7 +894,10 @@ function openMobExerciseDetail(id) {
   _mobLockBody();
 }
 function closeMobExerciseDetail() {
+  const ex = getMobExercises().find(x => x.id === _mobDetailId);
+  if (ex && _mobDraftDirty(ex) && !confirm('Discard your unsaved changes?')) return;
   document.getElementById('mobExerciseDetailPage').classList.remove('open');
+  _mobDraft = null;
   _mobDetailId = null;
   _mobUnlockBodyIfClear();
 }
@@ -459,6 +919,7 @@ function renderMobExerciseDetail() {
   if (!body || !_mobDetailId) return;
   const ex = getMobExercises().find(x => x.id === _mobDetailId);
   if (!ex) { closeMobExerciseDetail(); return; }
+  if (!_mobDraft) _mobDraft = _mobFieldsOf(ex);
 
   const log     = getMobLog(ex.id);
   const baseline = { sets: ex.sets, measure: ex.measure, holdSeconds: ex.holdSeconds, reps: ex.reps };
@@ -468,9 +929,10 @@ function renderMobExerciseDetail() {
     return `<span class="mob-di${placed ? ' on' : ''}">${ini}</span>`;
   }).join('');
 
+  const fixed = _mobIsFixed(ex);
   const trend = (() => {
     const recent = log.slice(-12);
-    if (recent.length < 2) return '';
+    if (fixed || recent.length < 2) return '';
     const vals = recent.map(e => e.measure === 'reps' ? (e.reps || 0) : (e.holdSeconds || 0));
     const max  = Math.max(...vals, 1);
     const fmtD = ds => { const [y, m, d] = ds.split('-').map(Number);
@@ -493,22 +955,63 @@ function renderMobExerciseDetail() {
             <span class="area-note-date">${_fullDateLabel(e.date)}</span>
             <button class="hd-note-del" data-mobdel-entry="${e.date}" title="Delete entry" aria-label="Delete entry">×</button>
           </div>
-          <div class="area-note-body mob-logrow-dose">${_esc(_mobDose(e))}</div>
+          <div class="area-note-body mob-logrow-dose">${_esc(_mobDose(e))}${e.note ? ` <span class="mob-logrow-note">· ${_esc(e.note)}</span>` : ''}</div>
         </div>`).join('')
     : '<div class="area-detail-empty">No sessions logged yet.</div>';
 
+  const d = _mobDraft;
+  const seg = (opts, active, attr) => opts.map(([v, l]) =>
+    `<button class="mob-seg-btn${String(v) === String(active) ? ' active' : ''}" type="button" ${attr}="${v}">${l}</button>`).join('');
+  const groups = [...new Map(getMobExercises().filter(e => e.group && e.id !== ex.id && (e.session === 'night') === (d.session === 'night'))
+    .map(e => [e.group.toLowerCase(), e.group])).values()];
+
   body.innerHTML = `
-    <div class="mob-exd-head">
-      <h2 class="habit-detail-name" style="margin:0;flex:1;">${_esc(ex.name)}</h2>
-      <button class="mob-row-btn" id="mobExEdit" title="Edit exercise">✎ Edit</button>
-    </div>
+    <input class="mob-exd-name" data-mobd="name" value="${_esc(d.name)}" aria-label="Exercise name" maxlength="80">
     <div class="mob-exd-meta">
-      <span class="mob-tag mob-tag-${ex.session === 'night' ? 'night' : 'morning'}">${ex.session === 'night' ? 'Night' : 'Morning'}</span>
-      <span class="mob-row-freq">${ex.frequency || 1}× / week</span>
-      <span class="mob-row-days">${dots}</span>
+      <span class="mob-row-days" title="Scheduled days">${dots}</span>
+      ${fixed ? '<span class="mob-fixedchip">No progress tracking</span>' : ''}
     </div>
 
-    <div class="habit-detail-stats-grid">
+    <div class="mob-exd-form">
+      <span class="mob-exd-label">When</span>
+      <div class="mob-seg">${seg(MOB_SESSIONS, d.session, 'data-mobd-session')}</div>
+      <span class="mob-exd-label">Dose</span>
+      <div class="mob-exd-row">
+        <input class="mob-exd-num" type="number" min="1" step="1" data-mobd="sets" value="${d.sets ?? ''}" aria-label="Sets"> sets ×
+        <input class="mob-exd-num" type="number" min="1" step="${d.measure === 'reps' ? 1 : 5}" data-mobd="${d.measure === 'reps' ? 'reps' : 'holdSeconds'}"
+          value="${(d.measure === 'reps' ? d.reps : d.holdSeconds) ?? ''}" aria-label="${d.measure === 'reps' ? 'Reps' : 'Hold seconds'}">
+        <div class="mob-seg">${seg([['hold', 'sec'], ['reps', 'reps']], d.measure, 'data-mobd-measure')}</div>
+      </div>
+      <span class="mob-exd-label">Over time</span>
+      <div class="mob-seg">${seg(MOB_PROGRESS, d.progress, 'data-mobd-progress')}</div>
+      <span class="mob-exd-label">Per week</span>
+      <div class="mob-seg">${seg([1, 2, 3, 4, 5, 6, 7].map(n => [n, n]), d.frequency, 'data-mobd-freq')}</div>
+      <span class="mob-exd-label">Group</span>
+      <div><input class="mob-exd-text" data-mobd="group" list="mobExGroupList" value="${_esc(d.group)}" placeholder="Optional — same-group exercises share days" maxlength="40">
+        <datalist id="mobExGroupList">${groups.map(g => `<option value="${_esc(g)}">`).join('')}</datalist></div>
+    </div>
+    <div class="mob-exd-save">
+      <button class="btn-add" type="button" id="mobExSave"${_mobDraftDirty(ex) ? '' : ' disabled'}>Save changes</button>
+      <span class="polish-status" id="mobExStatus">${_esc(_mobDraftHint(ex))}</span>
+    </div>
+
+    ${fixed ? (() => {
+      const last = log.slice(-1)[0];
+      return `<div class="habit-detail-stats-grid">
+      <div class="habit-stat-card">
+        <div class="habit-stat-val mob-stat-dose">${_esc(dose(_mobCurrent(ex)))}</div>
+        <div class="habit-stat-label">Dose</div>
+      </div>
+      <div class="habit-stat-card">
+        <div class="habit-stat-val mob-stat-dose">${log.length}</div>
+        <div class="habit-stat-label">Sessions</div>
+      </div>
+      <div class="habit-stat-card">
+        <div class="habit-stat-val mob-stat-dose">${last ? _mobAgo(last.date, getActiveDateString()) : '–'}</div>
+        <div class="habit-stat-label">Last done</div>
+      </div>
+    </div>`;
+    })() : `<div class="habit-detail-stats-grid">
       <div class="habit-stat-card">
         <div class="habit-stat-val mob-stat-dose">${_esc(dose(baseline))}</div>
         <div class="habit-stat-label">Started</div>
@@ -521,7 +1024,7 @@ function renderMobExerciseDetail() {
         <div class="habit-stat-val mob-stat-dose">${_esc(_mobChangeLabel(ex, log))}</div>
         <div class="habit-stat-label">Change</div>
       </div>
-    </div>
+    </div>`}
 
     ${trend}
 
@@ -560,12 +1063,13 @@ function closeMobModal() {
 function _mobReadForm() {
   const numOrNull = id => { const v = Number(document.getElementById(id).value); return v > 0 ? Math.round(v) : null; };
   const data = {
-    name: document.getElementById('mobName').value.trim(),
+    name: _mobParseName(document.getElementById('mobName').value).name,
     session: _mobFormSession === 'night' ? 'night' : 'morning',
     measure: _mobFormMeasure === 'reps' ? 'reps' : 'hold',
     sets: Math.max(1, Math.round(Number(document.getElementById('mobSets').value) || 1)),
     frequency: Math.max(1, Math.min(7, Number(_mobFormFreq) || 3)),
     group: document.getElementById('mobGroup').value.trim(),
+    progress: _mobFormProgress === 'fixed' ? 'fixed' : 'dose',
     holdSeconds: null, reps: null,
   };
   if (data.measure === 'hold') data.holdSeconds = numOrNull('mobHold');
@@ -579,10 +1083,10 @@ function _mobClearForm() {
   document.getElementById('mobHold').value = '';
   document.getElementById('mobReps').value = '';
   document.getElementById('mobSets').value = '1';
-  _mobEditId = null;
   _mobFormSession = 'morning';
   _mobFormMeasure = 'hold';
   _mobFormFreq = 3;
+  _mobFormProgress = 'dose';
 }
 
 function _mobSameGroup(a, b) { return (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase(); }
@@ -594,41 +1098,68 @@ function _mobGroupClash(list, group, session, exceptId) {
   return hit ? `"${hit.group}" is a ${hit.session === 'night' ? 'night' : 'morning'} group — only exercises in the same session can share a group.` : '';
 }
 
-function submitMobForm() {
-  const status = document.getElementById('mobFormStatus');
-  const data = _mobReadForm();
-  if (!data.name) { showStatus(status, 'Give the exercise a name first.', 'var(--warning)'); return; }
-
+// Create (id null) or update an exercise. Returns an error message, or '' on success.
+function _mobSaveExercise(id, data) {
+  if (!data.name) return 'Give the exercise a name first.';
   const list = getMobExercises();
-  const orig = _mobEditId && list.find(x => x.id === _mobEditId);
+  const orig = id && list.find(x => x.id === id);
   // Changing the time of a grouped exercise moves the whole group to it.
   const moveGroup = orig && data.group && _mobSameGroup(orig.group, data.group) && orig.session !== data.session;
-  const clash = !moveGroup && _mobGroupClash(list, data.group, data.session, _mobEditId);
-  if (clash) { showStatus(status, clash, 'var(--warning)'); return; }
+  const clash = !moveGroup && _mobGroupClash(list, data.group, data.session, id);
+  if (clash) return clash;
   if (moveGroup) list.forEach(x => { if (_mobSameGroup(x.group, data.group)) x.session = data.session; });
-  if (_mobEditId) {
-    const i = list.findIndex(x => x.id === _mobEditId);
-    if (i !== -1) list[i] = { ...list[i], ...data };
-  } else {
-    list.push({ id: _mobId(), createdAt: Date.now(), ...data });
-  }
+  if (orig) Object.assign(orig, data);
+  else list.push({ id: _mobId(), createdAt: Date.now(), ...data });
   saveMobExercises(list);
+  return '';
+}
+
+function submitMobForm() {
+  const err = _mobSaveExercise(null, _mobReadForm());
+  if (err) { showStatus(document.getElementById('mobFormStatus'), err, 'var(--warning)'); return; }
   closeMobModal();
 }
 
-function editMobExercise(id) {
-  const ex = getMobExercises().find(x => x.id === id);
-  if (!ex) return;
-  _mobEditId = id;
-  _mobFormSession = ex.session === 'night' ? 'night' : 'morning';
-  _mobFormMeasure = ex.measure === 'reps' ? 'reps' : 'hold';
-  _mobFormFreq    = ex.frequency || 3;
-  document.getElementById('mobName').value = ex.name || '';
-  document.getElementById('mobGroup').value = ex.group || '';
-  document.getElementById('mobSets').value = ex.sets || 1;
-  document.getElementById('mobHold').value = ex.holdSeconds || '';
-  document.getElementById('mobReps').value = ex.reps || '';
-  openMobModal();
+// ── Detail-page editor ──
+// The editable fields of an exercise, normalised so a draft can be compared with it.
+function _mobFieldsOf(o) {
+  const reps = o.measure === 'reps';
+  return {
+    name: (o.name || '').trim(), session: o.session === 'night' ? 'night' : 'morning',
+    measure: reps ? 'reps' : 'hold', sets: Math.max(1, Math.round(Number(o.sets) || 1)),
+    holdSeconds: reps ? null : (Number(o.holdSeconds) > 0 ? Math.round(o.holdSeconds) : null),
+    reps: reps ? (Number(o.reps) > 0 ? Math.round(o.reps) : null) : null,
+    frequency: Math.max(1, Math.min(7, Number(o.frequency) || 3)),
+    group: (o.group || '').trim(), progress: o.progress === 'fixed' ? 'fixed' : 'dose',
+  };
+}
+function _mobDraftDirty(ex) {
+  return !!_mobDraft && JSON.stringify(_mobFieldsOf(_mobDraft)) !== JSON.stringify(_mobFieldsOf(ex));
+}
+// Side effect worth knowing before saving: a new time moves the whole group.
+function _mobDraftHint(ex) {
+  if (!_mobDraft || !ex.group || !_mobSameGroup(ex.group, _mobDraft.group) || _mobDraft.session === ex.session) return '';
+  const mates = getMobExercises().filter(x => x.id !== ex.id && _mobSameGroup(x.group, ex.group)).length;
+  return mates ? `Saving also moves the ${mates} other exercise${mates > 1 ? 's' : ''} in "${ex.group}".` : '';
+}
+function _mobSyncSaveBtn() {
+  const ex = getMobExercises().find(x => x.id === _mobDetailId);
+  const btn = document.getElementById('mobExSave');
+  if (!ex || !btn) return;
+  btn.disabled = !_mobDraftDirty(ex);
+  document.getElementById('mobExStatus').textContent = _mobDraftHint(ex);
+}
+function saveMobDraft() {
+  const ex = getMobExercises().find(x => x.id === _mobDetailId);
+  if (!ex || !_mobDraftDirty(ex)) return;
+  const err = _mobSaveExercise(ex.id, _mobFieldsOf(_mobDraft));
+  const status = document.getElementById('mobExStatus');
+  if (err) { status.textContent = err; status.style.color = 'var(--warning)'; return; }
+  _mobDraft = _mobFieldsOf(getMobExercises().find(x => x.id === ex.id));
+  renderMobExerciseDetail();
+  renderMobility();
+  if (document.getElementById('mobSessionPage').classList.contains('open')) renderMobSession();
+  showStatus(document.getElementById('mobExStatus'), 'Saved', 'var(--success)', 2000);
 }
 
 function deleteMobExercise(id) {
@@ -636,8 +1167,7 @@ function deleteMobExercise(id) {
   if (!ex || !confirm(`Remove "${ex.name}"? Its session log is deleted too.`)) return;
   delete MEM['mobility_progress:' + id];   // drop the log before the save that persists MEM
   saveMobExercises(getMobExercises().filter(x => x.id !== id));   // DB log rows go via FK on delete cascade
-  if (_mobEditId === id) _mobClearForm();
-  if (_mobDetailId === id) closeMobExerciseDetail();
+  if (_mobDetailId === id) { _mobDraft = null; closeMobExerciseDetail(); }
   renderMobility();
   if (document.getElementById('mobSessionPage').classList.contains('open')) renderMobSession();
 }
@@ -652,31 +1182,33 @@ function _mobUnlockBodyIfClear() {
 }
 
 
-// ── Session row: read the inputs, commit / auto-save ──
-function _mobReadSrow(exId) {
-  const ex = getMobExercises().find(x => x.id === exId);
-  if (!ex) return null;
-  const q = f => document.querySelector(`#mobSessionBody [data-mobf="${f}"][data-ex="${exId}"]`);
-  const n = (el, fb) => { const v = Math.round(Number(el && el.value)); return v > 0 ? v : fb; };
-  const out = { sets: n(q('sets'), 1), measure: ex.measure, holdSeconds: null, reps: null };
-  if (ex.measure === 'reps') out.reps = n(q('reps'), ex.reps || 1);
-  else out.holdSeconds = n(q('hold'), ex.holdSeconds || 1);
-  return out;
-}
-
-
-// ── Drag an exercise onto a group header / row to group it (onto "Ungrouped" to leave) ──
+// ── Drag an exercise onto a group header / row to group it (onto "Ungrouped" to leave).
+// Onto a grouped row, it lands just before or after that row (top / bottom half). ──
 let _mobDragId = null;
+let _mobDropAfter = false;
 
 function _mobDropTarget(e) { return e.target.closest('[data-mobgroup], [data-mobrow]'); }
 
-function _mobGroupExercise(id, group) {
+// Put `ex` into `other`'s group, just before or after `other`, and renumber the group.
+function _mobPlaceBeside(list, ex, other, after) {
+  const members = list.filter(x => x.id !== ex.id && _mobSameGroup(x.group, other.group)).sort(_mobListCmp);
+  members.splice(members.indexOf(other) + (after ? 1 : 0), 0, ex);
+  ex.group = other.group;
+  members.forEach((m, i) => { m.order = i + 1; });
+}
+
+function _mobGroupExercise(id, group, besideId, after) {
   const list = getMobExercises();
   const ex = list.find(x => x.id === id);
   if (!ex) return;
-  const clash = _mobGroupClash(list, group, ex.session, id);
+  const clash = !_mobSameGroup(ex.group, group) && _mobGroupClash(list, group, ex.session, id);
   if (clash) { alert(clash); return; }
-  ex.group = group;
+  const other = besideId && list.find(x => x.id === besideId);
+  if (other) _mobPlaceBeside(list, ex, other, after);
+  else {
+    if (!_mobSameGroup(ex.group, group)) ex.order = null;   // joins at the end of the new group
+    ex.group = group;
+  }
   saveMobExercises(list);
   renderMobility();
 }
@@ -688,15 +1220,45 @@ function _mobDrop(target) {
   if (target.dataset.mobgroup !== undefined) return _mobGroupExercise(ex.id, target.dataset.mobgroup);
   const other = list.find(x => x.id === target.dataset.mobrow);
   if (!other || other.id === ex.id) return;
-  if (other.group) return _mobGroupExercise(ex.id, other.group);
+  if (other.group) return _mobGroupExercise(ex.id, other.group, other.id, _mobDropAfter);
   // Dropped on another ungrouped exercise: start a new group with both.
-  const name = (prompt(`Group name for "${ex.name}" and "${other.name}":`) || '').trim();
-  if (!name) return;
-  const clash = _mobGroupClash(list, name, ex.session, ex.id) || _mobGroupClash(list, name, other.session, other.id);
-  if (clash) { alert(clash); return; }
   if (ex.session !== other.session) { alert('Only exercises in the same session can share a group.'); return; }
+  openMobGroupModal(ex, other);
+}
+
+// ── New-group dialog: a name plus Circuit or Pairs (no default — the user picks) ──
+let _mobNewGroup = null;   // { ids: [dragged, target], flow }
+function openMobGroupModal(ex, other) {
+  _mobNewGroup = { ids: [ex.id, other.id], flow: null };
+  document.getElementById('mobGroupSub').textContent = `${ex.name} + ${other.name}`;
+  document.getElementById('mobGroupName').value = '';
+  document.getElementById('mobGroupStatus').textContent = '';
+  renderMobGroupModal();
+  document.getElementById('mobGroupModal').classList.add('open');
+  _mobLockBody();
+  setTimeout(() => document.getElementById('mobGroupName').focus(), 0);
+}
+function closeMobGroupModal() {
+  document.getElementById('mobGroupModal').classList.remove('open');
+  _mobNewGroup = null;
+  _mobUnlockBodyIfClear();
+}
+function renderMobGroupModal() {
+  document.querySelectorAll('#mobGroupModal [data-gflow]').forEach(b => b.classList.toggle('active', b.dataset.gflow === _mobNewGroup.flow));
+  document.getElementById('mobGroupCreate').disabled = !(_mobNewGroup.flow && document.getElementById('mobGroupName').value.trim());
+}
+function createMobGroup() {
+  const name = document.getElementById('mobGroupName').value.trim();
+  if (!_mobNewGroup || !name || !_mobNewGroup.flow) return;
+  const list = getMobExercises();
+  const [ex, other] = _mobNewGroup.ids.map(id => list.find(x => x.id === id));
+  if (!ex || !other) { closeMobGroupModal(); return; }
+  const clash = _mobGroupClash(list, name, ex.session, ex.id) || _mobGroupClash(list, name, other.session, other.id);
+  if (clash) { document.getElementById('mobGroupStatus').textContent = clash; return; }
   ex.group = other.group = name;
+  _mobSetFlow(name, _mobNewGroup.flow);
   saveMobExercises(list);
+  closeMobGroupModal();
   renderMobility();
 }
 
@@ -704,10 +1266,19 @@ function _mobDrop(target) {
 // ── Listeners ──
 const _mobPanel = document.getElementById('tab-mobility');
 const _mobModal = document.getElementById('mobModal');
+const _mobGroupModal = document.getElementById('mobGroupModal');
+_mobGroupModal.addEventListener('click', e => {
+  const f = e.target.closest('[data-gflow]');
+  if (f) { _mobNewGroup.flow = f.dataset.gflow; renderMobGroupModal(); return; }
+  if (e.target.id === 'mobGroupCreate') { createMobGroup(); return; }
+  if (e.target.closest('[data-close]') || e.target === _mobGroupModal) closeMobGroupModal();
+});
+_mobGroupModal.addEventListener('input', renderMobGroupModal);
+_mobGroupModal.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); createMobGroup(); } });
 const _mobSessionPage = document.getElementById('mobSessionPage');
 const _mobExDetailPage = document.getElementById('mobExerciseDetailPage');
 
-// Tab panel: week grid, add button, exercise name → detail, edit / delete, session cards.
+// Tab panel: today rows → session page, nudge, week strip, list filter / add / edit / delete, rail links.
 const _mobList = document.getElementById('mobList');
 _mobList.addEventListener('dragstart', e => {
   const row = e.target.closest('[data-mobrow]');
@@ -721,8 +1292,13 @@ _mobList.addEventListener('dragover', e => {
   const t = _mobDropTarget(e);
   if (!t || !_mobDragId || t.dataset.mobrow === _mobDragId) return;
   e.preventDefault();
-  _mobList.querySelectorAll('.is-drop').forEach(x => x !== t && x.classList.remove('is-drop'));
-  t.classList.add('is-drop');
+  // Grouped rows show where the exercise will land; everything else highlights as a whole.
+  const beside = t.dataset.mobrow && t.classList.contains('in-group');
+  if (beside) { const r = t.getBoundingClientRect(); _mobDropAfter = e.clientY > r.top + r.height / 2; }
+  _mobList.querySelectorAll('.is-drop, .drop-before, .drop-after').forEach(x => x !== t && x.classList.remove('is-drop', 'drop-before', 'drop-after'));
+  t.classList.toggle('is-drop', !beside);
+  t.classList.toggle('drop-before', !!beside && !_mobDropAfter);
+  t.classList.toggle('drop-after', !!beside && _mobDropAfter);
 });
 _mobList.addEventListener('drop', e => {
   const t = _mobDropTarget(e);
@@ -733,21 +1309,47 @@ _mobList.addEventListener('drop', e => {
 });
 _mobList.addEventListener('dragend', () => {
   _mobDragId = null;
-  _mobList.querySelectorAll('.is-drop, .is-dragging').forEach(x => x.classList.remove('is-drop', 'is-dragging'));
+  _mobList.querySelectorAll('.is-drop, .is-dragging, .drop-before, .drop-after').forEach(x => x.classList.remove('is-drop', 'is-dragging', 'drop-before', 'drop-after'));
 });
 
 _mobPanel.addEventListener('click', e => {
-  // Checked first: names sit inside the session card / week column, which have their own click targets.
+  const fl = e.target.closest('[data-mobflow]');
+  if (fl) { _mobSetFlow(fl.dataset.mobflow, fl.dataset.v); renderMobList(); return; }
+
+  const bump = e.target.closest('[data-mobbump]');
+  if (bump) {
+    const ex = getMobExercises().find(x => x.id === bump.dataset.mobbump);
+    const n = ex && _mobNudge([ex], getActiveDateString());
+    if (n) {
+      const bumps = { ...(MEM['mobility_bumps_v1'] || {}), [ex.id]: { ...n.to, since: getActiveDateString() } };
+      MEM['mobility_bumps_v1'] = bumps; _syncSetting('mobility_bumps_v1', bumps);
+    }
+    renderMobility();
+    return;
+  }
+  const skip = e.target.closest('[data-mobskip]');
+  if (skip) {
+    const last = getMobLog(skip.dataset.mobskip).slice(-1)[0];
+    const skips = { ...(MEM['mobility_nudge_skip_v1'] || {}), [skip.dataset.mobskip]: last && last.date };
+    MEM['mobility_nudge_skip_v1'] = skips; _syncSetting('mobility_nudge_skip_v1', skips);
+    renderMobility();
+    return;
+  }
+
+  const flt = e.target.closest('[data-mobfilter]');
+  if (flt) {
+    _mobFilter = flt.dataset.mobfilter;
+    document.querySelectorAll('#mobFilter [data-mobfilter]').forEach(b => b.classList.toggle('active', b === flt));
+    renderMobList();
+    return;
+  }
+
+  // Checked before rows: names sit inside rows, which have their own click target.
   const det = e.target.closest('[data-mobdetail]');
   if (det) { openMobExerciseDetail(det.dataset.mobdetail); return; }
 
   const day = e.target.closest('[data-mobday]');
-  if (day) {
-    const i = Number(day.dataset.mobday);
-    _mobOpenDay = _mobOpenDay === i ? null : i;
-    renderMobWeek(compileMobSchedule(getMobExercises()));
-    return;
-  }
+  if (day) { _mobOpenDay = Number(day.dataset.mobday); renderMobWeek(compileMobSchedule(getMobExercises())); return; }
 
   const wk = e.target.closest('[data-mobweek-open]');
   if (wk) {
@@ -759,10 +1361,10 @@ _mobPanel.addEventListener('click', e => {
   const so = e.target.closest('[data-mobsession-open]');
   if (so) { openMobSession(getActiveDateString(), so.dataset.mobsessionOpen); return; }
 
-  if (e.target.id === 'mobOpenAddBtn') { _mobClearForm(); openMobModal(); return; }
+  if (e.target.closest('[data-mobadd]')) { _mobClearForm(); openMobModal(); return; }
 
   const ed = e.target.closest('[data-mobedit]');
-  if (ed) { editMobExercise(ed.dataset.mobedit); return; }
+  if (ed) { openMobExerciseDetail(ed.dataset.mobedit); return; }
 
   const del = e.target.closest('[data-mobdel]');
   if (del) { deleteMobExercise(del.dataset.mobdel); return; }
@@ -770,6 +1372,8 @@ _mobPanel.addEventListener('click', e => {
   const row = e.target.closest('[data-mobrow]');
   if (row) openMobExerciseDetail(row.dataset.mobrow);
 });
+
+document.getElementById('mobSearch').addEventListener('input', e => { _mobQuery = e.target.value; renderMobList(); });
 
 // Modal: segmented controls, submit, close.
 _mobModal.addEventListener('click', e => {
@@ -779,12 +1383,29 @@ _mobModal.addEventListener('click', e => {
   const m = e.target.closest('[data-mobmeasure]');
   if (m) { _mobFormMeasure = m.dataset.mobmeasure; renderMobForm(); return; }
 
+  const pr = e.target.closest('[data-mobprogress]');
+  if (pr) { _mobFormProgress = pr.dataset.mobprogress; renderMobForm(); return; }
+
   const f = e.target.closest('[data-mobfreq]');
   if (f) { _mobFormFreq = Number(f.dataset.mobfreq); renderMobForm(); return; }
 
   if (e.target.id === 'mobAddBtn')     { submitMobForm(); return; }
   if (e.target.id === 'mobModalClose') { closeMobModal(); return; }
   if (e.target.id === 'mobModal')      { closeMobModal(); return; }   // backdrop
+});
+
+// Shortcuts typed in the name fill the fields as you type; they're stripped from the name on save.
+document.getElementById('mobName').addEventListener('input', e => {
+  const f = _mobParseName(e.target.value).fields;
+  if (f.session)     _mobFormSession = f.session;
+  if (f.measure)     _mobFormMeasure = f.measure;
+  if (f.progress)    _mobFormProgress = f.progress;
+  if (f.frequency)   _mobFormFreq    = f.frequency;
+  if (f.sets)        document.getElementById('mobSets').value  = f.sets;
+  if (f.holdSeconds) document.getElementById('mobHold').value  = f.holdSeconds;
+  if (f.reps)        document.getElementById('mobReps').value  = f.reps;
+  if (f.group)       document.getElementById('mobGroup').value = f.group;
+  renderMobForm();
 });
 
 _mobModal.addEventListener('keydown', e => {
@@ -810,47 +1431,110 @@ _mobSessionPage.addEventListener('click', e => {
     _mobSessionPage.scrollTop = 0; renderMobSession(); return;
   }
 
+  const ok = e.target.closest('[data-mobsetok]');
+  if (ok) { _mobTickSet(ok.dataset.mobsetok, Number(ok.dataset.i)); return; }
+
+  const add = e.target.closest('[data-mobaddset]');
+  if (add) {
+    const id = add.dataset.mobaddset;
+    const shown = document.querySelectorAll(`#mobSessionBody [data-mobset="${id}"]`).length;
+    _mobSetDraftFor(id, _mobSessionDate).rows = shown + 1;
+    renderMobSession();
+    return;
+  }
+
+  if (e.target.closest('[data-mobrestskip]')) { _mobStopRest(); return; }
+  if (e.target.closest('[data-mobrestadd]') && _mobRest) { _mobRest.end += 15000; return; }
+
+  const fl = e.target.closest('[data-mobflow]');
+  if (fl) { _mobSetFlow(fl.dataset.mobflow, fl.dataset.v); _mobStopRest(false); renderMobSession(); renderMobList(); return; }
+
   const det = e.target.closest('[data-mobdetail]');
   if (det) { openMobExerciseDetail(det.dataset.mobdetail); return; }
 });
 
+// Tick / untick a set from the table and refresh everything that shows it.
+function _mobTickSet(exId, i) {
+  if (_mobToggleSet(exId, _mobSessionDate, i)) _mobAfterSet(exId, i);
+  else _mobStopRest(false);
+  renderMobSession();
+  renderMobility();
+  if (_mobDetailId === exId && _mobExDetailPage.classList.contains('open')) renderMobExerciseDetail();
+}
+
+// Enter saves. In a set box: logs the set and jumps to the next one (a set that's
+// already logged just saves its edited value). In a note: saves the note.
+_mobSessionPage.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const inp = e.target.closest('[data-mobset], [data-mobnote]');
+  if (!inp) return;
+  e.preventDefault();
+  if (inp.dataset.mobset === undefined) { inp.blur(); return; }   // blur fires change, which saves
+  const exId = inp.dataset.mobset, i = Number(inp.dataset.i);
+  if (_mobSetVals(getMobLog(exId).find(x => x.date === _mobSessionDate))[i] != null) { inp.blur(); return; }
+  _mobTickSet(exId, i);
+  const next = document.querySelector('#mobSessionBody .mob-cell.next .mob-set-in');
+  if (next) next.focus();
+});
+
 _mobSessionPage.addEventListener('change', e => {
   const date = _mobSessionDate;
-
-  const chk = e.target.closest('[data-mobrowcheck]');
-  if (chk) {
-    const exId = chk.dataset.mobrowcheck;
-    if (chk.checked) {
-      const vals = _mobReadSrow(exId);
-      if (vals) _mobUpsertEntry(exId, date, vals);
-    } else {
-      if (date !== getActiveDateString() && !confirm("Remove this session's log entry?")) {
-        chk.checked = true; return;
-      }
-      _mobDeleteEntry(exId, date);
-    }
+  const after = exId => {
     renderMobSession();
     renderMobility();
     if (_mobDetailId === exId && _mobExDetailPage.classList.contains('open')) renderMobExerciseDetail();
+  };
+
+  // A set's value: saved straight away if the set is done, else kept as a draft.
+  const inp = e.target.closest('[data-mobset]');
+  if (inp) {
+    const exId = inp.dataset.mobset, i = Number(inp.dataset.i);
+    const ex = getMobExercises().find(x => x.id === exId);
+    const entry = getMobLog(exId).find(en => en.date === date);
+    const vals = _mobSetVals(entry).slice();
+    const v = Math.round(Number(inp.value));
+    if (ex && vals[i] != null && v > 0) { vals[i] = v; _mobWriteSets(ex, date, vals, entry.note); after(exId); }
+    else _mobSetDraftFor(exId, date).vals[i] = inp.value;
     return;
   }
 
-  const fld = e.target.closest('[data-mobf]');
-  if (fld) {
-    const exId = fld.dataset.ex;
-    if (!getMobLog(exId).some(en => en.date === date)) return;   // not committed — wait for the tick
-    const vals = _mobReadSrow(exId);
-    if (vals) _mobUpsertEntry(exId, date, vals);
-    renderMobSession();
-    renderMobility();
-    if (_mobDetailId === exId && _mobExDetailPage.classList.contains('open')) renderMobExerciseDetail();
+  const note = e.target.closest('[data-mobnote]');
+  if (note) {
+    const exId = note.dataset.mobnote;
+    const entry = getMobLog(exId).find(en => en.date === date);
+    if (entry) { entry.note = note.value.trim(); saveMobLog(exId, getMobLog(exId)); }
+    else _mobSetDraftFor(exId, date).note = note.value.trim();
+    return;
+  }
+
+  if (e.target.matches('[data-mobroundrest]')) {
+    MEM['mobility_round_rest_v1'] = Number(e.target.value);
+    _syncSetting('mobility_round_rest_v1', Number(e.target.value));
+    return;
+  }
+
+  const rest = e.target.closest('[data-mobrest]');
+  if (rest) {
+    const all = { ...(MEM['mobility_rest_v1'] || {}), [rest.dataset.mobrest]: Number(rest.value) };
+    MEM['mobility_rest_v1'] = all; _syncSetting('mobility_rest_v1', all);
   }
 });
 
 // Exercise detail page.
 _mobExDetailPage.addEventListener('click', e => {
   if (e.target.id === 'mobExDetailBack') { closeMobExerciseDetail(); return; }
-  if (e.target.id === 'mobExEdit')       { editMobExercise(_mobDetailId); return; }
+  if (e.target.id === 'mobExSave')       { saveMobDraft(); return; }
+
+  const opt = e.target.closest('[data-mobd-session], [data-mobd-measure], [data-mobd-progress], [data-mobd-freq]');
+  if (opt && _mobDraft) {
+    const ds = opt.dataset;
+    if (ds.mobdSession)  _mobDraft.session   = ds.mobdSession;
+    if (ds.mobdMeasure)  _mobDraft.measure   = ds.mobdMeasure;
+    if (ds.mobdProgress) _mobDraft.progress  = ds.mobdProgress;
+    if (ds.mobdFreq)     _mobDraft.frequency = Number(ds.mobdFreq);
+    renderMobExerciseDetail();
+    return;
+  }
   if (e.target.id === 'mobExDelete')     { deleteMobExercise(_mobDetailId); return; }
 
   const delEntry = e.target.closest('[data-mobdel-entry]');
@@ -870,13 +1554,47 @@ _mobExDetailPage.addEventListener('click', e => {
   }
 });
 
+// Detail-page editor: typing updates the draft and the Save button, without a re-render (keeps focus).
+_mobExDetailPage.addEventListener('input', e => {
+  const f = e.target.dataset.mobd;
+  if (!f || !_mobDraft) return;
+  _mobDraft[f] = e.target.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
+  _mobSyncSaveBtn();
+});
+_mobExDetailPage.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.mobd) { e.preventDefault(); saveMobDraft(); }
+});
+
 // One Escape handler for all three mobility overlays — close the topmost only.
 document.addEventListener('keydown', e => {
+  // N opens the add modal — on the Mobility tab, when nothing else has the keyboard.
+  if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey &&
+      _mobPanel.classList.contains('active') &&
+      !document.querySelector('.sr-modal.open') &&
+      !document.querySelector('.habit-detail-page.open') &&
+      !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) &&
+      !document.activeElement.isContentEditable) {
+    e.preventDefault();
+    _mobClearForm();
+    openMobModal();
+    return;
+  }
   if (e.key !== 'Escape') return;
+  if (_mobGroupModal.classList.contains('open'))     { closeMobGroupModal(); return; }
   if (_mobModal.classList.contains('open'))          { closeMobModal(); return; }
   if (_mobExDetailPage.classList.contains('open'))   { closeMobExerciseDetail(); return; }
   if (_mobSessionPage.classList.contains('open'))    { closeMobSession(); return; }
 });
+
+// Wide tabs scale the whole layout up, like enlarging an image, instead of
+// stretching rows. 1094 = 820px main + 14px gap + 260px side column — the
+// width the two-column layout (css/mobility.css) is designed at.
+const MOB_BASE_WIDTH = 1094;
+const _mobLayoutEl = document.querySelector('#tab-mobility .mob-layout');
+new ResizeObserver(([e]) => {
+  const w = e.contentRect.width;
+  _mobLayoutEl.style.zoom = w > MOB_BASE_WIDTH ? (w / MOB_BASE_WIDTH).toFixed(4) : '';
+}).observe(document.querySelector('#tab-mobility .mob-section'));
 
 // Re-render when the tab is opened (mirrors the Diet / Areas tabs).
 document.querySelectorAll('.tab-btn').forEach(btn => {

@@ -1125,14 +1125,21 @@ async function _syncMobExercises(list) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
+    // `progress` is only sent once some exercise is fixed, so a DB that hasn't
+    // had master.sql's mobility_exercises.progress column added keeps saving.
+    const withProgress = list.some(ex => ex.progress === 'fixed');
+    const withOrder = list.some(ex => ex.order != null);   // same idea for sort_order
     const { error } = await sb.from('mobility_exercises').upsert(list.map(ex => ({
       id: ex.id, user_id: uid, name: ex.name,
       session: ex.session || 'morning', measure: ex.measure || 'hold',
       sets: ex.sets || 1, hold_seconds: ex.holdSeconds ?? null, reps: ex.reps ?? null,
       frequency: ex.frequency || 3, group_name: ex.group || null,
+      ...(withProgress ? { progress: ex.progress === 'fixed' ? 'fixed' : null } : {}),
+      ...(withOrder ? { sort_order: ex.order ?? null } : {}),
       created_at: new Date(ex.createdAt || Date.now()).toISOString(),
     })), { onConflict: 'id' });
-    if (error) _syncFailed('mobility_exercises upsert failed', error);
+    if (error) _syncFailed(withProgress || withOrder ? 'mobility_exercises upsert failed (run master.sql for mobility_exercises.progress / sort_order?)'
+                                       : 'mobility_exercises upsert failed', error);
   }
   const { data: existing = [], error: selErr } =
     await sb.from('mobility_exercises').select('id').eq('user_id', uid);
@@ -1149,10 +1156,14 @@ async function _syncMobExercises(list) {
 async function _syncMobLog(exerciseId, entries) {
   if (LOCAL_MODE) return _saveLocal();
   const uid = await _requireUid(); if (!uid) return;
+  // set_values / note are only sent once some entry has them, so a DB that hasn't
+  // had master.sql's new mobility_logs columns added keeps saving older-style logs.
+  const withSets = entries.some(e => Array.isArray(e.setValues) || e.note);
   const rows = entries.map(e => ({
     user_id: uid, exercise_id: exerciseId, date: e.date,
     sets: e.sets || 1, measure: e.measure || 'hold',
     hold_seconds: e.holdSeconds ?? null, reps: e.reps ?? null,
+    ...(withSets ? { set_values: Array.isArray(e.setValues) ? e.setValues : null, note: e.note || null } : {}),
   }));
   if (rows.length) {
     let { error } = await sb.from('mobility_logs').upsert(rows, { onConflict: 'user_id,exercise_id,date' });
@@ -1160,7 +1171,8 @@ async function _syncMobLog(exerciseId, entries) {
       await _syncMobExercises(getMobExercises());
       ({ error } = await sb.from('mobility_logs').upsert(rows, { onConflict: 'user_id,exercise_id,date' }));
     }
-    if (error) _syncFailed('mobility_logs upsert failed', error);
+    if (error) _syncFailed(withSets ? 'mobility_logs upsert failed (run master.sql for mobility_logs.set_values / note?)'
+                                   : 'mobility_logs upsert failed', error);
   }
   const keepDates = new Set(entries.map(e => e.date));
   const { data: existing = [], error: selErr } =
@@ -1470,12 +1482,14 @@ async function loadFromSupabase() {
     id: r.id, name: r.name, session: r.session, measure: r.measure,
     sets: r.sets, holdSeconds: r.hold_seconds, reps: r.reps,
     frequency: r.frequency, group: r.group_name || '', createdAt: Date.parse(r.created_at),
+    progress: r.progress === 'fixed' ? 'fixed' : 'dose', order: r.sort_order ?? null,
   }));
   mobLogs.forEach(r => {
     const k = 'mobility_progress:' + r.exercise_id;
     (MEM[k] = MEM[k] || []).push({
       id: r.id, date: r.date, sets: r.sets, measure: r.measure,
       holdSeconds: r.hold_seconds, reps: r.reps,
+      setValues: Array.isArray(r.set_values) ? r.set_values : null, note: r.note || '',
     });
   });
 

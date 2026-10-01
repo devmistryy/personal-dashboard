@@ -441,9 +441,13 @@ create table if not exists mobility_exercises (
   reps         integer,                             -- set when measure = 'reps'
   frequency    integer not null default 3,          -- times per week, 1..7
   group_name   text,                                -- optional; same-group exercises share days
+  progress     text,                                -- null/'dose' = grows over time; 'fixed' = same dose, no progress tracking
+  sort_order   integer,                             -- manual order inside a group (drag to reorder)
   created_at   timestamptz default now()
 );
 alter table mobility_exercises add column if not exists group_name text;
+alter table mobility_exercises add column if not exists progress text;
+alter table mobility_exercises add column if not exists sort_order integer;
 create index if not exists mobility_exercises_user_idx
   on mobility_exercises (user_id);
 alter table mobility_exercises enable row level security;
@@ -460,9 +464,13 @@ create table if not exists mobility_logs (
   measure      text not null default 'hold',
   hold_seconds integer,
   reps         integer,
+  set_values   jsonb,                               -- per-set values, e.g. [30, 30, null]; null = set not done
+  note         text,
   created_at   timestamptz not null default now(),
   unique (user_id, exercise_id, date)               -- upsert target (no delete-then-insert)
 );
+alter table mobility_logs add column if not exists set_values jsonb;
+alter table mobility_logs add column if not exists note text;
 create index if not exists mobility_logs_user_ex_idx
   on mobility_logs (user_id, exercise_id);
 alter table mobility_logs enable row level security;

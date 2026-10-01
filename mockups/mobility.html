@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobility — mockup</title>
+<link rel="stylesheet" href="../css/main.css">
+<style>
+  /* Mockup-only styles, prefixed mb- so nothing collides with the app sheets. */
+  :root {
+    --mb-line: rgba(255,255,255,0.06);
+    --mb-soft: rgba(255,255,255,0.035);
+    --mb-am: #F2C063; --mb-pm: #A9B2D6;
+    --mb-hold: #7FBBFF; --mb-reps: #BCA6FB; --mb-ok: #6BE3A4;
+  }
+  body { padding: 28px 16px 80px; }
+  .mb-wrap { max-width: 940px; margin: 0 auto; }
+  /* Wide screens: a side rail fills the margins with extra info; below 1240px it stacks under the main column. */
+  @media (min-width: 1240px) {
+    .mb-wrap { max-width: 1260px; }
+    .mb-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+    .mb-rail { position: sticky; top: 16px; }
+  }
+  .mb-rail .card { padding: 16px 18px; }
+  .mb-rail-h { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline; }
+  .mb-rail-h b { font: 700 20px var(--font-mono); letter-spacing: 0; color: var(--text-primary); text-transform: none; }
+  .mb-heat { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .mb-heat i { height: 16px; border-radius: 3px; background: rgba(255,255,255,0.05); }
+  .mb-heat i.l1 { background: rgba(107,227,164,0.25); } .mb-heat i.l2 { background: rgba(107,227,164,0.5); } .mb-heat i.l3 { background: rgba(107,227,164,0.85); }
+  .mb-heat i.now { outline: 1.5px solid rgba(74,158,255,0.8); outline-offset: 1px; }
+  .mb-heat-d { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 4px; font: 700 8.5px var(--font-mono); color: var(--text-tertiary); text-align: center; }
+  .mb-rail-foot { display: flex; justify-content: space-between; margin-top: 10px; font: 11px var(--font-mono); color: var(--text-tertiary); }
+  .mb-rail-foot .ok { color: var(--mb-ok); }
+  .mb-gain { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 10px; padding: 7px 0; border-bottom: 1px solid var(--mb-line); font-size: 12.5px; }
+  .mb-gain:last-child { border-bottom: 0; padding-bottom: 0; }
+  .mb-gain .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-gain .pct { font: 600 11px var(--font-mono); color: var(--mb-ok); }
+  .mb-gain .fr { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font: 10.5px var(--font-mono); color: var(--text-tertiary); }
+  .mb-gain .bar { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); overflow: hidden; }
+  .mb-gain .bar i { display: block; height: 100%; background: var(--mb-hold); }
+  .mb-gain .bar i.reps { background: var(--mb-reps); }
+  .mb-att { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12.5px; }
+  .mb-att .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-att .why { font: 10.5px var(--font-mono); color: #E0A36B; white-space: nowrap; }
+  .mb-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .mb-note {
+    font-size: 11.5px; color: var(--text-tertiary); border: 1px dashed rgba(255,255,255,0.14);
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 18px; line-height: 1.5;
+  }
+  .mb-note b { color: var(--text-secondary); font-weight: 600; }
+  .card { margin-bottom: 14px; }
+
+  /* Small outline buttons (same family as To Do's "+ Add task") */
+  .mb-btn {
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+    font: 600 12px var(--font-body); color: var(--text-secondary);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.12); background: var(--mb-soft);
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .mb-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .mb-btn.primary { background: #FAFAFA; color: #111; border-color: #FAFAFA; }
+  .mb-btn.primary:hover { background: #fff; }
+  .mb-btn kbd { font: 600 10px var(--font-mono); opacity: .55; }
+  .mb-link { background: none; border: 0; padding: 0; cursor: pointer; font: 600 11.5px var(--font-body); color: var(--mb-hold); }
+  .mb-link:hover { text-decoration: underline; }
+
+  /* ── Header ── */
+  .mb-head { display: flex; align-items: center; gap: 18px; }
+  .mb-ring { width: 64px; height: 64px; flex-shrink: 0; position: relative; }
+  .mb-ring svg { transform: rotate(-90deg); }
+  .mb-ring-txt { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px var(--font-mono); }
+  .mb-head-main { flex: 1; min-width: 0; }
+  .mb-head-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .mb-head-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 3px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .mb-head-sub .ok { color: var(--mb-ok); }
+  .mb-head-actions { display: flex; gap: 8px; }
+
+  /* Progression nudge */
+  .mb-nudge {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 16px; padding: 9px 12px; border-radius: 10px;
+    background: rgba(107,227,164,0.07); border: 1px solid rgba(107,227,164,0.22);
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .mb-nudge .ic { color: var(--mb-ok); font-weight: 800; }
+  .mb-nudge b { color: var(--text-primary); font-weight: 600; }
+  .mb-nudge .sp { flex: 1; }
+
+  /* ── Today: two sessions side by side ── */
+  .mb-sessions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  .mb-sess { border-radius: 12px; background: var(--mb-soft); border: 1px solid rgba(255,255,255,0.07); overflow: hidden; }
+  .mb-sess-head { display: flex; align-items: center; gap: 8px; padding: 11px 12px 9px 14px; }
+  .mb-sess-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .mb-sess-label.am { color: var(--mb-am); } .mb-sess-label.pm { color: var(--mb-pm); }
+  .mb-sess-meta { font: 11px var(--font-mono); color: var(--text-tertiary); flex: 1; }
+  .mb-sess-bar { height: 2px; background: var(--mb-line); }
+  .mb-sess-bar i { display: block; height: 100%; background: var(--mb-ok); transition: width .25s; }
+  .mb-sess-list { padding: 4px 0; }
+
+  .mb-trow {
+    display: flex; align-items: center; gap: 10px; padding: 7px 12px 7px 14px;
+    font-size: 13px; cursor: pointer; transition: background .12s;
+  }
+  .mb-trow:hover { background: rgba(255,255,255,0.04); }
+  .mb-cb {
+    width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0;
+    border: 1.5px solid rgba(255,255,255,0.28); display: grid; place-items: center;
+    font-size: 11px; color: #111; font-weight: 900; transition: background .12s, border-color .12s;
+  }
+  .mb-trow.done .mb-cb { background: var(--mb-ok); border-color: var(--mb-ok); }
+  .mb-trow.done .mb-tname { color: var(--text-tertiary); text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.2); }
+  .mb-tname { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-tgroup { font-size: 10.5px; color: var(--text-tertiary); margin-left: 6px; }
+  .mb-tcue { font-size: 10.5px; color: var(--mb-ok); font-family: var(--font-mono); }
+
+  .mb-dose {
+    font: 600 10.5px var(--font-mono); padding: 2px 7px; border-radius: 6px; white-space: nowrap; flex-shrink: 0;
+  }
+  .mb-dose.hold { background: rgba(74,158,255,0.14); color: var(--mb-hold); }
+  .mb-dose.reps { background: rgba(167,139,250,0.16); color: var(--mb-reps); }
+  .mb-sess-empty { padding: 14px; font-size: 12px; color: var(--text-tertiary); font-style: italic; }
+
+  /* ── Week strip ── */
+  .mb-week { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; }
+  .mb-day {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 9px 4px 10px; border-radius: 10px; cursor: pointer;
+    background: var(--mb-soft); border: 1px solid transparent; font-family: var(--font-body); color: var(--text-secondary);
+    transition: background .15s, border-color .15s;
+  }
+  .mb-day:hover { background: rgba(255,255,255,0.07); }
+  .mb-day.today { border-color: rgba(74,158,255,0.5); }
+  .mb-day.sel { background: rgba(74,158,255,0.14); border-color: rgba(74,158,255,0.5); }
+  .mb-day-n { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); }
+  .mb-day-d { font: 700 15px var(--font-mono); color: var(--text-primary); line-height: 1; }
+  .mb-day-pips { display: flex; flex-direction: column; gap: 3px; width: 70%; }
+  .mb-pip { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .mb-pip i { display: block; height: 100%; }
+  .mb-pip.am i { background: var(--mb-am); } .mb-pip.pm i { background: var(--mb-pm); }
+  .mb-day-c { font: 10px var(--font-mono); color: var(--text-tertiary); }
+  .mb-day.past.miss .mb-day-c { color: #E0736B; }
+  .mb-week-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--mb-line); font-size: 12.5px; color: var(--text-secondary); display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mb-week-detail > div { min-width: 0; }
+  .mb-wd-h { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .mb-wd-h.am { color: var(--mb-am); } .mb-wd-h.pm { color: var(--mb-pm); }
+  .mb-wd-items { line-height: 1.75; }
+  .mb-wd-items span { white-space: nowrap; display: inline-block; }
+  .mb-wd-items span + span::before { content: '·'; margin: 0 6px 0 2px; color: var(--text-tertiary); }
+
+  /* ── Exercise library ── */
+  .mb-lib-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .mb-seg { display: inline-flex; background: var(--mb-soft); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 2px; }
+  .mb-seg button { background: none; border: 0; color: var(--text-tertiary); font: 600 11.5px var(--font-body); padding: 5px 10px; border-radius: 7px; cursor: pointer; }
+  .mb-seg button.on { background: rgba(255,255,255,0.10); color: var(--text-primary); }
+  .mb-search {
+    flex: 1; min-width: 120px; max-width: 220px; padding: 6px 10px; border-radius: 8px;
+    background: var(--mb-soft); border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-primary); font: 12px var(--font-body);
+  }
+  .mb-search:focus { outline: none; border-color: rgba(74,158,255,0.5); }
+  .mb-lib-head .sp { flex: 1; }
+
+  /* One-line rows: columns fill the width instead of stacking on the left */
+  .mb-cols, .mb-row {
+    display: grid; align-items: center; column-gap: 14px;
+    grid-template-columns: 14px minmax(0, 1fr) 118px 50px 128px 76px 44px;
+  }
+  .mb-cols {
+    padding: 0 10px 6px; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text-tertiary); border-bottom: 1px solid var(--mb-line); white-space: nowrap;
+  }
+  .mb-row {
+    padding: 0 10px; min-height: 40px; border-bottom: 1px solid var(--mb-line);
+    font-size: 13px; cursor: pointer; transition: background .12s;
+  }
+  .mb-row:hover { background: rgba(255,255,255,0.035); }
+  .mb-row:hover .mb-act, .mb-row:hover .mb-grip { opacity: 1; }
+  .mb-grip { opacity: 0; color: var(--text-tertiary); font-size: 11px; cursor: grab; letter-spacing: -2px; transition: opacity .15s; }
+  .mb-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .mb-name > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mb-sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .mb-sdot.am { background: var(--mb-am); } .mb-sdot.pm { background: var(--mb-pm); }
+  .mb-dosecell { display: flex; align-items: center; gap: 6px; }
+  .mb-up { font: 600 10px var(--font-mono); color: var(--mb-ok); white-space: nowrap; }
+  .mb-freq { font: 11.5px var(--font-mono); color: var(--text-secondary); }
+  .mb-days { display: flex; gap: 3px; }
+  .mb-di {
+    width: 15px; height: 15px; border-radius: 4px; display: grid; place-items: center;
+    font: 700 8.5px var(--font-mono); background: rgba(255,255,255,0.05); color: var(--text-tertiary);
+  }
+  .mb-di.on { background: rgba(74,158,255,0.28); color: #fff; }
+  .mb-di.on.done { background: rgba(107,227,164,0.35); }
+  .mb-last { font: 11px var(--font-mono); color: var(--text-tertiary); white-space: nowrap; }
+  .mb-last.stale { color: #E0A36B; }
+  .mb-acts { display: flex; justify-content: flex-end; gap: 2px; }
+  .mb-act { opacity: 0; background: none; border: 0; color: var(--text-tertiary); cursor: pointer; font-size: 13px; padding: 3px 5px; border-radius: 6px; transition: opacity .15s, color .15s; }
+  .mb-act:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+  .mb-grp {
+    display: flex; align-items: center; gap: 10px; padding: 14px 10px 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary);
+  }
+  .mb-grp .cnt { font: 500 10.5px var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--text-tertiary); }
+  .mb-grp .ln { flex: 1; height: 1px; background: var(--mb-line); }
+  .mb-row.in-grp { box-shadow: inset 2px 0 rgba(255,255,255,0.1); }
+
+  /* ── Add-exercise modal (compact) ── */
+  .mb-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; place-items: center; z-index: 50; padding: 16px; }
+  .mb-modal-bg.open { display: grid; }
+  .mb-modal { width: 100%; max-width: 440px; background: #151618; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; }
+  .mb-modal h3 { font-size: 16px; margin-bottom: 14px; display: flex; justify-content: space-between; }
+  .mb-modal input.big { width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--mb-soft); border: 1px solid rgba(255,255,255,0.12); color: var(--text-primary); font: 14px var(--font-body); }
+  .mb-modal .hint { font-size: 11px; color: var(--text-tertiary); margin: 6px 2px 14px; }
+  .mb-modal .hint code { font-family: var(--font-mono); color: var(--text-secondary); }
+  .mb-fgrid { display: grid; grid-template-columns: 80px 1fr; gap: 10px 12px; align-items: center; font-size: 12px; color: var(--text-tertiary); }
+  .mb-fgrid .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .mb-num { width: 58px; padding: 6px 8px; border-radius: 8px; background: var(--mb-soft); border: 1px solid rgba(255,255,255,0.12); color: var(--text-primary); font: 13px var(--font-mono); text-align: center; }
+  .mb-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--mb-line); }
+
+  /* ── Phone ── */
+  @media (max-width: 720px) {
+    .mb-sessions { grid-template-columns: 1fr; }
+    .mb-cols { display: none; }
+    .mb-row {
+      grid-template-columns: minmax(0,1fr) auto; row-gap: 5px; padding: 9px 10px;
+      grid-template-areas: "name dose" "days last";
+    }
+    .mb-grip, .mb-freq, .mb-acts { display: none; }
+    .mb-name { grid-area: name; } .mb-dosecell { grid-area: dose; justify-self: end; }
+    .mb-days { grid-area: days; } .mb-last { grid-area: last; justify-self: end; }
+    .mb-week-detail { grid-template-columns: 1fr; }
+    .mb-head-actions .mb-btn:not(.primary) { display: none; }
+  }
+  @media (max-width: 480px) {
+    .mb-week { gap: 3px; }
+    .mb-search { max-width: none; order: 5; flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="mb-wrap">
+  <div class="mb-note">
+    <b>Mobility mockup.</b> Everything is clickable: tick exercises in Today, pick a day in the week strip,
+    filter the list, press <b>+ Exercise</b> (or <b>N</b>). Resize below 720px for the phone layout.
+  </div>
+
+  <div class="mb-layout">
+  <div class="mb-main">
+  <!-- Header + today -->
+  <div class="card">
+    <div class="mb-head">
+      <div class="mb-ring">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+          <circle id="ring" cx="32" cy="32" r="27" fill="none" stroke="#6BE3A4" stroke-width="5" stroke-linecap="round" stroke-dasharray="169.6" stroke-dashoffset="169.6" style="transition:stroke-dashoffset .3s"/>
+        </svg>
+        <div class="mb-ring-txt" id="ringTxt">0/0</div>
+      </div>
+      <div class="mb-head-main">
+        <div class="mb-head-title">Wednesday</div>
+        <div class="mb-head-sub"><span id="headLeft">—</span><span>·</span><span class="ok">🔥 9-day streak</span><span>·</span><span>~14 min</span></div>
+      </div>
+      <div class="mb-head-actions">
+        <button class="mb-btn">History</button>
+        <button class="mb-btn primary" data-add>+ Exercise <kbd>N</kbd></button>
+      </div>
+    </div>
+
+    <div class="mb-nudge" id="nudge">
+      <span class="ic">↑</span>
+      <span><b>Dead hang</b> — held 45s for 3 sessions in a row. Try <b>50s</b> today?</span>
+      <span class="sp"></span>
+      <button class="mb-btn" data-nudge="yes">Bump to 50s</button>
+      <button class="mb-link" data-nudge="no">Not yet</button>
+    </div>
+
+    <div class="mb-sessions" id="sessions"></div>
+  </div>
+
+  <!-- Week -->
+  <div class="section-title">This week</div>
+  <div class="card">
+    <div class="mb-week" id="week"></div>
+    <div class="mb-week-detail" id="weekDetail"></div>
+  </div>
+
+  <!-- Library -->
+  <div class="section-title">Exercises</div>
+  <div class="card">
+    <div class="mb-lib-head">
+      <div class="mb-seg" id="filter">
+        <button class="on" data-f="all">All</button><button data-f="am">Morning</button><button data-f="pm">Night</button>
+      </div>
+      <input class="mb-search" id="search" placeholder="Search…">
+      <span class="sp"></span>
+      <button class="mb-btn" data-add>+ Add</button>
+    </div>
+    <div class="mb-cols"><span></span><span>Exercise</span><span>Dose</span><span>Freq</span><span>Days</span><span>Last done</span><span></span></div>
+    <div id="lib"></div>
+  </div>
+  </div>
+
+  <!-- Side rail: extra info in what used to be empty margin -->
+  <aside class="mb-rail">
+    <div class="card">
+      <div class="mb-rail-h"><span>Last 5 weeks</span><b>86%</b></div>
+      <div class="mb-heat-d"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+      <div class="mb-heat" id="heat"></div>
+      <div class="mb-rail-foot"><span>129 of 150 logged</span><span class="ok">↑ 9% vs prior</span></div>
+    </div>
+    <div class="card">
+      <div class="mb-rail-h"><span>Biggest gains</span><span>since start</span></div>
+      <div id="gains"></div>
+    </div>
+    <div class="card">
+      <div class="mb-rail-h"><span>Falling behind</span><span>this week</span></div>
+      <div class="mb-att"><span class="mb-sdot pm"></span><span class="nm">Jefferson curl</span><span class="why">missed Sun · 7d</span></div>
+      <div class="mb-att"><span class="mb-sdot pm"></span><span class="nm">Hamstring floss</span><span class="why">missed Tue · 5d</span></div>
+      <div class="mb-att"><span class="mb-sdot am"></span><span class="nm">Wall slides</span><span class="why">1 of 3 so far</span></div>
+    </div>
+  </aside>
+  </div>
+</div>
+
+<!-- Add modal -->
+<div class="mb-modal-bg" id="modal">
+  <div class="mb-modal">
+    <h3>Add exercise <button class="mb-act" style="opacity:1" data-close>✕</button></h3>
+    <input class="big" id="addName" placeholder="Couch stretch 2x60s night 4/wk">
+    <div class="hint">Shortcuts fill the fields: <code>3x12</code> <code>60s</code> <code>night</code> <code>4/wk</code> <code>#hips</code></div>
+    <div class="mb-fgrid">
+      <span>Session</span><div class="row"><div class="mb-seg"><button class="on">Morning</button><button>Night</button></div></div>
+      <span>Dose</span><div class="row"><input class="mb-num" value="2"> sets × <input class="mb-num" value="60"><div class="mb-seg"><button class="on">sec</button><button>reps</button></div></div>
+      <span>Per week</span><div class="row"><div class="mb-seg"><button>1</button><button>2</button><button>3</button><button class="on">4</button><button>5</button><button>6</button><button>7</button></div></div>
+      <span>Group</span><div class="row"><input class="mb-search" style="max-width:none" placeholder="Optional — e.g. Hips"></div>
+    </div>
+    <div class="mb-modal-foot"><button class="mb-btn" data-close>Cancel</button><button class="mb-btn primary" data-close>Add exercise</button></div>
+  </div>
+</div>
+
+<script>
+// Sample data (mockup only). days: Mon=0 … Sun=6. last: days since last logged.
+const EX = [
+  { n: "Cat-cow",                 s: 'am', m: 'reps', dose: '10 reps',  f: 7, days: [0,1,2,3,4,5,6], last: 0 },
+  { n: "World's greatest stretch",s: 'am', m: 'reps', dose: '2 × 5',    f: 4, days: [0,2,4,6], last: 2, g: 'Hips' },
+  { n: "90/90 hip switch",        s: 'am', m: 'reps', dose: '2 × 8',    f: 4, days: [0,2,4,6], last: 2, g: 'Hips', up: '+2' },
+  { n: "Couch stretch",           s: 'am', m: 'hold', dose: '2 × 60s',  f: 4, days: [0,2,4,6], last: 2, g: 'Hips', up: '+15s' },
+  { n: "Dead hang",               s: 'am', m: 'hold', dose: 'Hold 45s', f: 3, days: [0,2,5],   last: 2, up: '+15s' },
+  { n: "Wall slides",             s: 'am', m: 'reps', dose: '2 × 12',   f: 3, days: [1,3,5],   last: 1 },
+  { n: "Pigeon pose",             s: 'pm', m: 'hold', dose: '2 × 90s',  f: 5, days: [0,1,2,4,5], last: 1, up: '+30s' },
+  { n: "Neck CARs",               s: 'pm', m: 'reps', dose: '5 reps',   f: 7, days: [0,1,2,3,4,5,6], last: 1 },
+  { n: "Jefferson curl",          s: 'pm', m: 'reps', dose: '2 × 8',    f: 2, days: [2,6],     last: 7 },
+  { n: "Hamstring floss",         s: 'pm', m: 'reps', dose: '15 reps',  f: 3, days: [1,3,6],   last: 5 },
+];
+const TODAY = 2, DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], DI = 'MTWTFSS';
+// past-day completion (fraction logged) for the week strip
+const PAST = { 0: [1, 1], 1: [1, 0.5] };
+const done = new Set(["Cat-cow"]);
+let selDay = TODAY, filt = 'all', q = '';
+
+const $ = id => document.getElementById(id);
+const on = d => EX.filter(e => e.days.includes(d));
+
+function renderToday() {
+  const list = on(TODAY), n = list.filter(e => done.has(e.n)).length;
+  $('ringTxt').textContent = `${n}/${list.length}`;
+  $('ring').style.strokeDashoffset = 169.6 * (1 - n / list.length);
+  $('headLeft').textContent = n === list.length ? 'All done today' : `${list.length - n} left today`;
+  $('sessions').innerHTML = [['am','Morning','☀'],['pm','Night','☾']].map(([s, l, ic]) => {
+    const rows = list.filter(e => e.s === s), d = rows.filter(e => done.has(e.n)).length;
+    const mins = Math.max(2, rows.length * 2);
+    return `<div class="mb-sess">
+      <div class="mb-sess-head">
+        <span class="mb-sess-label ${s}">${ic} ${l}</span>
+        <span class="mb-sess-meta">${d}/${rows.length} · ~${mins} min</span>
+        ${d < rows.length ? `<button class="mb-btn" data-all="${s}">Log all</button>` : ''}
+        <button class="mb-btn" title="Guided session with a hold timer">▶ Start</button>
+      </div>
+      <div class="mb-sess-bar"><i style="width:${rows.length ? d / rows.length * 100 : 0}%"></i></div>
+      <div class="mb-sess-list">${rows.map(e => `
+        <div class="mb-trow${done.has(e.n) ? ' done' : ''}" data-tick="${e.n}">
+          <span class="mb-cb">${done.has(e.n) ? '✓' : ''}</span>
+          <span class="mb-tname">${e.n}${e.g ? `<span class="mb-tgroup">${e.g}</span>` : ''}</span>
+          ${e.up && !done.has(e.n) ? `<span class="mb-tcue" title="Dose went up since you started">↑</span>` : ''}
+          <span class="mb-dose ${e.m}">${e.dose}</span>
+        </div>`).join('') || '<div class="mb-sess-empty">Rest — nothing scheduled.</div>'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderWeek() {
+  $('week').innerHTML = DAYS.map((d, i) => {
+    const am = on(i).filter(e => e.s === 'am').length, pm = on(i).filter(e => e.s === 'pm').length;
+    const p = i < TODAY ? PAST[i] : i === TODAY
+      ? ['am','pm'].map(s => { const r = on(i).filter(e => e.s === s); return r.filter(e => done.has(e.n)).length / (r.length || 1); })
+      : [0, 0];
+    const miss = i < TODAY && (p[0] < 1 || p[1] < 1);
+    return `<button class="mb-day${i === TODAY ? ' today' : ''}${i === selDay ? ' sel' : ''}${i < TODAY ? ' past' : ''}${miss ? ' miss' : ''}" data-day="${i}">
+      <span class="mb-day-n">${d}</span><span class="mb-day-d">${28 + i > 30 ? 28 + i - 30 : 28 + i}</span>
+      <span class="mb-day-pips">
+        <span class="mb-pip am"><i style="width:${am ? Math.max(p[0] * 100, 0) : 0}%;${i > TODAY ? 'opacity:0' : ''}"></i></span>
+        <span class="mb-pip pm"><i style="width:${pm ? Math.max(p[1] * 100, 0) : 0}%;${i > TODAY ? 'opacity:0' : ''}"></i></span>
+      </span>
+      <span class="mb-day-c">${am}☀ ${pm}☾</span>
+    </button>`;
+  }).join('');
+  const col = (s, l) => {
+    const r = on(selDay).filter(e => e.s === s);
+    return `<div><div class="mb-wd-h ${s}"><span>${l} · ${r.length}</span>${selDay <= TODAY ? '<button class="mb-link">open ›</button>' : ''}</div>
+      <div class="mb-wd-items">${r.map(e => `<span>${e.n}</span>`).join('') || '—'}</div></div>`;
+  };
+  $('weekDetail').innerHTML = col('am', 'Morning') + col('pm', 'Night');
+}
+
+function renderLib() {
+  const rows = EX.filter(e => (filt === 'all' || e.s === filt) && e.n.toLowerCase().includes(q));
+  const solo = rows.filter(e => !e.g), groups = [...new Set(rows.filter(e => e.g).map(e => e.g))];
+  const row = e => `<div class="mb-row${e.g ? ' in-grp' : ''}">
+    <span class="mb-grip">⋮⋮</span>
+    <span class="mb-name"><span class="mb-sdot ${e.s}" title="${e.s === 'am' ? 'Morning' : 'Night'}"></span><span>${e.n}</span></span>
+    <span class="mb-dosecell"><span class="mb-dose ${e.m}">${e.dose}</span>${e.up ? `<span class="mb-up">↑${e.up}</span>` : ''}</span>
+    <span class="mb-freq">${e.f}×/wk</span>
+    <span class="mb-days">${[...DI].map((c, i) => `<span class="mb-di${e.days.includes(i) ? ' on' : ''}${e.days.includes(i) && i <= TODAY && (i < TODAY || done.has(e.n)) ? ' done' : ''}">${c}</span>`).join('')}</span>
+    <span class="mb-last${e.last >= 5 ? ' stale' : ''}">${e.n && done.has(e.n) ? 'today' : e.last === 0 ? 'today' : e.last === 1 ? 'yesterday' : e.last + 'd ago'}</span>
+    <span class="mb-acts"><button class="mb-act" title="Edit">✎</button><button class="mb-act" title="Remove">×</button></span>
+  </div>`;
+  $('lib').innerHTML = solo.map(row).join('') + groups.map(g => {
+    const m = rows.filter(e => e.g === g);
+    return `<div class="mb-grp">${g}<span class="cnt">${m.length} · shared days ${m[0].days.map(i => DAYS[i]).join(' ')}</span><span class="ln"></span></div>` + m.map(row).join('');
+  }).join('') || '<div class="mb-sess-empty">No matches.</div>';
+}
+
+// Rail: 5-week heatmap (level = share of that day's work logged) and top gains.
+$('heat').innerHTML = Array.from({ length: 35 }, (_, i) => {
+  const d = i - 28; // current week is the last row
+  if (d > TODAY) return '<i style="opacity:.35"></i>';
+  const lv = d === TODAY ? 1 : [3,3,2,3,1,0,3, 3,2,3,3,3,2,1, 3,3,3,1,3,2,3, 2,3,3,3,3,3,2, 3,2][i] ?? 3;
+  return `<i class="${lv ? 'l' + lv : ''}${d === TODAY ? ' now' : ''}"></i>`;
+}).join('');
+$('gains').innerHTML = [
+  ['Pigeon pose', 'hold', '60s', '90s', 50], ['Dead hang', 'hold', '30s', '45s', 50],
+  ['Couch stretch', 'hold', '45s', '60s', 33], ['90/90 hip switch', 'reps', '6', '8', 33],
+].map(([n, m, a, b, p]) => `<div class="mb-gain"><span class="nm">${n}</span><span class="pct">+${p}%</span>
+  <span class="fr">${a}<span class="bar"><i class="${m}" style="width:${Math.min(100, p * 1.6)}%"></i></span>${b}</span></div>`).join('');
+
+const all = () => { renderToday(); renderWeek(); renderLib(); };
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tick]');
+  if (t) { done.has(t.dataset.tick) ? done.delete(t.dataset.tick) : done.add(t.dataset.tick); return all(); }
+  const a = e.target.closest('[data-all]');
+  if (a) { on(TODAY).filter(x => x.s === a.dataset.all).forEach(x => done.add(x.n)); return all(); }
+  const d = e.target.closest('[data-day]');
+  if (d) { selDay = +d.dataset.day; return renderWeek(); }
+  const f = e.target.closest('[data-f]');
+  if (f) { filt = f.dataset.f; document.querySelectorAll('#filter button').forEach(b => b.classList.toggle('on', b === f)); return renderLib(); }
+  const nu = e.target.closest('[data-nudge]');
+  if (nu) { if (nu.dataset.nudge === 'yes') { const x = EX.find(x => x.n === 'Dead hang'); x.dose = 'Hold 50s'; x.up = '+20s'; } $('nudge').remove(); return all(); }
+  if (e.target.closest('[data-add]')) { $('modal').classList.add('open'); $('addName').focus(); return; }
+  if (e.target.closest('[data-close]') || e.target.id === 'modal') $('modal').classList.remove('open');
+});
+$('search').addEventListener('input', e => { q = e.target.value.toLowerCase(); renderLib(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') $('modal').classList.remove('open');
+  if (e.key.toLowerCase() === 'n' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $('modal').classList.add('open'); $('addName').focus(); }
+});
+all();
+</script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobility session — mockup C</title>
+<link rel="stylesheet" href="../css/main.css">
+<style>
+  /* Mockup-only styles, prefixed ms- so nothing collides with the app sheets. */
+  :root {
+    --ms-line: rgba(255,255,255,0.07); --ms-soft: rgba(255,255,255,0.04);
+    --ms-blue: #5AA8FF; --ms-ok: #6BE3A4;
+  }
+  body { padding: 20px 16px 80px; }
+  .ms-wrap { max-width: 1100px; margin: 0 auto; }
+  .ms-note-box {
+    font-size: 11.5px; color: var(--text-tertiary); border: 1px dashed rgba(255,255,255,0.14);
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; line-height: 1.5;
+  }
+  .ms-note-box b { color: var(--text-secondary); }
+
+  button { font-family: var(--font-body); }
+  .ms-btn { background: var(--ms-soft); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); font: 600 12px var(--font-body); padding: 6px 11px; border-radius: 8px; cursor: pointer; }
+  .ms-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+  .ms-link { background: none; border: 0; padding: 0; color: var(--ms-blue); font: 600 12px var(--font-body); cursor: pointer; }
+  .ms-link:hover { text-decoration: underline; }
+  .ms-seg { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--ms-soft); border: 1px solid var(--ms-line); }
+  .ms-seg button { background: none; border: 0; color: var(--text-tertiary); font: 600 12px var(--font-body); padding: 5px 12px; border-radius: 7px; cursor: pointer; }
+  .ms-seg button.on { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+  .ms-spacer { flex: 1; }
+
+  /* ── Sticky header ── */
+  .ms-head {
+    position: sticky; top: 0; z-index: 5; margin: 0 -16px 16px; padding: 12px 16px;
+    background: rgba(10,10,12,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--ms-line);
+  }
+  .ms-head-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ms-date { display: flex; align-items: center; gap: 6px; }
+  .ms-date h2 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; min-width: 150px; text-align: center; }
+  .ms-nav { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--ms-line); background: var(--ms-soft); color: var(--text-secondary); cursor: pointer; }
+  .ms-prog { display: flex; align-items: center; gap: 10px; font: 12px var(--font-mono); color: var(--text-tertiary); }
+  .ms-prog b { color: var(--text-primary); font-weight: 700; }
+  .ms-bar { height: 3px; border-radius: 2px; background: var(--ms-line); margin-top: 10px; overflow: hidden; }
+  .ms-bar i { display: block; height: 100%; background: var(--ms-ok); transition: width .25s; }
+
+  /* Up-next strip: always shows the next set; turns into a countdown while resting */
+  .ms-next {
+    display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(90,168,255,0.08); border: 1px solid rgba(90,168,255,0.25); font-size: 13px; color: var(--text-secondary);
+  }
+  .ms-next.resting { background: rgba(242,192,99,0.08); border-color: rgba(242,192,99,0.3); }
+  .ms-next.alldone { background: rgba(107,227,164,0.08); border-color: rgba(107,227,164,0.3); }
+  .ms-next-tag { font: 700 10px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ms-blue); white-space: nowrap; }
+  .ms-next.resting .ms-next-tag { color: #F2C063; }
+  .ms-next.alldone .ms-next-tag { color: var(--ms-ok); }
+  .ms-next b { color: var(--text-primary); }
+  .ms-clock { font: 700 18px var(--font-mono); color: #F2C063; min-width: 50px; }
+  .ms-mode-hint { font-size: 11.5px; color: var(--text-tertiary); }
+  .ms-restsel { display: inline-flex; align-items: center; gap: 4px; font: 12px var(--font-body); color: var(--text-tertiary); white-space: nowrap; }
+  .ms-restsel select { background: none; border: 0; color: var(--ms-blue); font: 600 12px var(--font-body); cursor: pointer; appearance: none; -webkit-appearance: none; padding: 0; }
+
+  /* ── Table ── */
+  .ms-name { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font: 700 14px var(--font-body); color: var(--text-primary); }
+  .ms-name:hover { color: var(--ms-blue); }
+  .ms-noteline { width: 100%; background: none; border: 0; border-bottom: 1px solid transparent; padding: 2px 0; font: 11.5px var(--font-body); color: var(--text-secondary); }
+  .ms-noteline::placeholder { color: var(--text-tertiary); }
+  .ms-noteline:focus { outline: none; border-bottom-color: rgba(255,255,255,0.15); }
+  .ms-in {
+    width: 100%; height: 32px; border-radius: 8px; text-align: center; background: transparent;
+    border: 1px solid rgba(255,255,255,0.14); color: var(--text-primary); font: 14px var(--font-mono); -moz-appearance: textfield;
+  }
+  .ms-in::placeholder { color: var(--text-tertiary); }
+  .ms-in:focus { outline: none; border-color: rgba(90,168,255,0.6); }
+  .ms-ok { height: 32px; min-width: 32px; border-radius: 8px; border: 0; cursor: pointer; font-size: 14px; font-weight: 800; background: rgba(255,255,255,0.07); color: var(--text-tertiary); }
+  .ms-ok:hover { color: var(--text-primary); }
+  .ms-ok.done { background: var(--ms-ok); color: #0b0b0b; }
+  .ms-in.done { border-color: rgba(107,227,164,0.45); background: rgba(107,227,164,0.08); }
+  .ms-fixed { font: 600 10px var(--font-mono); color: var(--text-tertiary); }
+  .ms-up { font: 600 10.5px var(--font-mono); color: var(--ms-ok); }
+  .ms-group { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); }
+
+  .ms-ring { width: 26px; height: 26px; flex-shrink: 0; position: relative; }
+  .ms-ring svg { transform: rotate(-90deg); display: block; }
+  .ms-ring span { position: absolute; inset: 0; display: grid; place-items: center; font: 800 11px var(--font-body); color: var(--ms-ok); }
+
+  .C-card { border-radius: 14px; background: #111214; border: 1px solid var(--ms-line); overflow-x: auto; }
+  .C-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  .C-table th { font: 600 9.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); text-align: left; padding: 10px 10px 8px; border-bottom: 1px solid var(--ms-line); white-space: nowrap; }
+  .C-table th.round-now { color: var(--ms-blue); }
+  .C-table td { padding: 10px; border-bottom: 1px solid var(--ms-line); vertical-align: middle; }
+  .C-table tr:last-child td { border-bottom: 0; }
+  .C-table tr.row-now td { background: rgba(90,168,255,0.04); }
+  .C-ex { display: flex; align-items: center; gap: 10px; min-width: 210px; }
+  .C-sub { display: flex; gap: 8px; align-items: center; font: 11px var(--font-mono); color: var(--text-tertiary); margin-top: 1px; }
+  .C-last { font: 12px var(--font-mono); color: var(--text-tertiary); white-space: nowrap; }
+  .C-cell { display: flex; gap: 4px; width: 104px; position: relative; border-radius: 10px; }
+  .C-cell.next { box-shadow: 0 0 0 2px var(--ms-blue); }
+  .C-cell.next::after {
+    content: 'NEXT'; position: absolute; top: -9px; left: 8px; padding: 0 4px;
+    font: 700 8.5px var(--font-mono); letter-spacing: .08em; color: var(--ms-blue); background: #111214;
+  }
+  .C-table tr.grp td { padding: 14px 10px 6px; border-bottom: 0; }
+  .C-grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .C-grp-name { font: 700 10.5px var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--text-secondary); margin-right: 4px; }
+  .C-step { font: 11px var(--font-body); color: var(--text-tertiary); padding: 2px 8px; border-radius: 20px; border: 1px solid var(--ms-line); white-space: nowrap; }
+  .C-step.done { color: var(--ms-ok); border-color: rgba(107,227,164,0.3); background: rgba(107,227,164,0.06); }
+  .C-step.now { color: var(--ms-blue); border-color: var(--ms-blue); background: rgba(90,168,255,0.08); }
+  .C-arrow { color: var(--text-tertiary); font-size: 10px; }
+  .C-flow { margin-right: 6px; }
+  .C-flow button { padding: 3px 9px; font-size: 11px; }
+  .C-table tr.in-grp td:first-child { box-shadow: inset 2px 0 rgba(255,255,255,0.1); }
+  .C-add { width: 32px; height: 32px; border-radius: 8px; border: 1px dashed rgba(255,255,255,0.18); background: none; color: var(--text-tertiary); cursor: pointer; }
+  .C-add:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.35); }
+
+  @media (max-width: 720px) { .ms-date h2 { min-width: 0; font-size: 16px; } }
+</style>
+</head>
+<body>
+<div class="ms-wrap">
+  <div class="ms-note-box">
+    <b>Mockup C — each group picks its order.</b> <b>Circuit</b> (Neck): every exercise in a row, then again — 1, 2, 3, 1, 2, 3.
+    <b>Pairs</b> (Stretches): alternate in twos — 1, 2, 1, 2, then 3, 4, 3, 4. Switch it on the group's line. Switching exercise is the break, so there's
+    no wait inside a group. An exercise with no group is straight sets with its own rest timer (Plank). The <b>NEXT</b> outline, the step chips and the
+    strip under the header show where you are. Tick sets to try it.
+  </div>
+
+  <div class="ms-head">
+    <div class="ms-head-row">
+      <button class="ms-btn">← Back</button>
+      <div class="ms-date"><button class="ms-nav">‹</button><h2>Wed, Sep 30</h2><button class="ms-nav" disabled style="opacity:.3">›</button></div>
+      <div class="ms-seg"><button class="on">☀ Morning</button><button>☾ Night</button></div>
+      <span class="ms-spacer"></span>
+      <div class="ms-prog" id="prog"></div>
+    </div>
+    <div class="ms-bar"><i id="bar"></i></div>
+    <div class="ms-next" id="next"></div>
+  </div>
+
+  <div class="C-card"><table class="C-table" id="table"></table></div>
+</div>
+
+<script>
+const EX = [
+  { id: 'nc', name: 'Lying Neck Curls', group: 'Neck', unit: 'reps', goal: 12, prev: [12, 12], sets: [null, null] },
+  { id: 'ne', name: 'Lying Neck Extension', group: 'Neck', unit: 'reps', goal: 12, prev: [10, 12], sets: [null, null] },
+  { id: 'nl', name: 'Lying Lateral Neck Raise', group: 'Neck', unit: 'reps', goal: 10, prev: [10, 10], sets: [null, null] },
+  { id: 'pl', name: 'Plank', unit: 's', goal: 50, prev: [45, 40], rest: 30, sets: [null, null], bumped: true },
+  { id: 'cp', name: "Child's pose", group: 'Stretches', unit: 's', goal: 60, prev: [60, 60], sets: [null, null], fixed: true, note: 'Knees wide, sink hips' },
+  { id: 'hp', name: "Hero's pose", group: 'Stretches', unit: 's', goal: 60, prev: [45, 45], sets: [null, null], fixed: true },
+  { id: 'cs', name: 'Calf stretch', group: 'Stretches', unit: 's', goal: 45, prev: [45, 45], sets: [null, null], fixed: true },
+  { id: 'hs', name: 'Hamstring stretch', group: 'Stretches', unit: 's', goal: 60, prev: [60, 60], sets: [null, null], fixed: true },
+];
+EX.forEach(ex => { ex.note = ex.note || ''; ex.rest = ex.rest || 0; });
+const REST_OPTS = [0, 15, 30, 45, 60, 90, 120, 180];
+let roundRest = 0, timer = null;
+// Per-group order: 'circuit' = 1,2,3,1,2,3 · 'pairs' = 1,2,1,2,3,4,3,4 (saved per group in the real build).
+const FLOW = { Neck: 'circuit', Stretches: 'pairs' };
+const $ = id => document.getElementById(id);
+const fmt = (ex, v) => v == null ? '–' : ex.unit === 's' ? v + 's' : String(v);
+const doneN = ex => ex.sets.filter(v => v != null).length;
+const restLbl = s => !s ? 'Off' : s < 60 ? s + 's' : `${Math.floor(s / 60)}m${s % 60 ? ' ' + s % 60 + 's' : ''}`;
+const sel = (attr, val, none) => `<select ${attr}>${REST_OPTS.map(s => `<option value="${s}"${s === val ? ' selected' : ''}>${s ? restLbl(s) : none}</option>`).join('')}</select>`;
+
+// Units in list order: a group is one unit (placed where its first exercise is), an ungrouped exercise is its own.
+function units() {
+  const out = [], byG = new Map();
+  EX.forEach(ex => {
+    if (!ex.group) return out.push([ex]);
+    if (!byG.has(ex.group)) { byG.set(ex.group, []); out.push(byG.get(ex.group)); }
+    byG.get(ex.group).push(ex);
+  });
+  return out;
+}
+// The order sets are done in. A circuit goes through every exercise once, then
+// again (exercises with fewer sets drop out of later passes). Pairs does the same
+// inside each run of two: 1,2,1,2 then 3,4,3,4 (an odd one out goes alone).
+// An ungrouped exercise is straight sets.
+function passes(list) {
+  const steps = [], rounds = Math.max(...list.map(ex => ex.sets.length));
+  for (let r = 0; r < rounds; r++) list.forEach(ex => { if (r < ex.sets.length) steps.push({ ex, i: r }); });
+  return steps;
+}
+function unitSteps(u) {
+  if (!u[0].group || FLOW[u[0].group] !== 'pairs') return passes(u);
+  const steps = [];
+  for (let k = 0; k < u.length; k += 2) steps.push(...passes(u.slice(k, k + 2)));
+  return steps;
+}
+const sequence = () => units().flatMap(unitSteps);
+const nextSet = () => sequence().find(s => s.ex.sets[s.i] == null) || null;
+
+const ring = ex => {
+  const f = doneN(ex) / ex.sets.length, C = 69.1;
+  return `<span class="ms-ring"><svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+    <circle cx="13" cy="13" r="11" fill="none" stroke="#6BE3A4" stroke-width="3" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - f)}"/></svg>
+    <span>${f === 1 ? '✓' : ''}</span></span>`;
+};
+
+function rowHTML(ex, cols, nx) {
+  const grouped = !!ex.group;
+  return `<tr class="${nx && nx.ex === ex ? 'row-now' : ''}${grouped ? ' in-grp' : ''}">
+    <td><div class="C-ex">${ring(ex)}<div style="min-width:0;flex:1">
+      <button class="ms-name">${ex.name}</button>
+      <div class="C-sub"><span>${ex.sets.length} × ${fmt(ex, ex.goal)}</span>
+        ${ex.bumped ? '<span class="ms-up">↑ from 45s</span>' : ''}${ex.fixed ? '<span class="ms-fixed">fixed</span>' : ''}</div>
+      <input class="ms-noteline" data-note="${ex.id}" value="${ex.note}" placeholder="+ note"></div></div></td>
+    <td class="C-last">${ex.prev.map(v => fmt(ex, v)).join(' · ')}</td>
+    ${Array.from({ length: cols }, (_, i) => `<td>${i < ex.sets.length ? `
+      <div class="C-cell${nx && nx.ex === ex && nx.i === i ? ' next' : ''}">
+        <input class="ms-in${ex.sets[i] != null ? ' done' : ''}" type="number" data-in="${ex.id}" data-i="${i}" value="${ex.sets[i] ?? ''}" placeholder="${ex.goal}">
+        <button class="ms-ok${ex.sets[i] != null ? ' done' : ''}" data-ok="${ex.id}" data-i="${i}" aria-label="Set ${i + 1} done">✓</button>
+      </div>` : ''}</td>`).join('')}
+    <td><button class="C-add" data-add="${ex.id}" title="Add a set">+</button></td>
+    <td>${grouped ? '' : `<label class="ms-restsel">⏱ ${sel(`data-rest="${ex.id}"`, ex.rest, 'No rest')}</label>`}</td>
+  </tr>`;
+}
+
+function render() {
+  const all = EX.reduce((s, ex) => s + ex.sets.length, 0), done = EX.reduce((s, ex) => s + doneN(ex), 0);
+  const exDone = EX.filter(ex => doneN(ex) === ex.sets.length).length;
+  const nx = nextSet(), cols = Math.max(...EX.map(ex => ex.sets.length));
+  $('prog').innerHTML = `<span><b>${done}</b>/${all} sets</span><span>·</span><span><b>${exDone}</b>/${EX.length} exercises</span>`;
+  $('bar').style.width = (done / all * 100) + '%';
+
+  $('table').innerHTML = `
+    <thead><tr><th>Exercise</th><th>Last time</th>${Array.from({ length: cols }, (_, i) => `<th>Set ${i + 1}</th>`).join('')}<th></th><th>Rest</th></tr></thead>
+    <tbody>${units().map(u => {
+      if (u.length === 1 && !u[0].group) return rowHTML(u[0], cols, nx);
+      const steps = unitSteps(u);
+      const g = u[0].group, flow = FLOW[g] || 'circuit';
+      return `<tr class="grp"><td colspan="${cols + 4}"><div class="C-grp"><span class="C-grp-name">${g}</span>
+          <span class="ms-seg C-flow"><button class="${flow === 'circuit' ? 'on' : ''}" data-flow="${g}" data-v="circuit" title="All in a row, then again">Circuit</button><button class="${flow === 'pairs' ? 'on' : ''}" data-flow="${g}" data-v="pairs" title="Alternate in twos">Pairs</button></span>
+          ${steps.map(st => `<span class="C-step${st.ex.sets[st.i] != null ? ' done' : nx && nx.ex === st.ex && nx.i === st.i ? ' now' : ''}">${st.ex.name}</span>`).join('<span class="C-arrow">→</span>')}
+        </div></td></tr>` + u.map(ex => rowHTML(ex, cols, nx)).join('');
+    }).join('')}</tbody>`;
+  renderNext();
+}
+
+function renderNext() {
+  const el = $('next'), nx = nextSet();
+  const left = timer ? Math.max(0, Math.ceil((timer.end - Date.now()) / 1000)) : 0;
+  if (timer && !left) timer = null;
+  el.className = 'ms-next' + (timer ? ' resting' : !nx ? ' alldone' : '');
+  const where = nx ? `<b>${nx.ex.name}</b> · set ${nx.i + 1} · ${fmt(nx.ex, nx.ex.goal)}${nx.ex.group ? ` <span class="ms-group">· ${nx.ex.group}</span>` : ''}` : '';
+  const roundSel = `<label class="ms-restsel">Rest between group rounds: ${sel('data-roundrest', roundRest, 'none')}</label>`;
+  if (!nx) el.innerHTML = `<span class="ms-next-tag">All done</span><span>Every set is logged for this session.</span>`;
+  else if (timer) el.innerHTML = `<span class="ms-next-tag">${timer.round ? 'Round done' : 'Rest'}</span><span class="ms-clock">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</span>
+      <span>then ${where}</span><span class="ms-spacer"></span><button class="ms-btn" data-add15>+15s</button><button class="ms-link" data-skip>Skip</button>`;
+  else el.innerHTML = `<span class="ms-next-tag">${nx.ex.group ? '⇄ Up next' : 'Up next'}</span><span>${where}</span>
+      <span class="ms-spacer"></span>${nx.ex.group ? '<span class="ms-mode-hint">Switching exercise is your break</span>' : ''}${roundSel}`;
+}
+setInterval(() => { if (timer) renderNext(); }, 250);
+
+document.addEventListener('click', e => {
+  const ok = e.target.closest('[data-ok]');
+  if (ok) {
+    const ex = EX.find(x => x.id === ok.dataset.ok), i = +ok.dataset.i;
+    if (ex.sets[i] != null) { ex.sets[i] = null; timer = null; return render(); }
+    const inp = document.querySelector(`[data-in="${ex.id}"][data-i="${i}"]`);
+    ex.sets[i] = +(inp.value || inp.placeholder);
+    const nx = nextSet();
+    timer = null;
+    if (!ex.group) {
+      // Straight sets: rest between sets of the same exercise.
+      if (ex.rest && nx && nx.ex === ex) timer = { end: Date.now() + ex.rest * 1000 };
+    } else if (roundRest && nx && nx.ex.group === ex.group && nx.i > i) {
+      // Group: no wait between exercises; optional rest when a round of the group ends.
+      timer = { end: Date.now() + roundRest * 1000, round: true };
+    }
+    return render();
+  }
+  const fl = e.target.closest('[data-flow]');
+  if (fl) { FLOW[fl.dataset.flow] = fl.dataset.v; timer = null; return render(); }
+  const add = e.target.closest('[data-add]');
+  if (add) { EX.find(x => x.id === add.dataset.add).sets.push(null); return render(); }
+  if (e.target.closest('[data-skip]')) { timer = null; return renderNext(); }
+  if (e.target.closest('[data-add15]') && timer) { timer.end += 15000; return renderNext(); }
+});
+document.addEventListener('change', e => {
+  const r = e.target.closest('[data-rest]');
+  if (r) EX.find(x => x.id === r.dataset.rest).rest = +r.value;
+  if (e.target.matches('[data-roundrest]')) roundRest = +e.target.value;
+  const n = e.target.closest('[data-note]');
+  if (n) EX.find(x => x.id === n.dataset.note).note = n.value;
+  const inp = e.target.closest('[data-in]');
+  if (inp) { const ex = EX.find(x => x.id === inp.dataset.in), i = +inp.dataset.i; if (ex.sets[i] != null && +inp.value > 0) { ex.sets[i] = +inp.value; render(); } }
+});
+render();
+</script>
+</body>
+</html>

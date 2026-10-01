@@ -23,7 +23,7 @@
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
 <link rel="stylesheet" href="css/diet.css?v=14">
-<link rel="stylesheet" href="css/mobility.css?v=13">
+<link rel="stylesheet" href="css/mobility.css?v=33">
 <link rel="stylesheet" href="css/whoop.css?v=1">
 <link rel="stylesheet" href="css/finance.css?v=4">
 </head>
@@ -582,39 +582,47 @@
 
   <!-- Tab: Mobility -->
   <div class="tab-panel" id="tab-mobility">
-    <div class="section">
-      <div class="section-title">Today's Routine</div>
-      <div class="card">
-        <div class="mob-today-head">
-          <span class="mob-today-day" id="mobTodayDay">—</span>
-          <span class="mob-today-sub" id="mobTodaySub"></span>
-        </div>
-        <div class="mob-routines">
-          <div class="mob-routine">
-            <div class="mob-routine-title">☀ Morning</div>
-            <div id="mobTodayMorning"></div>
+    <div class="section mob-section">
+      <div class="mob-layout">
+        <div class="mob-main">
+          <div class="card">
+            <div class="mob-head">
+              <div class="mob-ring" id="mobRing"></div>
+              <div class="mob-head-main">
+                <div class="mob-head-title" id="mobTodayDay">—</div>
+                <div class="mob-head-sub" id="mobTodaySub"></div>
+              </div>
+              <button class="mob-btn mob-btn-primary" type="button" data-mobadd>+ Exercise <kbd>N</kbd></button>
+            </div>
+            <div id="mobNudge"></div>
+            <div class="mob-sessions">
+              <div class="mob-sess" id="mobTodayMorning"></div>
+              <div class="mob-sess" id="mobTodayNight"></div>
+            </div>
           </div>
-          <div class="mob-routine">
-            <div class="mob-routine-title">☾ Night</div>
-            <div id="mobTodayNight"></div>
+
+          <div class="section-title">This Week</div>
+          <div class="card">
+            <div class="mob-week-grid" id="mobWeekGrid"></div>
+            <div class="mob-week-detail" id="mobWeekDetail"></div>
+          </div>
+
+          <div class="section-title">Exercises</div>
+          <div class="card">
+            <div class="mob-lib-head">
+              <div class="mob-filter" id="mobFilter">
+                <button class="active" type="button" data-mobfilter="all">All</button><button type="button" data-mobfilter="morning">Morning</button><button type="button" data-mobfilter="night">Night</button>
+              </div>
+              <input class="mob-search" id="mobSearch" type="search" placeholder="Search…" aria-label="Search exercises">
+              <span class="mob-spacer"></span>
+              <button class="mob-btn" type="button" data-mobadd>+ Add</button>
+            </div>
+            <div class="mob-cols" id="mobListCols"><span></span><span>Exercise</span><span>Dose</span><span>Freq</span><span>Days</span><span>Last done</span><span></span></div>
+            <div class="mob-list" id="mobList"></div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <div class="section">
-      <div class="section-title">This Week</div>
-      <div class="card">
-        <div class="mob-week-grid" id="mobWeekGrid"></div>
-        <div class="mob-week-detail" id="mobWeekDetail" hidden></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Exercises</div>
-      <div class="card">
-        <button class="mob-add-cta" id="mobOpenAddBtn" type="button">+ Add exercise</button>
-        <div class="mob-list" id="mobList"></div>
+        <aside class="mob-rail" id="mobRail"></aside>
       </div>
     </div>
   </div>
@@ -781,6 +789,28 @@
   <div class="habit-detail-wrap">
     <button id="mobExDetailBack" class="habit-detail-back">← Back</button>
     <div id="mobExDetailBody"></div>
+  </div>
+</div>
+
+<div id="mobGroupModal" class="sr-modal">
+  <div class="sr-modal-card mob-gm-card" role="dialog" aria-modal="true" aria-labelledby="mobGroupTitle">
+    <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
+    <h2 class="sr-modal-title" id="mobGroupTitle">New group</h2>
+    <p class="mob-gm-sub" id="mobGroupSub"></p>
+    <div class="mob-form">
+      <input type="text" class="task-input" id="mobGroupName" placeholder="Group name (e.g. Neck)" maxlength="40" aria-label="Group name">
+      <div class="mob-field">
+        <span class="mob-field-label">Order of sets</span>
+        <div class="mob-gm-opts">
+          <button type="button" class="mob-gm-opt" data-gflow="circuit"><b>Circuit</b><span>Every exercise in a row, then again · 1, 2, 3, 1, 2, 3</span></button>
+          <button type="button" class="mob-gm-opt" data-gflow="pairs"><b>Pairs</b><span>Alternate in twos · 1, 2, 1, 2, then 3, 4, 3, 4</span></button>
+        </div>
+      </div>
+      <div class="mob-modal-actions">
+        <button class="btn-add" id="mobGroupCreate" type="button" disabled>Create group</button>
+        <span class="polish-status" id="mobGroupStatus"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1124,10 +1154,10 @@
     <h2 class="sr-modal-title" id="mobModalTitle">Add exercise</h2>
     <div class="mob-form">
       <input type="text" class="task-input" id="mobName" placeholder="Exercise name (e.g. Couch stretch)">
+      <p class="at-hint mob-hint">Shortcuts in the name: <code>2x60s</code> <code>3x12</code> <code>45s</code> <code>night</code> <code>4/wk</code> <code>#hips</code> <code>fixed</code></p>
       <div class="mob-field">
         <span class="mob-field-label">When</span>
         <div class="mob-seg" id="mobSessionBtns"></div>
-        <span class="polish-status" id="mobSessionHint"></span>
       </div>
       <div class="mob-field">
         <span class="mob-field-label">Sets</span>
@@ -1150,6 +1180,11 @@
         <div class="diet-form-row">
           <input type="number" class="habit-date-input mob-num" id="mobReps" placeholder="reps" min="1" step="1">
         </div>
+      </div>
+      <div class="mob-field">
+        <span class="mob-field-label">Dose</span>
+        <div class="mob-seg" id="mobProgressBtns"></div>
+        <span class="polish-status" id="mobProgressHint"></span>
       </div>
       <div class="mob-field">
         <span class="mob-field-label">Frequency &mdash; times per week</span>
@@ -1184,7 +1219,7 @@
 <script src="js/goals.js?v=2"></script>
 <script src="js/diet.js?v=22"></script>
 <script src="js/finance.js?v=4"></script>
-<script src="js/mobility.js?v=17"></script>
+<script src="js/mobility.js?v=33"></script>
 <script src="js/whoop.js?v=2"></script>
 <script src="js/main.js?v=59"></script>
 </body>
