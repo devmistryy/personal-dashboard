@@ -586,7 +586,8 @@ function buildHabitRow(habit, allHabits, opts) {
   main.className = 'hab-main';
   const line = document.createElement('div');
   line.className = 'hab-line';
-  const name = document.createElement('span');
+  const name = document.createElement('button');
+  name.type = 'button';
   name.className = 'hab-name';
   name.textContent = habit.name;
   if (!preview) name.addEventListener('click', () => openHabitDetail(habit.id));
