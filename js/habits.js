@@ -1423,8 +1423,7 @@ function renderHabitDetailPage(habit, allHabits) {
     const sub = voidedToday && !doneToday ? `${formatDate(today)} · excused, the streak carries over`
       : weekly ? `${formatDate(today)} · ${Math.min(wk.done, _habitTimes(habit))} of ${_habitTimes(habit)} this week`
       : offToday && !doneToday ? `${formatDate(today)} · not scheduled today — ticking it still counts`
-      : doneToday ? `${formatDate(today)} · streak is ${displayStreak} day${displayStreak === 1 ? '' : 's'}`
-      : streak > 0 ? `${formatDate(today)} · keeps the ${streak}-day streak going` : formatDate(today);
+      : formatDate(today);
     const ctl = isIncrement ? `
         <div class="habit-stepper">
           <button class="habit-stepper-btn" id="habitCountMinus" type="button" ${todayCount <= 0 ? 'disabled' : ''} aria-label="Remove one">−</button>
@@ -2030,6 +2029,16 @@ function renderDayDetail(ds) {
 document.querySelectorAll('.hab-group-btn').forEach(b =>
   b.addEventListener('click', () => { if (b.dataset.group !== getHabitGroup()) setHabitGroup(b.dataset.group); }));
 document.getElementById('habSortSel').addEventListener('change', e => setHabitSort(e.target.value));
+
+document.querySelectorAll('.hab-mobile-nav-btn').forEach(b => b.addEventListener('click', () => {
+  const view = b.dataset.habView;
+  document.querySelector('.hab-layout').dataset.mobileView = view;
+  document.querySelectorAll('.hab-mobile-nav-btn').forEach(btn => {
+    const active = btn === b;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active);
+  });
+}));
 
 // ── Add habit modal ──
 const _AH = { area: null, routine: 'anytime', track: 'checkbox', sched: 'daily', days: [1, 3, 5], len: '0' };

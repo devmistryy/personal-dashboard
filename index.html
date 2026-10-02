@@ -18,7 +18,7 @@
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
 <link rel="stylesheet" href="css/main.css?v=39">
 <link rel="stylesheet" href="css/todo.css?v=31">
-<link rel="stylesheet" href="css/habits.css?v=63">
+<link rel="stylesheet" href="css/habits.css?v=70">
 <link rel="stylesheet" href="css/jobs.css?v=93">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
@@ -201,9 +201,14 @@
   <!-- Tab: Habits -->
   <div class="tab-panel" id="tab-habits">
     <div class="section">
-      <div class="hab-layout">
+      <div class="hab-mobile-nav" role="tablist" aria-label="Habits view">
+        <button class="hab-mobile-nav-btn active" data-hab-view="todo" role="tab" aria-selected="true" type="button">To-do</button>
+        <button class="hab-mobile-nav-btn" data-hab-view="calendar" role="tab" aria-selected="false" type="button">Calendar</button>
+        <button class="hab-mobile-nav-btn" data-hab-view="intensive" role="tab" aria-selected="false" type="button">Intensive</button>
+      </div>
+      <div class="hab-layout" data-mobile-view="todo">
         <!-- Today: the check-in list -->
-        <div class="card hab-panel" id="habitCard">
+        <div class="card hab-panel" id="habitCard" data-hab-panel="todo">
           <div class="hab-head">
             <div class="hab-head-left">
               <div class="hab-count"><b id="habCountNum">0/0</b><span>done today</span></div>
@@ -246,7 +251,7 @@
 
         <div class="hab-side">
           <!-- Month calendar -->
-          <div class="card hab-panel">
+          <div class="card hab-panel" data-hab-panel="calendar">
             <div class="hcal">
               <div class="hcal-nav">
                 <button class="hcal-nav-btn" id="hcalPrev" type="button" aria-label="Previous month">‹</button>
@@ -262,7 +267,7 @@
           </div>
 
           <!-- Reactive habits -->
-          <div class="card hab-panel">
+          <div class="card hab-panel" data-hab-panel="intensive">
             <div class="rh-panel">
               <div class="rh-panel-head">
                 <span class="hab-eyebrow">Reactive habits</span>
@@ -1209,7 +1214,7 @@
      is the only file with bare top-level calls. Keep this order. -->
 <script src="js/todo.js?v=31"></script>
 <script src="js/todoPlan.js?v=4"></script>
-<script src="js/habits.js?v=45"></script>
+<script src="js/habits.js?v=46"></script>
 <script src="js/reactiveHabits.js?v=2"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>

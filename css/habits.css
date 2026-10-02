@@ -1165,10 +1165,11 @@
   .hd-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
   .hd-stat {
     background: #111214; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px;
-    padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+    padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0;
+    text-align: center;
   }
   .hd-stat-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); }
-  .hd-stat-val { display: flex; align-items: center; min-height: 30px; }
+  .hd-stat-val { display: flex; align-items: center; justify-content: center; min-height: 30px; }
   .hd-stat-num {
     font-family: var(--font-mono); font-size: 24px; font-weight: 700; line-height: 1;
     letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--text-primary);
@@ -1248,7 +1249,7 @@
   .hd-cell.void { background: transparent; border: 1.5px dashed rgba(124,147,184,0.6); color: #7C93B8; }
   .hd-cell.off { background: transparent; border-color: rgba(255,255,255,0.05); color: rgba(255,255,255,0.3); }
   .hd-cell.pre, .hd-cell.fut { background: transparent; border-color: rgba(255,255,255,0.04); color: rgba(255,255,255,0.2); font-weight: 500; }
-  .hd-cell.today { box-shadow: 0 0 0 1.5px var(--text-primary); color: var(--text-primary); }
+  .hd-cell.today { box-shadow: inset 0 0 0 1.5px var(--text-primary); color: var(--text-primary); }
   .hd-cell.clk { cursor: pointer; }
   .hd-cell.clk:hover { filter: brightness(1.25); border-color: rgba(255,255,255,0.4); }
   .hd-cell.clk:focus-visible { outline: 2px solid #4A9EFF; outline-offset: 1px; }
@@ -1268,6 +1269,8 @@
   .hd-notes .area-note-input-wrap { margin-top: 12px; }
 
   /* Responsive */
+  .hab-mobile-nav { display: none; }
+
   /* The sidebar takes ~240px, so the list needs the full width well before
      the window gets narrow: one column, Today list first (it's first in the
      markup), calendar and reactive habits side by side underneath. */
@@ -1284,13 +1287,62 @@
     .hab-side { grid-template-columns: 1fr; }
   }
   @media (max-width: 640px) {
+    .hab-mobile-nav {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      padding-bottom: 2px;
+    }
+    .hab-mobile-nav-btn {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 7px 11px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      background: none;
+      color: var(--text-tertiary);
+      font: 600 14px var(--font-body);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .hab-mobile-nav-btn.active {
+      border-color: rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.1);
+      color: var(--text-primary);
+    }
+    .hab-layout[data-mobile-view="todo"] [data-hab-panel]:not([data-hab-panel="todo"]),
+    .hab-layout[data-mobile-view="calendar"] [data-hab-panel]:not([data-hab-panel="calendar"]),
+    .hab-layout[data-mobile-view="intensive"] [data-hab-panel]:not([data-hab-panel="intensive"]) { display: none; }
     .hab-cols { display: none; }
     .hab-row { grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 10px; padding: 10px 12px; }
     .hab-week { display: none; }
     .hab-hover { display: none; }
     .hab-row .habit-drag-handle { display: none; }
     .hab-count b { font-size: 34px; }
-    .hd-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #habitDetailPage { overflow-x: hidden; }
+    #habitDetailPage .habit-detail-wrap,
+    #habitDetailPage .habit-detail-cols,
+    #habitDetailPage .habit-detail-col-left,
+    #habitDetailPage .habit-detail-col-right,
+    #habitDetailPage .hd-hist { min-width: 0; }
+    #habitDetailPage .hd-heat-wrap { max-width: 100%; }
+    #habitDetailPage .habit-detail-col-left,
+    #habitDetailPage .habit-detail-col-right,
+    #habitDetailPage #habitDetailActions { display: contents; }
+    #habitDetailPage .habit-detail-cols { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+    #habitDetailPage .hd-checkin,
+    #habitDetailPage .hd-stats { margin-bottom: 0; }
+    #habitDetailPage #habitDetailActions .hd-checkin { order: 1; }
+    #habitDetailPage #habitDetailStats { order: 2; }
+    #habitDetailPage #habitDetailHistory { order: 3; }
+    #habitDetailPage #habitDetailActions .hd-settings { order: 4; }
+    #habitDetailPage #habitDetailActions .hd-danger { order: 5; }
+    #habitDetailPage #habitDetailNotes { order: 6; }
+    #habitDetailPage .hd-heat { grid-template-columns: 16px repeat(13, minmax(0, 1fr)); gap: 2px; min-width: 0; }
+    #habitDetailPage .hd-cell { font-size: 8px; border-radius: 4px; }
+    #habitDetailPage .hd-heat-month { font-size: 8px; }
+    #habitDetailPage .hd-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    #habitDetailPage .hd-stat { padding: 10px 8px; }
     .hd-set { grid-template-columns: 1fr; gap: 6px; }
     .hd-hist-hint { display: none; }
   }
