@@ -129,6 +129,15 @@
     transition: background 0.15s, opacity 0.2s;
   }
   .hab-row:hover { background: #1A1B1F; }
+  .hab-row.is-flipping {
+    z-index: 2;
+    animation: habit-row-land 0.95s ease-out;
+  }
+  @keyframes habit-row-land {
+    0% { box-shadow: 0 0 0 0 rgba(107,227,164,0); }
+    35% { background: rgba(107,227,164,0.16); box-shadow: 0 0 0 5px rgba(107,227,164,0.10), 0 10px 28px rgba(0,0,0,0.28); }
+    100% { box-shadow: 0 0 0 0 rgba(107,227,164,0); }
+  }
   .hab-row.drag-over { border-top: 2px solid rgba(255,255,255,0.35); }
   .hab-row.dragging { opacity: 0.4; }
   .hab-row.is-new { animation: task-new 1.4s ease-out; }

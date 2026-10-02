@@ -314,7 +314,7 @@ function _reorderHabitByDrag(fromEl, toEl) {
 
 // FLIP-animate `rowSel` rows inside `containerEl` (a node that survives `mutate`)
 // around a DOM rebuild. Rows are matched across the rebuild by `data-habit-id`.
-function _flipRows(containerEl, rowSel, mutate) {
+function _flipRows(containerEl, rowSel, mutate, focusId) {
   if (!containerEl || matchMedia('(prefers-reduced-motion: reduce)').matches) { mutate(); return; }
   const firstTop = new Map();
   containerEl.querySelectorAll(rowSel).forEach(r => firstTop.set(r.dataset.habitId, r.getBoundingClientRect().top));
@@ -326,8 +326,12 @@ function _flipRows(containerEl, rowSel, mutate) {
     if (Math.abs(dy) < 1) return;
     r.style.transition = 'none';
     r.style.transform  = `translateY(${dy}px)`;
+    if (r.dataset.habitId === focusId) {
+      r.classList.add('is-flipping');
+      setTimeout(() => r.classList.remove('is-flipping'), 950);
+    }
     void r.offsetHeight; // reflow so the next line animates from here
-    r.style.transition = 'transform 0.34s cubic-bezier(0.22,1,0.36,1)';
+    r.style.transition = 'transform 0.75s cubic-bezier(0.22,1,0.36,1)';
     r.style.transform  = '';
   });
 }
@@ -538,7 +542,7 @@ function buildHabitRow(habit, allHabits, opts) {
   li.className = 'hab-row' + (rowDone ? ' is-done' : '') + (isVoided && !rowDone ? ' is-voided' : '');
   li.dataset.habitId = habit.id;
 
-  const refresh = () => _flipRows(document.getElementById('habitList'), '.hab-row', renderHabits);
+  const refresh = () => _flipRows(document.getElementById('habitList'), '.hab-row', renderHabits, habit.id);
 
   if (opts.canDrag && !preview) {
     li.draggable = true;
