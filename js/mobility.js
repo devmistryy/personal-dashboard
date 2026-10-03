@@ -216,21 +216,25 @@ function _mobSpacing(f) {
 // in the template's phase (weekday offset `off`), so perfect adherence lands on
 // the template days.
 // Load stays even: a unit on its template day always goes (the template is
-// balanced), but catch-up sessions only fill a day while its session holds fewer
-// than `cap` exercises — most overdue first — so units that fell behind together
-// spread out instead of moving in lockstep.
+// balanced), but catch-up sessions only fill a day up to `cap` exercises — most
+// overdue first — so units that fell behind together spread out instead of moving
+// in lockstep. A single exercise may go one over, so one missed exercise can come
+// back the next day even when that day is already full; a group may not (moving
+// a whole block early empties a later day).
 // Days before today count what was logged; today on assumes each due session gets done.
 //   units: [{ f, off, from, until?, logged: Set(date), tod: 'morning'|'night', n: exercises in it }]
 //   (`until`: archive day — the unit is off the schedule from then on)
-//   → per unit { due: Set(date), carried: Set(date) } — `carried` are due days that
-//     only re-offer an earlier undone session (no new one came due), so leaving
-//     one undone isn't another miss.
+//   → per unit { due: Set(date), carried: Set(date), spare: Set(date) } — `carried`
+//     are due days that only re-offer an earlier undone session (no new one came
+//     due), so leaving one undone isn't another miss; `spare` are days a make-up
+//     was allowed by its rest spacing but held back because the day was full —
+//     offered as optional extras.
 function _mobSimulate(units, to, today, cap = { morning: Infinity, night: Infinity }) {
   const st = units.map(u => {
     const f = Math.max(1, Math.min(7, u.f | 0));
     // c: owed credit (clamped); ph: the same pace unclamped, marking when a new session comes due.
     const c = (_mobDateIdx(u.from) - u.off + 7) % 7 * f % 7;
-    return { u, f, ..._mobSpacing(f), c, ph: c, since: Infinity, run: 0, fresh: 0, due: new Set(), carried: new Set() };
+    return { u, f, ..._mobSpacing(f), c, ph: c, since: Infinity, run: 0, fresh: 0, due: new Set(), carried: new Set(), spare: new Set() };
   });
   const from = units.map(u => u.from).sort()[0];
   for (let d = from; d <= to; d = _shiftDay(d, 1)) {
@@ -245,22 +249,22 @@ function _mobSimulate(units, to, today, cap = { morning: Infinity, night: Infini
       if (s.c >= 7 && s.since >= s.minGap && (s.since > 1 || s.run < s.maxRun)) (onDay ? pick(s) : catchUp.push(s));
     });
     catchUp.sort((a, b) => b.c - a.c || b.since - a.since)
-      .forEach(s => { if (load[s.u.tod] + s.u.n <= cap[s.u.tod]) pick(s); });
+      .forEach(s => { if (load[s.u.tod] + s.u.n <= cap[s.u.tod] + (s.u.n === 1)) pick(s); else s.spare.add(d); });
     live.forEach(s => {
       if (s.u.logged.has(d) || (s.due.has(d) && d >= today)) { s.run = s.since === 1 ? s.run + 1 : 1; s.since = 0; s.c -= 7; }
       s.c = Math.max(-7, Math.min(7 * s.f, s.c));
     });
   }
-  return st.map(s => ({ due: s.due, carried: s.carried }));
+  return st.map(s => ({ due: s.due, carried: s.carried, spare: s.spare }));
 }
 
 // Compile the whole list into due dates per exercise, through the end of this week
 // (or of the future week the strip is showing).
-//   → { due: Map(id → Set('YYYY-MM-DD')), carried: Map(id → Set) }  (see _mobSimulate)
+//   → { due, carried, spare: Map(id → Set('YYYY-MM-DD')) }  (see _mobSimulate)
 // The weekly template (evenly-spread, load-balanced weekdays) sets each unit's
 // phase and the per-day load cap; _mobSimulate moves sessions around misses from there.
 function compileMobSchedule(exercises) {
-  const due = new Map(), carried = new Map();
+  const due = new Map(), carried = new Map(), spare = new Map();
   const today = getActiveDateString(), end = _shiftDay(_mobThisWeekMonday(), 7 * Math.max(0, _mobWeekOff) + 6);
   // ponytail: simulate at most ~14 months back; older history only matters to a very long streak.
   const floor = _shiftDay(today, -420);
@@ -312,18 +316,36 @@ function compileMobSchedule(exercises) {
       logged: new Set(unit.flatMap(ex => getMobLog(ex.id).map(e => e.date))) };
   });
 
-  // Catch-up never makes a session heavier than the template's heaviest day.
+  // Catch-up never makes a session heavier than the template's heaviest day
+  // (single exercises get one of slack, see _mobSimulate).
   const cap = { morning: Math.max(...totals.morning), night: Math.max(...totals.night) };
   _mobSimulate(specs, end, today, cap).forEach((r, i) =>
-    units[i].forEach(ex => { due.set(ex.id, r.due); carried.set(ex.id, r.carried); }));
+    units[i].forEach(ex => { due.set(ex.id, r.due); carried.set(ex.id, r.carried); spare.set(ex.id, r.spare); }));
 
-  return { due, carried };
+  return { due, carried, spare };
 }
 
 // Whether a session row counts toward a day's tally: done, or a session that newly
-// came due — an undone carry-over of an earlier miss isn't counted twice.
+// came due — an undone carry-over of an earlier miss isn't counted twice, and an
+// optional make-up left undone isn't counted at all.
 function _mobCounts(ex, date, schedule) {
-  return _mobLoggedOn(ex.id, date) || !schedule.carried.get(ex.id)?.has(date);
+  return _mobLoggedOn(ex.id, date) || (!!schedule.due.get(ex.id)?.has(date) && !schedule.carried.get(ex.id)?.has(date));
+}
+
+// ── Optional make-ups ──
+// Settings key mobility_extra_v1: { date, ids } — make-ups added to today's routine
+// by choice (from the schedule's `spare` list). Only today's list is used.
+function _mobExtras(date) {
+  const x = MEM['mobility_extra_v1'];
+  return x && x.date === date && date === getActiveDateString() ? x.ids : [];
+}
+function toggleMobExtra(ids) {
+  const today = getActiveDateString(), cur = _mobExtras(today);
+  const on = !ids.every(id => cur.includes(id));
+  const next = { date: today, ids: on ? [...new Set([...cur, ...ids])] : cur.filter(id => !ids.includes(id)) };
+  MEM['mobility_extra_v1'] = next; _syncSetting('mobility_extra_v1', next);
+  renderMobility();
+  if (document.getElementById('mobSessionPage').classList.contains('open')) renderMobSession();
 }
 
 // Weekday indexes (0 = Mon) an exercise is due this week, misses and catch-ups included.
@@ -467,7 +489,26 @@ function _mobNudge(list, today) {
 
 
 // ── Render: today (header, nudge, the two session cards) ──
-function _mobSessionCardHTML(tod, list, date) {
+// Make-ups on offer for a session today: behind, and allowed by their rest days,
+// but held back because today is already full. One chip per exercise or group.
+function _mobMakeupsHTML(tod, date, schedule) {
+  const extras = _mobExtras(date), chips = new Map();
+  getMobExercises().filter(ex => (ex.session === 'night' ? 'night' : 'morning') === tod &&
+      !_mobIsArchived(ex) && schedule.spare.get(ex.id)?.has(date))
+    .sort(_mobRowCmp).forEach(ex => {
+      const k = _mobGroupKey(ex.group) || ex.id;
+      if (!chips.has(k)) chips.set(k, { label: ex.group || ex.name, ids: [] });
+      chips.get(k).ids.push(ex.id);
+    });
+  if (!chips.size) return '';
+  return `<div class="mob-makeups">
+      <span class="mob-makeups-h" title="You're behind on these and their rest days allow today, but today is already full. Add any you feel like doing — skipping them isn't a miss.">Make-ups</span>
+      ${[...chips.values()].map(c => { const on = c.ids.every(id => extras.includes(id));
+        return `<button class="mob-makeup${on ? ' on' : ''}" type="button" data-mobextra="${c.ids.join(',')}" title="${on ? 'Remove from today' : 'Add to today (optional)'}">${on ? '✓' : '+'} ${_esc(c.label)}</button>`; }).join('')}
+    </div>`;
+}
+
+function _mobSessionCardHTML(tod, list, date, schedule) {
   const label = tod === 'night' ? '☾ Night' : '☀ Morning';
   const done  = list.filter(ex => _mobLoggedOn(ex.id, date)).length;
   const rows  = list.map(ex => {
@@ -477,7 +518,7 @@ function _mobSessionCardHTML(tod, list, date) {
     // Read-only status; logging happens on the session page the row opens.
     return `<button class="mob-trow${logged ? ' done' : ''}" type="button" data-mobsession-open="${tod}">
       <span class="mob-status" aria-label="${logged ? 'Done' : 'Not done yet'}">${logged ? '✓' : ''}</span>
-      <span class="mob-tname">${_esc(ex.name)}${ex.group ? `<span class="mob-tgroup">${_esc(ex.group)}</span>` : ''}</span>
+      <span class="mob-tname">${_esc(ex.name)}${ex.group ? `<span class="mob-tgroup">${_esc(ex.group)}</span>` : ''}${schedule.due.get(ex.id)?.has(date) ? '' : '<span class="mob-tgroup">extra</span>'}</span>
       ${bumped ? `<span class="mob-tcue" title="New dose, up from ${_esc(_mobDose(_mobCurrent(ex)))}">↑</span>` : ''}
       <span class="mob-dose mob-dose-${_mobMeasureClass(d)}">${_esc(_mobDose(d))}</span>
     </button>`;
@@ -488,7 +529,8 @@ function _mobSessionCardHTML(tod, list, date) {
       ${list.length ? `<button class="mob-btn" type="button" data-mobsession-open="${tod}" title="Open the session to adjust sets and doses">▶ Start</button>` : ''}
     </div>
     <div class="mob-sess-bar"><i style="width:${list.length ? done / list.length * 100 : 0}%"></i></div>
-    <div class="mob-sess-list">${rows || '<div class="mob-empty">Rest — nothing scheduled.</div>'}</div>`;
+    <div class="mob-sess-list">${rows || '<div class="mob-empty">Rest — nothing scheduled.</div>'}</div>
+    ${_mobMakeupsHTML(tod, date, schedule)}`;
 }
 
 function renderMobToday(schedule) {
@@ -525,8 +567,8 @@ function renderMobToday(schedule) {
       <button class="mob-link" type="button" data-mobskip="${nudge.ex.id}">Not yet</button>
     </div>` : '';
 
-  document.getElementById('mobTodayMorning').innerHTML = _mobSessionCardHTML('morning', am, today);
-  document.getElementById('mobTodayNight').innerHTML   = _mobSessionCardHTML('night', pm, today);
+  document.getElementById('mobTodayMorning').innerHTML = _mobSessionCardHTML('morning', am, today, schedule);
+  document.getElementById('mobTodayNight').innerHTML   = _mobSessionCardHTML('night', pm, today, schedule);
 }
 
 
@@ -729,6 +771,7 @@ function renderMobRail(schedule) {
 
   // Misses over the last 7 days, not counting today.
   const miss = new Map();
+  const lastDone = ex => getMobLog(ex.id).filter(e => e.date <= today).slice(-1)[0]?.date || '';
   for (let i = 7; i >= 1; i--) {
     const d = _shiftDay(today, -i);
     ['morning', 'night'].forEach(tod => _mobSessionRows(d, tod, schedule).forEach(ex => {
@@ -756,11 +799,11 @@ function renderMobRail(schedule) {
     <div class="card mob-rail-card">
       <div class="mob-rail-h"><span>Falling behind</span><span>last 7 days</span></div>
       ${missed.length ? missed.map(({ ex, n, d }) => {
-        const last = getMobLog(ex.id).slice(-1)[0];
+        const last = lastDone(ex);
         return `<button class="mob-behind" type="button" data-mobdetail="${ex.id}">
           <span class="mob-sdot ${ex.session === 'night' ? 'night' : 'morning'}"></span>
-          <span class="mob-behind-nm">${_esc(ex.name)}</span>
-          <span class="mob-behind-why">${n > 1 ? `missed ${n}×` : `missed ${MOB_DAYS[_mobDateIdx(d)]}`} · ${last ? _mobAgo(last.date, today) : 'never done'}</span>
+          <span class="mob-behind-txt"><span class="mob-behind-nm">${_esc(ex.name)}</span>
+            <span class="mob-behind-why">${n > 1 ? `missed ${n}×` : `missed ${MOB_DAYS[_mobDateIdx(d)]}`} · ${last ? `last done ${_mobAgo(last, today)}` : 'never done'}</span></span>
         </button>`;
       }).join('') : '<div class="mob-empty">Nothing missed in the last 7 days.</div>'}
     </div>`;
@@ -785,11 +828,13 @@ function renderMobility() {
 // exactly that date. The compile isn't stable over time, so the entry set is what
 // keeps past sessions editable.
 function _mobSessionRows(date, tod, schedule = compileMobSchedule(getMobExercises())) {
-  // Due that day (once the exercise existed), plus anything logged off-schedule.
+  // Due that day (once the exercise existed), plus anything logged off-schedule and
+  // any make-ups added for today.
+  const extras = _mobExtras(date);
   return getMobExercises().filter(ex =>
     (ex.session === 'night' ? 'night' : 'morning') === tod &&
     ((schedule.due.get(ex.id)?.has(date) && _mobStart(ex) <= date) ||
-     _mobLoggedOn(ex.id, date))).sort(_mobRowCmp);
+     _mobLoggedOn(ex.id, date) || extras.includes(ex.id))).sort(_mobRowCmp);
 }
 
 function openMobSession(date, tod) {
@@ -1546,6 +1591,9 @@ _mobPanel.addEventListener('click', e => {
     renderMobility();
     return;
   }
+  const extra = e.target.closest('[data-mobextra]');
+  if (extra) { toggleMobExtra(extra.dataset.mobextra.split(',')); return; }
+
   const skip = e.target.closest('[data-mobskip]');
   if (skip) {
     const last = getMobLog(skip.dataset.mobskip).slice(-1)[0];

@@ -95,6 +95,17 @@
   .mob-tgroup { font-size: 10.5px; color: var(--text-tertiary); margin-left: 6px; }
   .mob-tcue { font: 700 11px var(--font-mono); color: var(--success); }
 
+  /* Optional make-ups under a session's list */
+  .mob-makeups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px 10px 14px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .mob-makeups-h { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-tertiary); margin-right: 2px; cursor: help; }
+  .mob-makeup {
+    font: 12px var(--font-body); color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+    padding: 4px 10px; border-radius: 99px; background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.18);
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .mob-makeup:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .mob-makeup.on { border-style: solid; border-color: rgba(107,227,164,0.45); background: rgba(107,227,164,0.1); color: var(--success); }
+
   /* Dose badge */
   .mob-dose {
     font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
@@ -318,7 +329,8 @@
   .mob-gain-bar i { display: block; height: 100%; background: #7FBBFF; }
   .mob-gain-bar i.reps { background: #BCA6FB; }
   .mob-behind { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
-  .mob-behind-nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mob-behind-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .mob-behind-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mob-behind-why { font: 10.5px var(--font-mono); color: #E0A36B; white-space: nowrap; }
   .mob-rail .mob-empty { padding: 4px 0; }
 

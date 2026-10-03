@@ -77,16 +77,26 @@ assert.strictEqual(idle.due.size - idle.carried.size, 6);
 assert.strictEqual(_mobDueDates(3, 0, MON, day(13), new Set([2, 4, 6, 9, 11, 13].map(day)), day(14)).carried.size, 0);
 
 // Units that fall behind together spread out instead of moving in lockstep:
-// catch-up never pushes a day past the template's heaviest day, and every unit
-// still gets its 3 a week.
+// catch-up never pushes a day more than one past the template's heaviest day, and
+// every unit still gets its 3 a week.
 const offs = [0, 1, 2, 3, 4, 5];
 const tmpl = new Array(7).fill(0);
 offs.forEach(o => _mobBaseDays(3).forEach(b => tmpl[(b + o) % 7]++));
 const cap = Math.max(...tmpl);
 const sim = _mobSimulate(offs.map(off => ({ f: 3, off, from: MON, logged: new Set(), tod: 'morning', n: 1 })),
   day(27), day(7), { morning: cap, night: Infinity });
-for (let i = 7; i < 28; i++) assert.ok(sim.filter(r => r.due.has(day(i))).length <= cap, `day ${i} over cap`);
+for (let i = 7; i < 28; i++) assert.ok(sim.filter(r => r.due.has(day(i))).length <= cap + 1, `day ${i} over cap`);
 sim.forEach(r => assert.ok([...r.due].filter(d => d >= day(7)).length >= 9, 'each unit keeps 3×/wk'));
+
+// A single exercise's make-up may go one over the cap: 5×/wk on Sat/Sun/Tue/Wed/Thu
+// (off 4), added on a Wednesday, missed it, done Thursday. Friday is a rest day, so
+// it's the make-up — it fits onto a 6-exercise night with a cap of 6, not 5.
+const WED = day(2), filler = { f: 7, off: 0, from: WED, logged: new Set(), tod: 'night', n: 6 };
+const hero = { f: 5, off: 4, from: WED, logged: new Set([day(3)]), tod: 'night', n: 1 };
+assert.ok(_mobSimulate([filler, hero], day(6), day(5), { morning: Infinity, night: 6 })[1].due.has(day(4)), 'one over is fine');
+const held = _mobSimulate([filler, hero], day(6), day(5), { morning: Infinity, night: 5 })[1];
+assert.ok(!held.due.has(day(4)), 'two over waits');
+assert.ok(held.spare.has(day(4)), '...and is offered as an optional make-up instead');
 
 // Archived from a day (`until`): its days before that stay as they were, none from then on.
 const whole = _mobSimulate([{ f: 3, off: 0, from: MON, logged: new Set(), tod: 'morning', n: 1 }], day(20), day(21))[0];
