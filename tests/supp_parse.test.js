@@ -7,7 +7,8 @@ const vm = require('vm');
 const el = { addEventListener() {} };
 const ctx = { document: { getElementById: () => el, querySelectorAll: () => [] }, MEM: {}, console, _syncSetting() {} };
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/diet.js'), 'utf8'), ctx);
+for (const f of ['diet.js', 'supplements.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../js', f), 'utf8'), ctx);
+const plain = x => JSON.parse(JSON.stringify(x));
 const { _suppParseLabel } = ctx;
 
 // Name and amount columns come back as separate OCR lines on the same row.
@@ -56,23 +57,6 @@ assert.deepStrictEqual(st('2026-08-30'), { on: false, until: '2026-09-01' });   
 assert.deepStrictEqual(st('2026-11-09'), { on: true, day: 14, of: 14, until: '2026-11-10' });
 assert.deepStrictEqual(st('2026-11-10'), { on: false, until: '2026-11-24' });
 
-const { _suppPadRows } = ctx;
-const names = rows => rows.map(r => r.name);
-const empty = [];
-_suppPadRows(empty);
-assert.deepStrictEqual(names(empty), ['']);
-const zinc = [{ name: 'Zinc', amount: 11, unit: 'mg' }];
-_suppPadRows(zinc);
-assert.deepStrictEqual(names(zinc), ['Zinc', '']);
-zinc[0].name = '  ';
-_suppPadRows(zinc);
-assert.deepStrictEqual(names(zinc), ['  ']);
-const two = [{ name: 'Zinc', amount: 1, unit: 'mg' }, { name: 'Magnesium', amount: 2, unit: 'mg' }];
-_suppPadRows(two);
-assert.deepStrictEqual(names(two), ['Zinc', 'Magnesium', '']);
-_suppPadRows(two);
-assert.strictEqual(two.length, 3);
-
 // A second photo adds to the list: blanks dropped, repeated names skipped, edits kept.
 const { _suppMergeRows } = ctx;
 const list = [{ name: 'Vitamin C', amount: 50, unit: 'mg' }, { name: '', amount: null, unit: 'mg' }];
@@ -88,17 +72,61 @@ r = _suppParseLabel({ lines: [], text: 'Zinc 10 mg' }, 2);
 assert.strictEqual(r.servingFound, false);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(r.rows)), [{ name: 'Zinc', amount: 5, unit: 'mg' }]);
 
-// Contents saved without logging win over the latest log's contents.
-ctx.MEM.diet_supplements_v1 = [{ id: 'a', name: 'Multi', date: '2026-09-20', qty: 1, contents: [{ name: 'Zinc', amount: 5, unit: 'mg' }] }];
-assert.strictEqual(ctx._suppFind('multi').contents[0].amount, 5);
-ctx._suppWriteContents('Multi', [{ name: 'Zinc', amount: 8, unit: 'mg' }]);
-assert.strictEqual(ctx._suppFind('multi').contents[0].amount, 8);
+// Catalog: one entry per name; the latest log names it, a contents edit wins over the log's,
+// time of day comes from when it's usually taken, archived ones drop out, meta alone is enough.
+const logs = [
+  { id: '1', name: 'NAC + ALA', date: '2026-10-01', time: '09:06', qty: 1, contents: [{ name: 'NAC', amount: 500, unit: 'mg' }] },
+  { id: '2', name: 'NAC + ALA', date: '2026-10-02', time: '09:16', qty: 1, contents: [] },
+  { id: '3', name: 'Magnesium Glycinate', date: '2026-09-26', time: '22:10', qty: 2, contents: [{ name: 'Magnesium Glycinate', amount: 120, unit: 'mg' }] },
+  { id: '4', name: 'Old Thing', date: '2026-09-01', time: '08:00', qty: 1, contents: [] },
+];
+const cat = ctx._suppCatalogFrom(logs,
+  { 'old thing': { archived: true }, 'sleep cap': { name: 'Sleep Cap', sched: 'prn', stock: 5, food: 'with' } },
+  { 'nac + ala': [{ name: 'NAC', amount: 600, unit: 'mg' }] }, {}, { 'magnesium glycinate': 'Before bed' });
+assert.deepStrictEqual(plain(cat.map(c => c.name)), ['Magnesium Glycinate', 'NAC + ALA', 'Sleep Cap']);
+const [mag, nac, sleep] = plain(cat);
+assert.deepStrictEqual([nac.slot, nac.usual, nac.first, nac.last.id, nac.contents[0].amount, nac.sched], ['morning', '09:15', '2026-10-01', '2', 600, 'daily']);
+assert.deepStrictEqual([mag.slot, mag.qty, mag.note, mag.stock], ['night', 2, 'Before bed', '']);
+assert.deepStrictEqual([sleep.sched, sleep.stock, sleep.last, sleep.food, nac.food], ['prn', 5, null, 'with', '']);
 
-// Notes: trimmed, case-insensitive name, cleared when emptied, no rewrite when unchanged.
-assert.strictEqual(ctx._suppWriteNote('Multi', '  Take with food '), true);
-assert.strictEqual(ctx._suppNoteFor('multi'), 'Take with food');
-assert.strictEqual(ctx._suppWriteNote('MULTI', 'Take with food'), false);
-ctx._suppWriteNote('Multi', '');
-assert.strictEqual('multi' in ctx.MEM.diet_supp_notes_v1, false);
+// Spacing: pending until the first one is logged, then counts down from its latest dose.
+const after = { key: 'nac + ala', min: 30 };
+assert.deepStrictEqual(plain(ctx._suppWaitState(after, [], 600)), { pending: true, min: 30 });
+assert.deepStrictEqual(plain(ctx._suppWaitState(after, ['09:16'], 9 * 60 + 28)), { pending: false, min: 30, readyAt: '09:46', left: 18 });
+assert.strictEqual(ctx._suppWaitState(after, ['07:00', '09:16'], 600).left, -14);
+assert.strictEqual(ctx._suppGapBefore('09:41', ['09:06']), 35);
+assert.strictEqual(ctx._suppGapBefore('09:00', ['09:06']), null);
+
+// A supplement that waits on another sits right after it; a loop still lists both.
+const A = { key: 'a' }, B = { key: 'b', after: { key: 'c', min: 30 } }, C = { key: 'c' }, D = { key: 'd', after: { key: 'gone', min: 5 } };
+assert.deepStrictEqual(plain(ctx._suppChainOrder([A, B, C, D]).map(x => x.key)), ['a', 'c', 'b', 'd']);
+const X = { key: 'x', after: { key: 'y', min: 1 } }, Y = { key: 'y', after: { key: 'x', min: 1 } };
+assert.deepStrictEqual(plain(ctx._suppChainOrder([X, Y]).map(x => x.key)), ['x', 'y']);
+
+// Intake: forms of one nutrient merge, mg/mcg convert, other units stay apart, blanks skip.
+const t = plain(ctx._suppTotals([
+  { name: 'Magnesium Glycinate', qty: 2, contents: [{ name: 'Magnesium Glycinate', amount: 120, unit: 'mg' }] },
+  { name: 'Optimize Minerals', qty: 1, contents: [{ name: 'Magnesium Chelate', amount: 200, unit: 'mg' }, { name: 'Methylated B-12', amount: 2000, unit: 'mcg' },
+    { name: 'Selenium Chelate', amount: 50, unit: 'mcg' }, { name: 'Probiotic', amount: 1e9, unit: 'CFU' }, { name: 'Taurine', amount: null, unit: 'mg' }] },
+  { name: 'Multi', qty: 1, contents: [{ name: 'Selenium', amount: 0.05, unit: 'mg' }] },
+]));
+assert.deepStrictEqual(t.map(x => [x.name, Math.round(x.amount * 1000) / 1000, x.unit]),
+  [['Magnesium', 440, 'mg'], ['Probiotic', 1e9, 'CFU'], ['Selenium', 100, 'mcg'], ['Vitamin B12', 2000, 'mcg']]);
+assert.deepStrictEqual(t[0].src, ['Magnesium Glycinate 240 mg', 'Optimize Minerals 200 mg']);
+
+// Rename moves the log, every map and spacing rules pointing at it; a case-only rename keeps the key.
+Object.assign(ctx.MEM, {
+  diet_supplements_v1: [{ id: '1', name: 'Nac', date: '2026-10-01', time: '09:00', qty: 1 }, { id: '2', name: 'Zinc', date: '2026-10-01', time: '09:00', qty: 1 }],
+  diet_supp_meta_v1: { nac: { name: 'Nac', slot: 'morning' }, opt: { name: 'Opt', after: { key: 'nac', min: 30 } } },
+  diet_supp_notes_v1: { nac: 'With food' }, diet_supp_contents_v1: {}, diet_supp_cycles_v1: {},
+});
+ctx._suppRename('nac', 'NAC + ALA');
+assert.deepStrictEqual(plain(ctx.MEM.diet_supplements_v1.map(l => l.name)), ['NAC + ALA', 'Zinc']);
+assert.deepStrictEqual(plain(ctx.MEM.diet_supp_notes_v1), { 'nac + ala': 'With food' });
+assert.strictEqual(ctx.MEM.diet_supp_meta_v1['nac + ala'].name, 'NAC + ALA');
+assert.strictEqual(ctx.MEM.diet_supp_meta_v1.opt.after.key, 'nac + ala');
+ctx._suppRename('nac + ala', 'Nac + Ala');
+assert.deepStrictEqual(plain(ctx.MEM.diet_supp_notes_v1), { 'nac + ala': 'With food' });
+assert.strictEqual(ctx.MEM.diet_supplements_v1[0].name, 'Nac + Ala');
 
 console.log('supp_parse ok');

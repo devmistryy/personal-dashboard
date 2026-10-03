@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supplements — mockup</title>
+<style>
+  /* Self-contained: the few app rules it needs (main.css tokens/.card, diet.css view switch) are copied here. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --text-primary: #FAFAFA; --text-secondary: #B8B6B0; --text-tertiary: #76746E;
+    --success: #6BE3A4; --warning: #F2C063; --danger: #FF6B6B; --card-bg: rgba(255,255,255,0.04);
+    --font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  body { background: #050506; color: var(--text-primary); font-family: var(--font-body); min-height: 100vh; overflow-x: hidden; }
+  .card { background: var(--card-bg); border-radius: 16px; padding: 20px 22px; box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
+  .diet-view-bar { display: inline-flex; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+  .diet-view-btn { font: 600 13px var(--font-body); padding: 8px 18px; border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; }
+  .diet-view-btn.active { background: rgba(255,255,255,0.10); color: var(--text-primary); }
+
+  /* Mockup-only styles, prefixed sp-. */
+  :root {
+    --sp-line: rgba(255,255,255,0.06);
+    --sp-soft: rgba(255,255,255,0.035);
+    --sp-am: rgb(253,135,51); --sp-mid: #F2C063; --sp-pm: #C084FC; --sp-any: #7FBBFF; --sp-prn: #8FA3B8;
+    --sp-ok: #6BE3A4; --sp-warn: #F2A93B;
+  }
+  body { padding: 28px 16px 90px; }
+  .sp-wrap { max-width: 1180px; margin: 0 auto; }
+  .sp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+  @media (max-width: 880px) {
+    .sp-layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  .card { margin-bottom: 14px; }
+  .sp-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .sp-note {
+    font-size: 11.5px; color: var(--text-tertiary); border: 1px dashed rgba(255,255,255,0.14);
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 18px; line-height: 1.55;
+  }
+  .sp-note b { color: var(--text-secondary); font-weight: 600; }
+
+  .sp-btn {
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+    font: 600 12px var(--font-body); color: var(--text-secondary);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.12); background: var(--sp-soft);
+    transition: background .15s, color .15s, border-color .15s, opacity .15s;
+  }
+  .sp-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+  .sp-btn.primary { background: #FAFAFA; color: #111; border-color: #FAFAFA; }
+  .sp-btn.primary:hover { background: #fff; }
+  .sp-btn:disabled { opacity: .35; cursor: default; pointer-events: none; }
+  .sp-link { background: none; border: 0; padding: 0; cursor: pointer; font: 600 11.5px var(--font-body); color: var(--sp-any); }
+  .sp-link:hover { text-decoration: underline; }
+  .sp-link.danger { color: #FF8A8A; }
+
+  .sp-card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .sp-card-h h3 { font-size: 14px; font-weight: 700; }
+  .sp-card-h .aside { font-size: 11px; color: var(--text-tertiary); }
+
+  /* ── Header ── */
+  .sp-head { display: flex; align-items: center; gap: 18px; }
+  .sp-ring { width: 64px; height: 64px; flex-shrink: 0; position: relative; }
+  .sp-ring svg { transform: rotate(-90deg); }
+  .sp-ring circle { transition: stroke-dashoffset .4s ease; }
+  .sp-ring-txt { position: absolute; inset: 0; display: grid; place-items: center; font: 700 15px var(--font-mono); }
+  .sp-head-main { flex: 1; min-width: 0; }
+  .sp-head-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .sp-head-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; display: flex; gap: 6px 12px; flex-wrap: wrap; }
+  .sp-head-sub .ok { color: var(--sp-ok); }
+  .sp-head-sub .warn { color: var(--sp-warn); }
+
+  /* ── Today checklist ── */
+  .sp-slot + .sp-slot { margin-top: 14px; }
+  .sp-slot-h {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;
+    font-size: 13px; font-weight: 700;
+  }
+  .sp-slot-h .n { font: 600 11px var(--font-mono); color: var(--text-tertiary); }
+  .sp-slot-h .hint { margin-left: auto; font-size: 11px; font-weight: 500; color: var(--text-tertiary); }
+  .sp-slot-h.morning { color: var(--sp-am); } .sp-slot-h.midday { color: var(--sp-mid); }
+  .sp-slot-h.night { color: var(--sp-pm); } .sp-slot-h.any { color: var(--sp-any); } .sp-slot-h.prn { color: var(--sp-prn); }
+
+  .sp-row {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    padding: 9px 10px; margin: 0 -10px; border-radius: 10px; cursor: pointer;
+    transition: background .15s;
+  }
+  .sp-row:hover { background: rgba(255,255,255,0.04); }
+  .sp-chk {
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer; padding: 0;
+    border: 2px solid currentColor; background: transparent; color: var(--text-tertiary);
+    display: grid; place-items: center; font: 700 13px var(--font-body);
+    transition: background .15s, border-color .15s, transform .15s;
+  }
+  .sp-chk span { opacity: 0; color: #0b0b0c; transition: opacity .15s; }
+  .sp-chk:hover { transform: scale(1.08); }
+  .sp-chk:hover span { opacity: .5; color: currentColor; }
+  .sp-chk.morning { color: var(--sp-am); } .sp-chk.midday { color: var(--sp-mid); }
+  .sp-chk.night { color: var(--sp-pm); } .sp-chk.any { color: var(--sp-any); }
+  .sp-chk.prn { color: var(--sp-prn); border-style: dashed; }
+  .sp-row.done .sp-chk { background: var(--sp-ok); border-color: var(--sp-ok); border-style: solid; }
+  .sp-row.done .sp-chk span { opacity: 1; color: #0b0b0c; }
+  .sp-name { font-size: 14px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .sp-name .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-name .dose { font: 500 11px var(--font-mono); color: var(--text-tertiary); white-space: nowrap; }
+  .sp-row.done .sp-name .t { color: var(--text-secondary); }
+  .sp-sub { display: flex; gap: 6px; font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; min-width: 0; }
+  .sp-sub .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .sp-sub .more { color: var(--text-secondary); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .sp-sub .nt { color: #C9B98F; }
+  .sp-side { display: flex; align-items: center; gap: 10px; }
+  .sp-when { font: 500 11px var(--font-mono); color: var(--text-tertiary); white-space: nowrap; min-width: 92px; text-align: right; }
+  .sp-row.done .sp-when { color: var(--sp-ok); font-weight: 600; }
+  .sp-pill {
+    font: 600 10.5px var(--font-mono); padding: 2px 7px; border-radius: 20px; white-space: nowrap;
+    background: rgba(255,255,255,0.05); color: var(--text-tertiary);
+  }
+  .sp-pill.low { background: rgba(242,169,59,0.14); color: var(--sp-warn); }
+  .sp-pill.cyc { background: rgba(107,227,164,0.12); color: var(--sp-ok); }
+  .sp-pill.cyc.off { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+  .sp-row.resting { opacity: .55; }
+  .sp-when.wait { color: var(--sp-warn); font-weight: 600; }
+  .sp-when.ready { color: var(--sp-any); font-weight: 600; }
+  .sp-chk.wait { color: var(--sp-warn); border-style: dotted; }
+  .sp-chk.wait span { opacity: 1; color: var(--sp-warn); font: 700 10px var(--font-mono); }
+  .sp-chk.ready { animation: sp-pulse 1.8s ease-in-out infinite; }
+  @keyframes sp-pulse { 50% { box-shadow: 0 0 0 5px rgba(127,187,255,0.18); } }
+  .sp-gap {
+    display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: center;
+    margin: -6px 0; font: 600 10.5px var(--font-mono); color: var(--text-tertiary);
+  }
+  .sp-gap .ln { justify-self: center; height: 20px; border-left: 2px dashed rgba(255,255,255,0.16); }
+  .sp-gap.wait { color: var(--sp-warn); } .sp-gap.wait .ln { border-color: rgba(242,169,59,0.6); }
+  .sp-gap.ready { color: var(--sp-any); } .sp-gap.ready .ln { border-color: rgba(127,187,255,0.6); }
+  .sp-gap.ok { color: var(--sp-ok); } .sp-gap.ok .ln { border-color: rgba(107,227,164,0.5); }
+  .sp-gap.early { color: var(--sp-warn); }
+  .sp-log .gp { font: 600 10.5px var(--font-mono); margin-left: 8px; }
+  .sp-log .gp.ok { color: var(--sp-ok); } .sp-log .gp.early { color: var(--sp-warn); }
+  .sp-hint { margin-top: 8px; color: var(--text-tertiary); font-size: 11.5px; line-height: 1.5; }
+
+  /* ── 14-day grid ── */
+  .sp-legend { display: flex; gap: 12px; font-size: 11px; color: var(--text-tertiary); align-items: center; flex-wrap: wrap; }
+  .sp-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .sp-grid {
+    display: grid; grid-template-columns: minmax(110px, 170px) repeat(14, minmax(14px, 1fr)) 48px;
+    gap: 4px; align-items: center;
+  }
+  .sp-gh { font: 700 9px var(--font-mono); color: var(--text-tertiary); text-align: center; line-height: 1.35; }
+  .sp-gh b { display: block; font-size: 10.5px; color: var(--text-secondary); }
+  .sp-gh.today b { color: var(--sp-any); }
+  .sp-gl { font-size: 12.5px; display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: 6px; }
+  .sp-gl span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-gl i { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .sp-cell {
+    height: 22px; border-radius: 5px; border: 0; padding: 0; cursor: pointer;
+    background: rgba(255,255,255,0.055); color: #0b0b0c; font: 700 10px var(--font-mono);
+    transition: background .15s, transform .1s;
+  }
+  .sp-cell:hover { transform: scale(1.12); background: rgba(255,255,255,0.12); }
+  .sp-cell.t { background: rgba(107,227,164,0.85); }
+  .sp-cell.t:hover { background: var(--sp-ok); }
+  .sp-cell.prn { background: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); }
+  .sp-cell.prn.t { background: rgba(127,187,255,0.75); box-shadow: none; }
+  .sp-cell.off { background: repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 5px); }
+  .sp-cell.today { outline: 1.5px solid rgba(127,187,255,0.7); outline-offset: 1px; }
+  .sp-gr { font: 600 11px var(--font-mono); color: var(--text-secondary); text-align: right; }
+  .sp-gr small { display: block; font-size: 9px; color: var(--text-tertiary); font-weight: 500; }
+  .sp-grid-foot { margin-top: 12px; font-size: 11px; color: var(--text-tertiary); }
+  @media (max-width: 600px) {
+    .sp-grid { grid-template-columns: minmax(90px, 1fr) repeat(7, 22px) 40px; }
+    .sp-grid .old { display: none; }
+  }
+
+  /* ── Compact log ── */
+  .sp-day + .sp-day { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sp-line); }
+  .sp-day-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px; }
+  .sp-day-h span { font-weight: 500; color: var(--text-tertiary); font-size: 11px; }
+  .sp-log {
+    display: grid; grid-template-columns: 72px 8px minmax(0, 1fr) auto 22px; gap: 10px; align-items: center;
+    padding: 5px 8px; margin: 0 -8px; border-radius: 7px; font-size: 13px;
+  }
+  .sp-log:hover { background: rgba(255,255,255,0.035); }
+  .sp-log .tm { font: 11.5px var(--font-mono); color: var(--text-tertiary); }
+  .sp-log i { width: 6px; height: 6px; border-radius: 50%; }
+  .sp-log .q { font: 500 11px var(--font-mono); color: var(--text-tertiary); }
+  .sp-log .x { opacity: 0; background: none; border: 0; color: var(--text-tertiary); cursor: pointer; font-size: 15px; }
+  .sp-log:hover .x { opacity: 1; }
+  .sp-log .x:hover { color: #FF8A8A; }
+  .sp-more-btn { margin-top: 10px; }
+
+  /* ── Rail ── */
+  .sp-rail .card { padding: 16px 18px; }
+  .sp-rail-h { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .sp-seg { display: inline-flex; border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; overflow: hidden; }
+  .sp-seg button { font: 600 10.5px var(--font-body); letter-spacing: 0; text-transform: none; padding: 3px 8px; border: 0; background: none; color: var(--text-tertiary); cursor: pointer; }
+  .sp-seg button.on { background: rgba(255,255,255,0.1); color: var(--text-primary); }
+  .sp-plain { display: grid; grid-template-columns: minmax(0,1fr) auto; font-size: 12.5px; }
+  .sp-plain span { padding: 6px 0; border-bottom: 1px solid var(--sp-line); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-plain span:nth-child(even) { font: 11.5px var(--font-mono); color: var(--text-primary); text-align: right; padding-left: 10px; }
+  .sp-plain span:nth-last-child(-n+2) { border-bottom: 0; }
+  .sp-rail-foot { font-size: 10.5px; color: var(--text-tertiary); line-height: 1.5; margin-top: 12px; }
+  .sp-low { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--sp-line); }
+  .sp-low:last-child { border-bottom: 0; padding-bottom: 0; }
+  .sp-low .nm { flex: 1; min-width: 0; font-size: 12.5px; }
+  .sp-low .nm div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-low .nm small { display: block; font: 10.5px var(--font-mono); color: var(--sp-warn); margin-top: 2px; }
+  .sp-low .sp-btn { padding: 4px 9px; font-size: 11px; }
+
+  /* ── Drawer (supplement page) ── */
+  .sp-scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
+  .sp-scrim.open { opacity: 1; pointer-events: auto; }
+  .sp-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); z-index: 51;
+    background: #111214; border-left: 1px solid rgba(255,255,255,0.08);
+    transform: translateX(100%); transition: transform .25s ease;
+    display: flex; flex-direction: column;
+  }
+  .sp-drawer.open { transform: none; }
+  .sp-dr-body { flex: 1; overflow-y: auto; padding: 22px 22px 16px; }
+  .sp-dr-top { display: flex; align-items: flex-start; gap: 10px; }
+  .sp-dr-name {
+    flex: 1; min-width: 0; font: 700 20px var(--font-body); color: var(--text-primary);
+    background: transparent; border: 0; border-bottom: 1px solid transparent; padding: 2px 0; outline: none;
+  }
+  .sp-dr-name:hover, .sp-dr-name:focus { border-bottom-color: rgba(255,255,255,0.18); }
+  .sp-x { background: none; border: 0; color: var(--text-tertiary); font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+  .sp-x:hover { color: var(--text-primary); }
+  .sp-dr-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 6px; }
+  .sp-stat { background: var(--sp-soft); border-radius: 10px; padding: 9px 11px; }
+  .sp-stat b { display: block; font: 700 15px var(--font-mono); }
+  .sp-stat span { font-size: 10.5px; color: var(--text-tertiary); }
+  .sp-dr-mini { display: grid; grid-template-columns: repeat(30, 1fr); gap: 2px; margin-top: 8px; }
+  .sp-dr-mini i { height: 12px; border-radius: 2px; background: rgba(255,255,255,0.06); }
+  .sp-dr-mini i.t { background: rgba(107,227,164,0.8); }
+  .sp-dr-mini-l { display: flex; justify-content: space-between; font: 9.5px var(--font-mono); color: var(--text-tertiary); margin-top: 4px; }
+  .sp-f { margin-top: 20px; }
+  .sp-f-l { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .sp-f-l .sp-link { letter-spacing: 0; text-transform: none; }
+  .sp-f-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); }
+  .sp-in {
+    font: 13px var(--font-body); color: var(--text-primary); background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 9px; outline: none; min-width: 0;
+  }
+  .sp-in:focus { border-color: rgba(127,187,255,0.55); }
+  .sp-in.num { width: 64px; font-family: var(--font-mono); }
+  select.sp-in { padding-right: 4px; }
+  textarea.sp-in { width: 100%; resize: vertical; }
+  .sp-segs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sp-segs button {
+    font: 600 12px var(--font-body); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.1); background: transparent; color: var(--text-tertiary);
+  }
+  .sp-segs button:hover { color: var(--text-secondary); }
+  .sp-segs button.on { background: rgba(255,255,255,0.09); color: var(--text-primary); border-color: rgba(255,255,255,0.2); }
+  .sp-segs button.on.morning { color: var(--sp-am); border-color: rgba(253,135,51,0.5); background: rgba(253,135,51,0.1); }
+  .sp-segs button.on.midday { color: var(--sp-mid); border-color: rgba(242,192,99,0.5); background: rgba(242,192,99,0.1); }
+  .sp-segs button.on.night { color: var(--sp-pm); border-color: rgba(192,132,252,0.5); background: rgba(192,132,252,0.1); }
+  .sp-segs button.on.any { color: var(--sp-any); border-color: rgba(127,187,255,0.5); background: rgba(127,187,255,0.1); }
+  .sp-stepper { display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; }
+  .sp-stepper button { width: 30px; height: 31px; border: 0; background: rgba(255,255,255,0.04); color: var(--text-secondary); cursor: pointer; font-size: 15px; }
+  .sp-stepper button:hover { background: rgba(255,255,255,0.09); color: var(--text-primary); }
+  .sp-stepper input { width: 42px; border: 0; background: transparent; text-align: center; color: var(--text-primary); font: 600 13px var(--font-mono); outline: none; }
+  .sp-cyc { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--sp-soft); }
+  .sp-cyc-st { font-size: 11.5px; color: var(--sp-ok); margin-top: 8px; }
+  .sp-ing { display: grid; grid-template-columns: minmax(0, 1fr) 76px 66px 20px; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .sp-ing .sp-in { width: 100%; padding: 5px 8px; font-size: 12.5px; }
+  .sp-ing .del { background: none; border: 0; color: var(--text-tertiary); cursor: pointer; font-size: 15px; padding: 0; }
+  .sp-ing .del:hover { color: #FF8A8A; }
+  .sp-scan {
+    width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; cursor: pointer;
+    padding: 14px; border-radius: 12px; border: 1px dashed rgba(127,187,255,0.45); background: rgba(127,187,255,0.06);
+    color: var(--text-primary); font: 600 13px var(--font-body);
+  }
+  .sp-scan:hover { background: rgba(127,187,255,0.12); }
+  .sp-scan .ic { font-size: 22px; }
+  .sp-scan small { display: block; font-weight: 500; font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+  .sp-past { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--sp-soft); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .sp-dr-foot {
+    padding: 12px 22px; border-top: 1px solid rgba(255,255,255,0.08); background: #111214;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .sp-dr-foot .grow { flex: 1; }
+  .sp-dr-foot label { font-size: 12px; color: var(--text-secondary); display: flex; gap: 6px; align-items: center; }
+
+  /* ── Toast ── */
+  .sp-toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    background: #1B1C1F; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 14px; font-size: 13px; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px);
+  }
+  .sp-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .sp-toast .ok { color: var(--sp-ok); font-weight: 700; }
+
+  @media (max-width: 600px) {
+    body { padding: 16px 12px 90px; }
+    .card { padding: 16px; }
+    .sp-head { flex-wrap: wrap; gap: 14px; }
+    .sp-head-actions { width: 100%; }
+    .sp-head-actions .sp-btn { width: 100%; justify-content: center; }
+    .sp-when { display: none; }
+    .sp-row.done .sp-when { display: block; min-width: 0; }
+    .sp-log { grid-template-columns: 62px 8px minmax(0,1fr) auto 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="sp-wrap">
+  <div class="sp-note">
+    <b>Supplements mockup</b>, built on your real four supplements (history before Sep 26 is made up).
+    It's clickable: tap a <b>circle</b> to take a dose, a <b>square</b> in the 14-day grid to add or remove a past dose, or a <b>row</b> to open that supplement's page.
+    <b>Spacing:</b> Optimize Minerals now waits 30 min after NAC + ALA. NAC is logged as taken 12 min ago so the countdown shows; set a wait on any supplement's page.
+  </div>
+
+  <div class="diet-view-bar" role="tablist">
+    <button type="button" class="diet-view-btn">Meals</button>
+    <button type="button" class="diet-view-btn active">Supplements</button>
+  </div>
+
+  <div class="sp-layout">
+    <main>
+      <div class="card"><div class="sp-head" id="spHead"></div></div>
+
+      <div class="card">
+        <div class="sp-card-h"><h3>Today</h3><span class="aside">Fri, Oct 2</span></div>
+        <div id="spToday"></div>
+      </div>
+
+      <div class="card">
+        <div class="sp-card-h">
+          <h3>Last 14 days</h3>
+          <div class="sp-legend">
+            <span><i style="background:rgba(107,227,164,.85)"></i>Taken</span>
+            <span><i style="background:rgba(255,255,255,.055)"></i>Missed</span>
+            <span><i style="background:repeating-linear-gradient(135deg,rgba(255,255,255,.14) 0 2px,transparent 2px 5px)"></i>Off-cycle</span>
+          </div>
+        </div>
+        <div class="sp-grid" id="spGrid"></div>
+        <div class="sp-grid-foot">Tap a square to add a dose at your usual time, or tap a filled one to remove it. As-needed supplements never count as missed.</div>
+      </div>
+
+      <div class="card">
+        <div class="sp-card-h"><h3>Dose log</h3><span class="aside">Ingredients are on each supplement's page</span></div>
+        <div id="spLog"></div>
+      </div>
+    </main>
+
+    <aside class="sp-rail">
+      <div class="card">
+        <div class="sp-rail-h"><span>Running low</span></div>
+        <div id="spLow"></div>
+      </div>
+      <div class="card">
+        <div class="sp-rail-h">
+          <span>Today's intake</span>
+          <span class="sp-seg" id="spIntakeSeg">
+            <button data-intake="taken">Taken</button><button data-intake="plan" class="on">Full day</button>
+          </span>
+        </div>
+        <div id="spIntake"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="sp-scrim" id="spScrim"></div>
+<aside class="sp-drawer" id="spDrawer" role="dialog" aria-modal="true" aria-label="Supplement"></aside>
+<div class="sp-toast" id="spToast"></div>
+
+<script>
+const TODAY = '2026-10-02';
+const SLOTS = { morning: 'Morning', midday: 'Midday', night: 'Night', any: 'Anytime' };
+const SLOT_COLOR = { morning: 'var(--sp-am)', midday: 'var(--sp-mid)', night: 'var(--sp-pm)', any: 'var(--sp-any)', prn: 'var(--sp-prn)' };
+const FORMS = ['cap', 'tab', 'softgel', 'scoop', 'serving', 'drop'];
+const UNITS = ['mg', 'mcg', 'g', 'IU', 'CFU', 'mL'];
+const LOW_DAYS = 14;
+
+const S = [
+  { id: 'nac', name: 'NAC + ALA', slot: 'morning', sched: 'daily', qty: 1, form: 'cap', stock: 41, bottle: 60, note: '',
+    contents: [['NAC', 500, 'mg'], ['ALA', 300, 'mg']] },
+  { id: 'mag', name: 'Magnesium Glycinate', slot: 'night', sched: 'daily', qty: 2, form: 'cap', stock: 22, bottle: 120, note: 'Before bed',
+    contents: [['Magnesium Glycinate', 120, 'mg']] },
+  { id: 'opt', name: 'Optimize Minerals', slot: 'morning', sched: 'daily', qty: 1, form: 'serving', stock: 18, bottle: 30, note: '', after: { id: 'nac', min: 30 },
+    contents: [['Ancient Sea Salt', 300, 'mg'], ['Vitamin B Complex', 40, 'mg'], ['Methylated B-12', 2000, 'mcg'], ['Magnesium Chelate', 200, 'mg'],
+      ['Calcium Chelate', 100, 'mg'], ['Zinc Chelate', 5, 'mg'], ['Manganese Chelate', 2, 'mg'], ['Copper Chelate', 1, 'mg'],
+      ['Chromium Chelate', 120, 'mcg'], ['Selenium Chelate', 50, 'mcg'], ['Biotin', 100, 'mcg'], ['Methylfolate', 200, 'mcg'],
+      ['Taurine', 250, 'mg'], ['Burdock Root', 250, 'mg'], ['Vitamin C', 500, 'mg'], ['Aloe Vera Extract 200:1', 2000, 'mg'],
+      ['Potassium Chloride', 99, 'mg'], ['Ginkgo Biloba', 250, 'mg'], ['70+ ionic trace minerals', 400, 'mg']] },
+  { id: 'sleep', name: 'Sleep Cap', slot: 'night', sched: 'prn', qty: 1, form: 'cap', stock: 5, bottle: 30, note: '',
+    contents: [['L-Theanine', 200, 'mg'], ['Lemon Balm', 150, 'mg'], ['Valerian Extract 4:1', 100, 'mg'], ['Passionflower', 100, 'mg']] },
+];
+let seq = 0;
+const L = (s, d, t, q = 1) => ({ id: 'l' + (seq++), s, d: '2026-' + d, t, q });
+// Demo: today's NAC + ALA was 12 min ago, so Optimize Minerals' 30-min wait is mid-countdown on load.
+const minsAgo = m => { const d = new Date(Date.now() - m * 60000); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+let LOG = [
+  L('nac', '10-02', minsAgo(12)), L('nac', '10-01', '09:06'), L('opt', '10-01', '09:41'),
+  L('nac', '09-27', '12:08'), L('opt', '09-27', '12:30'),
+  L('mag', '09-26', '22:10', 2), L('sleep', '09-26', '22:30'),
+  L('nac', '09-25', '09:02'), L('mag', '09-24', '22:05', 2), L('opt', '09-24', '10:00'), L('sleep', '09-24', '22:45'),
+  L('nac', '09-23', '09:20'), L('mag', '09-23', '22:20', 2), L('nac', '09-22', '08:55'), L('opt', '09-22', '09:30'),
+  L('mag', '09-21', '21:55', 2), L('sleep', '09-21', '23:00'), L('nac', '09-20', '09:30'), L('mag', '09-20', '22:15', 2),
+  L('nac', '09-19', '09:10'), L('mag', '09-19', '22:00', 2), L('opt', '09-19', '09:45'),
+];
+
+// ── helpers ──
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtNum = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const byId = id => S.find(s => s.id === id);
+function addDays(ds, n) { const d = new Date(ds + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-CA'); }
+function dateObj(ds) { return new Date(ds + 'T12:00:00'); }
+function fmtTime(t) { if (!t) return '—'; let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; }
+function dayLabel(ds) {
+  if (ds === TODAY) return 'Today';
+  if (ds === addDays(TODAY, -1)) return 'Yesterday';
+  return dateObj(ds).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function nowTime() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+const plural = (n, w) => `${fmtNum(n)} ${w}${n === 1 ? '' : 's'}`;
+const doses = (id, d) => LOG.filter(l => l.s === id && l.d === d);
+const groupOf = s => s.sched === 'prn' ? 'prn' : s.slot;
+
+// Median time of past doses, rounded to 5 min.
+function usualTime(id) {
+  const m = LOG.filter(l => l.s === id).map(l => { const [h, mm] = l.t.split(':').map(Number); return h * 60 + mm; }).sort((a, b) => a - b);
+  if (!m.length) return '';
+  const v = Math.round(m[Math.floor(m.length / 2)] / 5) * 5;
+  return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+}
+
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const fromMin = n => { n = ((n % 1440) + 1440) % 1440; return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); };
+const minsLabel = n => n >= 60 ? `${Math.floor(n / 60)} hr${n % 60 ? ' ' + (n % 60) + ' min' : ''}` : `${n} min`;
+
+// Spacing: s.after = { id, min } means take s at least `min` minutes after supplement `id`.
+// Today: pending (that one isn't logged yet), else readyAt + minutes left (≤ 0 = ready).
+function waitState(s) {
+  const dep = s.after && byId(s.after.id);
+  if (!dep) return null;
+  const last = doses(dep.id, TODAY).map(l => l.t).sort().pop();
+  if (!last) return { dep, min: s.after.min, pending: true };
+  const ready = toMin(last) + s.after.min;
+  return { dep, min: s.after.min, readyAt: fromMin(ready), left: ready - toMin(nowTime()) };
+}
+const followers = s => S.filter(x => x.after && x.after.id === s.id);
+// Gap between a dose and the latest earlier dose of the supplement it waits on, same day.
+function gapBefore(s, d, t) {
+  const dep = s.after && byId(s.after.id);
+  const before = dep && doses(dep.id, d).map(l => l.t).filter(x => x <= t).sort().pop();
+  return before ? { dep, min: s.after.min, gap: toMin(t) - toMin(before) } : null;
+}
+
+// On/off cycles (same math as the app's _suppCycleState).
+function cycleState(c, ds) {
+  const diff = Math.round((dateObj(ds) - dateObj(c.start)) / 86400000);
+  if (diff < 0) return { on: false, until: c.start };
+  const pos = diff % (c.on + c.off);
+  return pos < c.on ? { on: true, day: pos + 1, of: c.on, until: addDays(ds, c.on - pos) } : { on: false, until: addDays(ds, c.on + c.off - pos) };
+}
+const isOff = (s, ds) => s.sched === 'cycle' && s.cycle && !cycleState(s.cycle, ds).on;
+const isDue = (s, ds) => s.sched !== 'prn' && !isOff(s, ds);
+
+function contentsParts(contents, qty) {
+  return contents.filter(c => c[0]).map(([n, a, u]) => a != null && a !== '' ? `${n} ${fmtNum(a * qty)} ${u}` : n);
+}
+function daysLeft(s) { return s.sched === 'prn' ? null : Math.floor(s.stock / s.qty); }
+function isLow(s) { return s.stock !== '' && (s.sched === 'prn' ? s.stock <= 7 : daysLeft(s) <= LOW_DAYS); }
+
+// ── Nutrient totals ──
+// Ingredients merge by nutrient: "Magnesium Chelate" + "Magnesium Glycinate" → Magnesium.
+const FORM_RE = /\s+(chelate|glycinate|bisglycinate|citrate|oxide|picolinate|malate|chloride)$/i;
+const ALIAS = { 'methylated b-12': 'Vitamin B12', 'methylfolate': 'Folate' };
+const nutrientOf = n => ALIAS[n.trim().toLowerCase()] || n.trim().replace(FORM_RE, '');
+const TO_MG = { mg: 1, mcg: 0.001, g: 1000 };
+
+function totals(entries) {
+  const m = new Map();
+  entries.forEach(({ s, q }) => s.contents.forEach(([n, a, u]) => {
+    if (!n || a == null || a === '') return;
+    const key = nutrientOf(n);
+    const mass = TO_MG[u] != null;
+    const k = key.toLowerCase() + (mass ? '' : '|' + u);
+    const cur = m.get(k) || { name: key, unit: u, mass, val: 0, src: [] };
+    const amt = a * q;
+    cur.val += mass ? amt * TO_MG[u] : amt;
+    cur.src.push(`${s.name} ${fmtNum(amt)} ${u}`);
+    m.set(k, cur);
+  }));
+  return [...m.values()].map(t => ({ ...t, show: t.mass ? t.val / TO_MG[t.unit] : t.val }));
+}
+
+// ── Toast ──
+let toastTimer;
+function toast(msg, undo) {
+  const el = $('#spToast');
+  el.innerHTML = `<span><span class="ok">✓</span> ${msg}</span>` + (undo ? '<button class="sp-link" id="spUndo">Undo</button>' : '');
+  el.classList.add('show');
+  if (undo) $('#spUndo').onclick = () => { undo(); el.classList.remove('show'); render(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+function logDose(s, d, t, q) {
+  const e = { id: 'l' + (seq++), s: s.id, d, t, q };
+  LOG.push(e);
+  s.stock = Math.max(0, s.stock - q);
+  return () => { LOG = LOG.filter(x => x !== e); s.stock += q; };
+}
+function removeDose(e) {
+  const s = byId(e.s);
+  LOG = LOG.filter(x => x !== e);
+  s.stock += e.q;
+  return () => { LOG.push(e); s.stock -= e.q; };
+}
+
+// ── Render ──
+function renderHead() {
+  const due = S.filter(s => isDue(s, TODAY));
+  const done = due.filter(s => doses(s.id, TODAY).length);
+  const C = 2 * Math.PI * 28;
+  const order = Object.keys(SLOTS);
+  const left = due.filter(s => !doses(s.id, TODAY).length).sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot));
+  const nextSlot = left.length ? SLOTS[left[0].slot] : '';
+  const waiting = left.map(s => [s, waitState(s)]).filter(([, w]) => w && !w.pending && w.left > 0);
+  $('#spHead').innerHTML = `
+    <div class="sp-ring">
+      <svg width="64" height="64"><circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+      <circle cx="32" cy="32" r="28" fill="none" stroke="var(--sp-ok)" stroke-width="5" stroke-linecap="round"
+        stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - (due.length ? done.length / due.length : 0))}"/></svg>
+      <div class="sp-ring-txt">${done.length}/${due.length}</div>
+    </div>
+    <div class="sp-head-main">
+      <div class="sp-head-title">Supplements</div>
+      <div class="sp-head-sub">
+        ${left.length ? `<span>${nextSlot}: ${left.filter(s => SLOTS[s.slot] === nextSlot).map(s => esc(s.name)).join(', ')}</span>`
+          : `<span class="ok">✓ Everything due today is taken</span>`}
+        ${waiting.map(([s, w]) => `<span class="warn">⏱ ${esc(s.name)} in ${minsLabel(w.left)}</span>`).join('')}
+      </div>
+    </div>
+    <div class="sp-head-actions"><button class="sp-btn primary" data-new>+ Add supplement</button></div>`;
+}
+
+function rowHTML(s) {
+  const ds = doses(s.id, TODAY);
+  const done = ds.length > 0;
+  const off = isOff(s, TODAY);
+  const st = s.sched === 'cycle' && s.cycle ? cycleState(s.cycle, TODAY) : null;
+  const w = !done && waitState(s);
+  const waiting = w && !w.pending && w.left > 0, ready = w && !w.pending && !waiting;
+  const when = done ? '✓ ' + ds.map(d => fmtTime(d.t)).join(', ') : off ? ''
+    : waiting ? 'ready ' + fmtTime(w.readyAt) : ready ? 'ready now'
+    : usualTime(s.id) ? 'usually ' + fmtTime(usualTime(s.id)) : '';
+  const qty = `${fmtNum(s.qty)} ${s.form}${s.qty === 1 ? '' : 's'}`;
+  const parts = contentsParts(s.contents, s.qty);
+  return gapHTML(s, ds, w) + `<div class="sp-row${done ? ' done' : ''}${off ? ' resting' : ''}" data-open="${s.id}">
+    <button class="sp-chk ${groupOf(s)}${waiting ? ' wait' : ready ? ' ready' : ''}" data-take="${s.id}" aria-label="${done ? 'Undo' : 'Take'} ${esc(s.name)}"><span>${waiting ? (w.left > 99 ? Math.ceil(w.left / 60) + 'h' : w.left) : '✓'}</span></button>
+    <div style="min-width:0">
+      <div class="sp-name"><span class="t">${esc(s.name)}</span><span class="dose">${qty}</span></div>
+      <div class="sp-sub"><span class="tx">${s.note ? `<span class="nt">${esc(s.note)}</span> · ` : ''}${esc(parts.slice(0, 3).join(' · '))}</span>${parts.length > 3 ? `<span class="more">+${parts.length - 3} more</span>` : ''}</div>
+    </div>
+    <div class="sp-side">
+      ${st ? `<span class="sp-pill cyc${st.on ? '' : ' off'}">⟳ ${st.on ? `day ${st.day}/${st.of}` : 'off till ' + dayLabel(st.until)}</span>` : ''}
+      ${s.stock !== '' ? `<span class="sp-pill${isLow(s) ? ' low' : ''}">${s.stock} left</span>` : ''}
+      <span class="sp-when${waiting ? ' wait' : ready ? ' ready' : ''}">${when}</span>
+    </div>
+  </div>`;
+}
+
+// The dashed link above a row that waits on another supplement.
+function gapHTML(s, ds, w) {
+  const dep = s.after && byId(s.after.id);
+  if (!dep) return '';
+  let cls = '', txt = `${minsLabel(s.after.min)} after ${esc(dep.name)}`;
+  const g = ds.length && gapBefore(s, TODAY, ds.map(l => l.t).sort()[0]);
+  if (g) { cls = g.gap >= g.min ? 'ok' : 'early'; txt = g.gap >= g.min ? `✓ waited ${minsLabel(g.gap)} after ${esc(dep.name)}` : `only ${minsLabel(g.gap)} after ${esc(dep.name)}, aim for ${minsLabel(g.min)}`; }
+  else if (ds.length) txt = `taken without ${esc(dep.name)} first`;
+  else if (w && w.pending) txt += ' · timer starts when you take it';
+  else if (w) { cls = w.left > 0 ? 'wait' : 'ready'; txt += w.left > 0 ? ` · ${minsLabel(w.left)} left` : ' · ready now'; }
+  return `<div class="sp-gap ${cls}"><span class="ln"></span><span>⏱ ${txt}</span></div>`;
+}
+
+// Within a time slot, a supplement that waits on another sits right after it.
+function chainOrder(list) {
+  const out = [];
+  const add = s => { if (out.includes(s)) return; out.push(s); list.filter(x => x.after && x.after.id === s.id).forEach(add); };
+  list.filter(s => !s.after || !list.some(x => x.id === s.after.id)).forEach(add);
+  list.forEach(add);
+  return out;
+}
+
+function renderToday() {
+  const groups = [['morning', 'Morning'], ['midday', 'Midday'], ['night', 'Night'], ['any', 'Anytime'], ['prn', 'As needed']];
+  $('#spToday').innerHTML = groups.map(([g, label]) => {
+    const list = chainOrder(S.filter(s => groupOf(s) === g));
+    if (!list.length) return '';
+    const due = list.filter(s => isDue(s, TODAY));
+    const done = due.filter(s => doses(s.id, TODAY).length).length;
+    const hint = g === 'prn' ? "doesn't count toward today" : '';
+    return `<div class="sp-slot">
+      <div class="sp-slot-h ${g}">${label}${g === 'prn' ? '' : `<span class="n">${done}/${due.length}</span>`}<span class="hint">${hint}</span></div>
+      ${list.map(rowHTML).join('')}
+    </div>`;
+  }).join('');
+}
+
+function renderGrid() {
+  const days = [...Array(14)].map((_, i) => addDays(TODAY, i - 13));
+  const head = '<div></div>' + days.map((d, i) => {
+    const o = dateObj(d);
+    return `<div class="sp-gh${d === TODAY ? ' today' : ''}${i < 7 ? ' old' : ''}">${'SMTWTFS'[o.getDay()]}<b>${o.getDate()}</b></div>`;
+  }).join('') + '<div></div>';
+  const rows = S.map(s => {
+    const prn = s.sched === 'prn';
+    let taken = 0, due = 0;
+    const cells = days.map((d, i) => {
+      const n = doses(s.id, d).length;
+      const off = isOff(s, d);
+      if (n) taken++;
+      if (!prn && !off) due++;
+      const tip = `${dayLabel(d)} · ` + (n ? doses(s.id, d).map(x => fmtTime(x.t)).join(', ') + ' — tap to remove' : off ? 'off-cycle' : 'tap to log at ' + fmtTime(usualTime(s.id) || '09:00'));
+      const cls = ['sp-cell', n && 't', prn && 'prn', off && 'off', d === TODAY && 'today', i < 7 && 'old'].filter(Boolean).join(' ');
+      return `<button class="${cls}" data-cell="${s.id}|${d}" title="${esc(tip)}">${n > 1 ? n : ''}</button>`;
+    }).join('');
+    const rate = prn ? `${taken}×<small>as needed</small>` : `${Math.round(100 * Math.min(taken, due) / (due || 1))}%<small>${taken}/${due}</small>`;
+    return `<div class="sp-gl" data-open="${s.id}" style="cursor:pointer"><i style="background:${SLOT_COLOR[groupOf(s)]}"></i><span>${esc(s.name)}</span></div>${cells}<div class="sp-gr">${rate}</div>`;
+  }).join('');
+  $('#spGrid').innerHTML = head + rows;
+}
+
+let logDays = 4;
+function renderLog() {
+  const sorted = [...LOG].sort((a, b) => (b.d + b.t).localeCompare(a.d + a.t));
+  const groups = [];
+  sorted.forEach(l => { let g = groups[groups.length - 1]; if (!g || g.d !== l.d) groups.push(g = { d: l.d, items: [] }); g.items.push(l); });
+  $('#spLog').innerHTML = groups.slice(0, logDays).map(g => `<div class="sp-day">
+    <div class="sp-day-h">${dayLabel(g.d)}<span>${plural(g.items.length, 'dose')}</span></div>
+    ${g.items.sort((a, b) => a.t.localeCompare(b.t)).map(l => { const s = byId(l.s); const gp = gapBefore(s, l.d, l.t); return `<div class="sp-log">
+      <span class="tm">${fmtTime(l.t)}</span><i style="background:${SLOT_COLOR[groupOf(s)]}"></i>
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" data-open="${s.id}">${esc(s.name)}${gp && gp.gap <= gp.min + 180 ? `<span class="gp ${gp.gap >= gp.min ? 'ok' : 'early'}">${gp.gap >= gp.min ? '✓' : '⚠'} ${minsLabel(gp.gap)} after ${esc(gp.dep.name)}</span>` : ''}</span>
+      <span class="q">× ${fmtNum(l.q)}</span>
+      <button class="x" data-del="${l.id}" aria-label="Delete dose">×</button></div>`; }).join('')}
+  </div>`).join('') + (groups.length > logDays ? `<button class="sp-btn sp-more-btn" data-more>Show earlier days</button>` : '');
+}
+
+let intakeMode = 'plan';
+function renderIntake() {
+  const entries = intakeMode === 'taken'
+    ? LOG.filter(l => l.d === TODAY).map(l => ({ s: byId(l.s), q: l.q }))
+    : S.filter(s => isDue(s, TODAY) || doses(s.id, TODAY).length)
+        .map(s => ({ s, q: Math.max(s.qty, doses(s.id, TODAY).reduce((a, l) => a + l.q, 0)) }));
+  const t = totals(entries).sort((a, b) => a.name.localeCompare(b.name));
+  const n = new Set(entries.map(e => e.s.id)).size;
+  $('#spIntake').innerHTML = !t.length ? '<div class="sp-rail-foot" style="margin-top:0">Nothing taken yet today.</div>' :
+    `<div class="sp-plain">${t.map(x => `<span title="${esc(x.src.join(' + '))}">${esc(x.name)}</span><span>${fmtNum(x.show)} ${x.unit}</span>`).join('')}</div>
+    <div class="sp-rail-foot">${t.length} ingredients from ${plural(n, 'supplement')}. The same nutrient in different forms is added together (Magnesium Chelate + Glycinate → Magnesium). Hover one to see where it comes from.</div>`;
+  document.querySelectorAll('[data-intake]').forEach(b => b.classList.toggle('on', b.dataset.intake === intakeMode));
+}
+
+function renderLow() {
+  const low = S.filter(isLow).sort((a, b) => a.stock - b.stock);
+  $('#spLow').innerHTML = low.length ? low.map(s => `<div class="sp-low">
+      <div class="nm"><div>${esc(s.name)}</div><small>${s.stock} ${s.form}s left${s.sched === 'prn' ? '' : ` · ~${daysLeft(s)} days`}</small></div>
+      <button class="sp-btn" data-restock="${s.id}" title="Add a bottle of ${s.bottle}">+${s.bottle} restocked</button>
+    </div>`).join('') : `<div class="sp-rail-foot" style="margin-top:0">Nothing under ${LOW_DAYS} days of stock.</div>`;
+}
+
+function render() { renderHead(); renderToday(); renderGrid(); renderLog(); renderIntake(); renderLow(); }
+
+// ── Drawer: one page per supplement, edited in place ──
+let draft = null, dirty = false, isNew = false, showAllIng = false;
+function openDrawer(id) {
+  isNew = !id;
+  const src = id ? byId(id) : { id: null, name: '', slot: 'morning', sched: 'daily', qty: 1, form: 'cap', stock: '', bottle: '', note: '', contents: [] };
+  draft = JSON.parse(JSON.stringify(src));
+  if (!draft.cycle) draft.cycle = { on: 56, off: 14, start: TODAY };
+  dirty = false; showAllIng = false;
+  renderDrawer();
+  $('#spDrawer').classList.add('open');
+  $('#spScrim').classList.add('open');
+  if (isNew) setTimeout(() => $('.sp-dr-name').focus(), 50);
+}
+function closeDrawer(force) {
+  if (!force && dirty && !confirm('Discard your changes?')) return;
+  $('#spDrawer').classList.remove('open');
+  $('#spScrim').classList.remove('open');
+  draft = null;
+}
+
+function renderDrawer() {
+  const s = draft;
+  const scroll = $('.sp-dr-body') ? $('.sp-dr-body').scrollTop : 0;
+  const fol = s.id ? followers(s) : [];
+  const deps = S.filter(x => x.id !== s.id && !(x.after && x.after.id === s.id));
+  const days30 = [...Array(30)].map((_, i) => addDays(TODAY, i - 29));
+  const taken30 = s.id ? days30.filter(d => doses(s.id, d).length).length : 0;
+  const due30 = s.id ? days30.filter(d => isDue(s, d)).length : 0;
+  const last = s.id && [...LOG].filter(l => l.s === s.id).sort((a, b) => (b.d + b.t).localeCompare(a.d + a.t))[0];
+  const ings = s.contents.length ? s.contents : [];
+  const many = ings.length > 8 && !showAllIng;
+  const shown = many ? ings.slice(0, 6) : ings;
+  const st = s.sched === 'cycle' ? cycleState(s.cycle, TODAY) : null;
+  const seg = (attr, opts, cur, cls) => opts.map(([v, l]) => `<button type="button" data-${attr}="${v}" class="${v === cur ? 'on ' : ''}${cls ? v : ''}">${l}</button>`).join('');
+  $('#spDrawer').innerHTML = `
+  <div class="sp-dr-body">
+    <div class="sp-dr-top">
+      <input class="sp-dr-name" value="${esc(s.name)}" placeholder="Supplement name" data-f="name" aria-label="Name">
+      <button class="sp-x" data-close aria-label="Close">×</button>
+    </div>
+    ${isNew ? `<div class="sp-f"><button class="sp-scan" data-scan><span class="ic">📷</span><span>Scan the Supplement Facts label<small>Fills in every ingredient and amount, per ${s.form}</small></span></button></div>` : `
+    <div class="sp-dr-stats">
+      <div class="sp-stat"><b>${s.sched === 'prn' ? taken30 + '×' : Math.round(100 * Math.min(taken30, due30) / (due30 || 1)) + '%'}</b><span>last 30 days</span></div>
+      <div class="sp-stat"><b>${last ? (last.d === TODAY ? fmtTime(last.t) : dayLabel(last.d).replace(/^\w+, /, '')) : '—'}</b><span>${last && last.d === TODAY ? 'taken today' : 'last taken'}</span></div>
+      <div class="sp-stat"><b style="${isLow(s) ? 'color:var(--sp-warn)' : ''}">${s.stock}</b><span>${s.sched === 'prn' ? s.form + 's left' : '~' + daysLeft(s) + ' days left'}</span></div>
+    </div>
+    <div class="sp-dr-mini">${days30.map(d => `<i class="${doses(s.id, d).length ? 't' : ''}" title="${dayLabel(d)}"></i>`).join('')}</div>
+    <div class="sp-dr-mini-l"><span>${dayLabel(days30[0])}</span><span>Today</span></div>`}
+
+    <div class="sp-f">
+      <div class="sp-f-l">Dose</div>
+      <div class="sp-f-row">
+        <span class="sp-stepper"><button type="button" data-step="-0.5">−</button><input data-f="qty" value="${s.qty}" inputmode="decimal"><button type="button" data-step="0.5">+</button></span>
+        <select class="sp-in" data-f="form">${FORMS.map(f => `<option${f === s.form ? ' selected' : ''}>${f}</option>`).join('')}</select>
+        <span>per dose</span>
+      </div>
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l">When</div>
+      <div class="sp-segs">${seg('slot', Object.entries(SLOTS), s.slot, true)}</div>
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l">Spacing</div>
+      <div class="sp-f-row">
+        Wait <input class="sp-in num" data-after-min value="${s.after ? s.after.min : 30}" inputmode="numeric" ${s.after ? '' : 'disabled'}> min after
+        <select class="sp-in" data-after-id>
+          <option value="">— no wait —</option>
+          ${deps.map(x => `<option value="${x.id}"${s.after && s.after.id === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="sp-hint">${s.after && byId(s.after.id)
+        ? `Once ${esc(byId(s.after.id).name)} is logged, today's list counts down until this one is ready. Doses taken too soon get flagged in the log.`
+        : 'For things like “Optimize Minerals 30 min after NAC + ALA”. Today’s list shows a countdown.'}
+        ${fol.map(f => `<br>${esc(f.name)} waits ${minsLabel(f.after.min)} after this one.`).join('')}</div>
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l">Schedule</div>
+      <div class="sp-segs">${seg('sched', [['daily', 'Every day'], ['cycle', 'Cycle on / off'], ['prn', 'As needed']], s.sched)}</div>
+      ${s.sched === 'cycle' ? `<div class="sp-cyc"><div class="sp-f-row">
+          <input class="sp-in num" data-cyc="on" value="${s.cycle.on / 7}"> weeks on
+          <input class="sp-in num" data-cyc="off" value="${s.cycle.off / 7}"> weeks off, from
+          <input class="sp-in" type="date" data-cyc="start" value="${s.cycle.start}">
+        </div><div class="sp-cyc-st">${st.on ? `Today is day ${st.day} of ${st.of} · off from ${dayLabel(st.until)}` : `Off today · back on ${dayLabel(st.until)}`}</div></div>` : ''}
+      ${s.sched === 'prn' ? `<div class="sp-f-row" style="margin-top:8px;color:var(--text-tertiary);font-size:11.5px">Shows under “As needed”. Skipped days never count as missed.</div>` : ''}
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l"><span>Contents per ${s.form}</span>${isNew ? '' : '<button class="sp-link" data-scan>📷 Rescan label</button>'}</div>
+      ${shown.map((c, i) => `<div class="sp-ing">
+        <input class="sp-in" data-ing="${i}|0" value="${esc(c[0])}" placeholder="Ingredient">
+        <input class="sp-in" data-ing="${i}|1" value="${c[1] ?? ''}" inputmode="decimal" placeholder="Amount" style="font-family:var(--font-mono)">
+        <select class="sp-in" data-ing="${i}|2">${UNITS.map(u => `<option${u === c[2] ? ' selected' : ''}>${u}</option>`).join('')}</select>
+        <button class="del" data-ing-del="${i}" aria-label="Remove">×</button></div>`).join('')}
+      <div class="sp-f-row" style="margin-top:4px">
+        ${many ? `<button class="sp-link" data-ing-all>Show all ${ings.length} ingredients</button><span style="color:var(--text-tertiary)">·</span>` : ''}
+        <button class="sp-link" data-ing-add>+ Add ingredient</button>
+      </div>
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l">Stock</div>
+      <div class="sp-f-row">
+        <input class="sp-in num" data-f="stock" value="${s.stock}" inputmode="numeric"> ${s.form}s left · bottle of
+        <input class="sp-in num" data-f="bottle" value="${s.bottle}" inputmode="numeric">
+        ${isNew ? '' : `<button class="sp-btn" data-restock-draft>+${s.bottle || 0} restocked</button>`}
+      </div>
+      <div class="sp-f-row" style="margin-top:6px;color:var(--text-tertiary);font-size:11.5px">Each dose you log takes from this. It shows in “Running low” at ${LOW_DAYS} days left.</div>
+    </div>
+
+    <div class="sp-f">
+      <div class="sp-f-l">Notes</div>
+      <textarea class="sp-in" rows="2" data-f="note" placeholder="e.g. Take with food">${esc(s.note)}</textarea>
+    </div>
+
+    ${isNew ? '' : `<div class="sp-f">
+      <div class="sp-f-l"><span>Log a past dose</span></div>
+      <div class="sp-past">
+        <input class="sp-in" type="date" id="spPastD" value="${addDays(TODAY, -1)}" max="${TODAY}">
+        <input class="sp-in" type="time" id="spPastT" value="${usualTime(s.id) || '09:00'}">
+        <span class="sp-stepper"><button type="button" data-pstep="-0.5">−</button><input id="spPastQ" value="${s.qty}"><button type="button" data-pstep="0.5">+</button></span>
+        <button class="sp-btn" data-past>Log</button>
+      </div>
+    </div>
+    <div class="sp-f" style="margin-bottom:6px"><button class="sp-link danger" data-delete>Delete supplement…</button></div>`}
+  </div>
+  <div class="sp-dr-foot">
+    ${isNew
+      ? `<label><input type="checkbox" id="spLogNow" checked> Log a dose now</label><span class="grow"></span>
+         <button class="sp-btn" data-close>Cancel</button><button class="sp-btn primary" data-save ${s.name.trim() ? '' : 'disabled'}>Add supplement</button>`
+      : `<span class="grow" style="font-size:11.5px;color:var(--text-tertiary)">${dirty ? 'Unsaved changes' : 'Edit any field above'}</span>
+         <button class="sp-btn primary" data-save ${dirty ? '' : 'disabled'}>Save changes</button>`}
+  </div>`;
+  $('.sp-dr-body').scrollTop = scroll;
+}
+function touch() { dirty = true; const b = $('#spDrawer [data-save]'); if (b) b.disabled = isNew ? !draft.name.trim() : false;
+  const g = $('#spDrawer .sp-dr-foot .grow'); if (g && !isNew) g.textContent = 'Unsaved changes'; }
+
+// ── Events ──
+document.addEventListener('click', e => {
+  const T = sel => e.target.closest(sel);
+  let el;
+  if ((el = T('[data-take]'))) {
+    e.stopPropagation();
+    const s = byId(el.dataset.take);
+    const today = doses(s.id, TODAY);
+    if (today.length) { const undo = removeDose(today[today.length - 1]); toast(`Removed ${esc(s.name)}`, undo); }
+    else {
+      const w = waitState(s);
+      if (w && w.pending && !confirm(`${s.name} goes ${minsLabel(w.min)} after ${w.dep.name}, which isn't logged yet today. Take it anyway?`)) return;
+      if (w && !w.pending && w.left > 0 && !confirm(`${minsLabel(w.left)} to go — ${s.name} goes ${minsLabel(w.min)} after ${w.dep.name}. Take it now anyway?`)) return;
+      const undo = logDose(s, TODAY, nowTime(), s.qty);
+      const next = followers(s).filter(f => !doses(f.id, TODAY).length).map(f => `${esc(f.name)} ready at ${fmtTime(fromMin(toMin(nowTime()) + f.after.min))}`);
+      toast(`Took ${fmtNum(s.qty)} × ${esc(s.name)}${next.length ? ' · ⏱ ' + next.join(', ') : ''}`, undo);
+    }
+    return render();
+  }
+  if ((el = T('[data-cell]'))) {
+    const [id, d] = el.dataset.cell.split('|'); const s = byId(id); const ds = doses(id, d);
+    if (ds.length) { const undo = removeDose(ds[ds.length - 1]); toast(`Removed ${esc(s.name)} · ${dayLabel(d)}`, undo); }
+    else { const t = usualTime(id) || '09:00'; const undo = logDose(s, d, t, s.qty); toast(`Logged ${esc(s.name)} · ${dayLabel(d)} ${fmtTime(t)}`, undo); }
+    return render();
+  }
+  if ((el = T('[data-del]'))) { const l = LOG.find(x => x.id === el.dataset.del); const undo = removeDose(l); toast(`Deleted ${esc(byId(l.s).name)} · ${dayLabel(l.d)}`, undo); return render(); }
+  if (T('[data-more]')) { logDays += 7; return renderLog(); }
+  if ((el = T('[data-intake]'))) { intakeMode = el.dataset.intake; return renderIntake(); }
+  if ((el = T('[data-restock]'))) { const s = byId(el.dataset.restock); s.stock += s.bottle; toast(`${esc(s.name)} restocked · ${s.stock} left`, () => { s.stock -= s.bottle; }); return render(); }
+  if (T('[data-new]')) return openDrawer(null);
+
+  if (T('#spScrim') && e.target.id === 'spScrim') return closeDrawer();
+  if (draft && T('#spDrawer')) {
+    if (T('[data-close]')) return closeDrawer();
+    if ((el = T('[data-slot]'))) { draft.slot = el.dataset.slot; touch(); return renderDrawer(); }
+    if ((el = T('[data-sched]'))) { draft.sched = el.dataset.sched; touch(); return renderDrawer(); }
+    if ((el = T('[data-step]'))) { draft.qty = Math.max(0.5, Number(draft.qty) + Number(el.dataset.step)); touch(); return renderDrawer(); }
+    if ((el = T('[data-pstep]'))) { const q = $('#spPastQ'); q.value = Math.max(0.5, Number(q.value) + Number(el.dataset.pstep)); return; }
+    if (T('[data-ing-all]')) { showAllIng = true; return renderDrawer(); }
+    if (T('[data-ing-add]')) { draft.contents.push(['', '', 'mg']); showAllIng = true; touch(); renderDrawer(); const ins = document.querySelectorAll('[data-ing$="|0"]'); ins[ins.length - 1].focus(); return; }
+    if ((el = T('[data-ing-del]'))) { draft.contents.splice(Number(el.dataset.ingDel), 1); touch(); return renderDrawer(); }
+    if (T('[data-scan]')) return toast('Opens the camera / file picker and reads the label (existing OCR scan)');
+    if (T('[data-restock-draft]')) { draft.stock = Number(draft.stock || 0) + Number(draft.bottle || 0); touch(); return renderDrawer(); }
+    if (T('[data-past]')) {
+      const s = byId(draft.id), d = $('#spPastD').value, t = $('#spPastT').value, q = Number($('#spPastQ').value) || s.qty;
+      const undo = logDose(s, d, t, q); toast(`Logged ${fmtNum(q)} × ${esc(s.name)} · ${dayLabel(d)} ${fmtTime(t)}`, undo);
+      render(); draft.stock = s.stock; return renderDrawer();
+    }
+    if (T('[data-delete]')) {
+      if (!confirm(`Delete ${draft.name}? Its past doses stay in the log.`)) return;
+      const i = S.findIndex(x => x.id === draft.id); const gone = S.splice(i, 1)[0];
+      closeDrawer(true); render(); toast(`Deleted ${esc(gone.name)}`, () => S.splice(i, 0, gone)); return;
+    }
+    if (T('[data-save]')) {
+      const d = { ...draft, qty: Number(draft.qty) || 1, stock: draft.stock === '' ? '' : Number(draft.stock), bottle: Number(draft.bottle) || 0,
+        contents: draft.contents.filter(c => String(c[0]).trim()).map(c => [c[0].trim(), c[1] === '' ? null : Number(c[1]), c[2]]) };
+      if (isNew) {
+        d.id = 'n' + (seq++); S.push(d);
+        if ($('#spLogNow').checked) logDose(d, TODAY, nowTime(), d.qty);
+        toast(`Added ${esc(d.name)}`);
+      } else { Object.assign(byId(d.id), d); toast(`Saved ${esc(d.name)}`); }
+      closeDrawer(true); return render();
+    }
+    return;
+  }
+  if ((el = T('[data-open]'))) return openDrawer(el.dataset.open);
+});
+
+document.addEventListener('input', e => {
+  if (!draft) return;
+  const t = e.target;
+  if (t.matches('[data-after-id]')) { draft.after = t.value ? { id: t.value, min: Math.max(1, Number($('[data-after-min]').value) || 30) } : null; touch(); return renderDrawer(); }
+  if (t.matches('[data-after-min]')) { if (draft.after && Number(t.value) > 0) draft.after.min = Math.round(Number(t.value)); touch(); return; }
+  if (t.dataset.f) { draft[t.dataset.f] = t.value; touch(); if (t.dataset.f === 'form') renderDrawer(); return; }
+  if (t.dataset.ing) { const [i, k] = t.dataset.ing.split('|').map(Number); draft.contents[i][k] = t.value; touch(); return; }
+  if (t.dataset.cyc) {
+    const v = t.dataset.cyc === 'start' ? t.value : Math.max(1, Math.round(Number(t.value) * 7));
+    if (t.dataset.cyc === 'start' ? v : Number(t.value) > 0) { draft.cycle[t.dataset.cyc] = v; touch(); }
+    const st = cycleState(draft.cycle, TODAY);
+    $('.sp-cyc-st').textContent = st.on ? `Today is day ${st.day} of ${st.of} · off from ${dayLabel(st.until)}` : `Off today · back on ${dayLabel(st.until)}`;
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && draft) closeDrawer();
+  if (e.key === 'Enter' && e.target.closest && e.target.closest('[data-open]') && !draft) openDrawer(e.target.closest('[data-open]').dataset.open);
+});
+
+render();
+setInterval(() => { renderHead(); renderToday(); }, 15000);
+</script>
+</body>
+</html>

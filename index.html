@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="css/jobs.css?v=93">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
-<link rel="stylesheet" href="css/diet.css?v=14">
+<link rel="stylesheet" href="css/diet.css?v=17">
 <link rel="stylesheet" href="css/mobility.css?v=35">
 <link rel="stylesheet" href="css/whoop.css?v=1">
 <link rel="stylesheet" href="css/finance.css?v=4">
@@ -481,18 +481,40 @@
     </div>
     </div>
 
-    <div id="dietViewSupps" hidden>
-      <div class="section">
-        <div class="section-title">My Supplements</div>
-        <div class="card">
-          <div class="supp-shelf" id="suppShelf"></div>
+    <div id="dietViewSupps" class="supp-view" hidden>
+      <div class="supp-layout">
+        <div class="supp-main">
+          <div class="card"><div class="supp-head" id="suppHead"></div></div>
+          <div class="card">
+            <div class="supp-card-h"><h3>Today</h3><span class="aside" id="suppTodayDate"></span></div>
+            <div id="suppToday"></div>
+          </div>
+          <div class="card">
+            <div class="supp-card-h">
+              <h3>Last 14 days</h3>
+              <div class="supp-legend"><span><i class="t"></i>Taken</span><span><i></i>Missed</span><span><i class="off"></i>Off-cycle</span></div>
+            </div>
+            <div class="supp-grid" id="suppGrid"></div>
+            <div class="supp-grid-foot">Tap a square to add a dose at your usual time, or tap a filled one to remove it. As-needed supplements never count as missed.</div>
+          </div>
+          <div class="card">
+            <div class="supp-card-h"><h3>Dose log</h3><span class="aside">Ingredients are on each supplement's page</span></div>
+            <div id="suppLog"></div>
+          </div>
         </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Log</div>
-        <div class="card">
-          <div id="suppHistoryList"></div>
-        </div>
+        <aside class="supp-rail">
+          <div class="card">
+            <div class="supp-rail-h"><span>Running low</span></div>
+            <div id="suppLow"></div>
+          </div>
+          <div class="card">
+            <div class="supp-rail-h">
+              <span>Today's intake</span>
+              <span class="supp-seg"><button type="button" data-supp-intake="taken">Taken</button><button type="button" data-supp-intake="plan" class="on">Full day</button></span>
+            </div>
+            <div id="suppIntake"></div>
+          </div>
+        </aside>
       </div>
     </div>
   </div>
@@ -1074,85 +1096,10 @@
   </div>
 </div>
 
-<div id="suppModal" class="sr-modal">
-  <div class="sr-modal-card supp-modal-card" role="dialog" aria-modal="true" aria-labelledby="suppModalTitle">
-    <button id="suppModalClose" class="sr-modal-close" type="button" aria-label="Close">×</button>
-    <h2 class="sr-modal-title" id="suppModalTitle">Log a supplement</h2>
-    <div class="supp-form">
-      <div class="diet-field">
-        <label class="diet-field-label" for="suppName">Supplement</label>
-        <input type="text" class="task-input" id="suppName" placeholder="Search yours, or type a new name" autocomplete="off">
-        <div class="diet-chips" id="suppPickChips"></div>
-        <div class="supp-picked" id="suppPickInfo" hidden></div>
-      </div>
-
-      <div class="supp-new" id="suppNewField" hidden>
-        <div class="supp-scan-row">
-          <button class="btn-polish" id="suppScanBtn" type="button">📷 Nutrition facts photo</button>
-          <input type="file" id="suppScanFile" accept="image/*" hidden>
-          <span class="polish-status" id="suppScanStatus"></span>
-        </div>
-        <span class="diet-field-label">What's in one pill?</span>
-        <div id="suppRows"></div>
-      </div>
-
-      <div class="supp-new" id="suppCycleField" hidden>
-        <div class="supp-new-head">
-          <span class="diet-field-label">Schedule</span>
-          <div class="diet-seg-bar" id="suppCycleBar"></div>
-        </div>
-        <div class="supp-cycle-body" id="suppCycleBody" hidden>
-          <div class="supp-cycle-row">
-            <span>On for</span>
-            <input type="number" class="habit-date-input supp-cyc-n" id="suppCycOn" min="1" step="1" aria-label="On length">
-            <select class="habit-date-input supp-unit" id="suppCycOnUnit" aria-label="On unit"><option value="7">weeks</option><option value="1">days</option></select>
-            <span>then off for</span>
-            <input type="number" class="habit-date-input supp-cyc-n" id="suppCycOff" min="1" step="1" aria-label="Off length">
-            <select class="habit-date-input supp-unit" id="suppCycOffUnit" aria-label="Off unit"><option value="7">weeks</option><option value="1">days</option></select>
-          </div>
-          <div class="supp-cycle-row">
-            <span>First on-day</span>
-            <input type="date" class="habit-date-input" id="suppCycStart" aria-label="Cycle start date">
-          </div>
-          <div class="supp-cycle-status" id="suppCycStatus"></div>
-        </div>
-      </div>
-
-      <div class="diet-field" id="suppNoteField" hidden>
-        <label class="diet-field-label" for="suppNote">Notes</label>
-        <textarea id="suppNote" class="task-input supp-note" rows="2" placeholder="e.g. Take with food"></textarea>
-      </div>
-
-      <div class="supp-dose">
-        <div class="diet-field">
-          <label class="diet-field-label" for="suppQty">How many</label>
-          <div class="supp-stepper">
-            <button type="button" data-supp-step="-1" aria-label="One fewer">−</button>
-            <input type="number" id="suppQty" value="1" min="0.5" step="0.5">
-            <button type="button" data-supp-step="1" aria-label="One more">+</button>
-            <span>pills</span>
-          </div>
-        </div>
-        <div class="diet-field">
-          <span class="diet-field-label">When</span>
-          <div class="diet-form-row">
-            <input type="date" class="habit-date-input" id="suppDate" aria-label="Date">
-            <input type="time" class="habit-date-input" id="suppTime" aria-label="Time">
-            <button type="button" class="diet-seg-btn" id="suppNowBtn">Now</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="supp-summary" id="suppSummary" hidden></div>
-
-      <div class="diet-form-actions">
-        <button class="btn-add" id="suppAddBtn" type="button">Log</button>
-        <button class="btn-polish" id="suppSaveBtn" type="button" hidden>Save changes</button>
-        <span class="polish-status" id="suppFormStatus"></span>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Supplement page (js/supplements.js) -->
+<div class="supp-scrim" id="suppScrim"></div>
+<aside class="supp-drawer" id="suppDrawer" role="dialog" aria-modal="true" aria-label="Supplement" tabindex="-1"></aside>
+<input type="file" id="suppScanFile" accept="image/*" hidden>
 
 <div id="mobModal" class="sr-modal">
   <div class="sr-modal-card" role="dialog" aria-modal="true" aria-label="Add exercise">
@@ -1223,7 +1170,8 @@
 <script src="js/techRankings.js?v=22"></script>
 <script src="js/areas.js?v=9"></script>
 <script src="js/goals.js?v=2"></script>
-<script src="js/diet.js?v=22"></script>
+<script src="js/diet.js?v=23"></script>
+<script src="js/supplements.js?v=4"></script>
 <script src="js/finance.js?v=4"></script>
 <script src="js/mobility.js?v=36"></script>
 <script src="js/whoop.js?v=2"></script>
