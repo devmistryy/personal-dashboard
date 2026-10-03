@@ -905,7 +905,7 @@ function finStartScan(file) {
 async function _finRunOcr(d) {
   const run = d.run = (d.run || 0) + 1;
   const live = () => _finDraft === d && d.run === run;
-  Object.assign(d, { ocr: 'reading', error: '', conf: {}, items: [], itemsEdited: false, boxes: [], split: false, image: null });
+  Object.assign(d, { ocr: 'reading', error: '', conf: {}, items: [], boxes: [], split: false, image: null });
   d.touched = {};
   renderFinModal();
   try {
@@ -1103,7 +1103,7 @@ function renderFinItems() {
     <div class="fin-items-list">${d.items.map((it, i) => `<div class="fin-item${d.mode === 'scan' ? ' del' : ''}">
       <span>${it.qty ? `<span class="fin-muted">${it.qty} × </span>` : ''}${_esc(it.name)}</span>${catCell(it, i)}<span class="fin-mono">${it.amount.toFixed(2)}</span>${d.mode === 'scan'
         ? `<button type="button" class="fin-icon-btn fin-item-del" data-fin-item-del="${i}" aria-label="Remove “${_esc(it.name)}”">×</button>` : ''}</div>`).join('')}</div>
-    ${total > 0 && Math.abs(expected - total) > 0.05 && d.mode === 'scan' && !d.itemsEdited
+    ${total > 0 && Math.abs(expected - total) > 0.05 && d.mode === 'scan'
       ? `<div class="fin-items-note">Items add up to ${_finMoney(expected)} — some lines may not have been read. The total is what gets saved.</div>` : ''}
     ${canSplit ? `<div class="fin-split">
       <button type="button" class="fin-toggle${d.split ? ' on' : ''}" data-fin-split role="switch" aria-checked="${d.split}" aria-label="Split by category"></button>
@@ -1399,10 +1399,15 @@ if (typeof document !== 'undefined') {
     if (t.hasAttribute('data-fin-delete')) { _finDelete(); return; }
     if (t.hasAttribute('data-fin-rescan')) { fileInput.click(); return; }
     if (t.hasAttribute('data-fin-rotate')) { d.rotation = ((d.rotation || 0) + 90) % 360; _finRunOcr(d); return; }
-    // Removing a line item only changes the category split; the total stays as scanned.
+    // Removing a line item takes its price off the total.
     if (t.dataset.finItemDel != null) {
-      d.items.splice(+t.dataset.finItemDel, 1);
-      d.itemsEdited = true;
+      const [it] = d.items.splice(+t.dataset.finItemDel, 1);
+      const total = _finParseAmount(d.fields.amount);
+      if (total > 0) {
+        d.fields.amount = Math.max(0, _r2(total - it.amount)).toFixed(2);
+        document.getElementById('finF-amount').value = d.fields.amount;
+      }
+      if (d.subtotal != null) d.subtotal = Math.max(0, _r2(d.subtotal - it.amount));
       if (d.split && d.items.length < 2) { modal.querySelector('[data-fin-split]').click(); return; }   // toggles split off + re-renders
       renderFinItems(); renderFinImpact();
       return;
