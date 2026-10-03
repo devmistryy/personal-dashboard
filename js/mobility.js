@@ -3,9 +3,11 @@
 // number of sets, each set measured by a hold time (static stretch) or by reps
 // (mobility drill).
 //
-// From that list the tab COMPILES a weekly schedule (every exercise on exactly
-// `frequency` evenly-spread, load-balanced days) and shows today's Morning / Night
-// routines as entry-point cards, plus a 7-day overview.
+// From that list the tab COMPILES a schedule: frequency is a pace, not fixed
+// weekdays. Each exercise starts on evenly-spread, load-balanced days; a missed
+// session moves to the next day that keeps the pattern's rest spacing, and the
+// debt is worked off over the following weeks, spread to keep days even (see _mobSimulate). The tab shows
+// today's Morning / Night routines as entry-point cards, plus a 7-day overview.
 //
 // PROGRESSION: the creation dose is only a starting point. Each exercise has a
 // dated session log. Doing a routine = opening that session's detail page, where
@@ -69,6 +71,59 @@ function _mobCurrent(ex) {
     : { sets: ex.sets, measure: ex.measure, holdSeconds: ex.holdSeconds, reps: ex.reps };
 }
 
+// ── Archive ──
+// Settings key mobility_archive_v1: id → { at: date } while archived, { resumed: date }
+// once back. An archived exercise is off the schedule from its archive day on (no
+// due days, so no misses) — the date can be set back, as far as the day it was
+// added, to clear misses from when it couldn't be done. Days before it keep their
+// history, and the log is kept. One that comes back is scheduled from that day,
+// with no backlog for the time it was away.
+function _mobArch(id)        { return (MEM['mobility_archive_v1'] || {})[id] || null; }
+function _mobIsArchived(ex)  { return !!_mobArch(ex.id)?.at; }
+function _mobMade(ex) { return _localDateStr(new Date(ex.createdAt || 0)); }
+// First day an exercise is on the schedule: when it was added, or when it last came back.
+function _mobStart(ex) {
+  const made = _mobMade(ex), back = _mobArch(ex.id)?.resumed;
+  return back && back > made ? back : made;
+}
+// A comeback only stays on record if it was before the new archive day; archiving
+// back past it means the exercise was never really back.
+function _mobStoreArchive(ids, on, date) {
+  const all = { ...(MEM['mobility_archive_v1'] || {}) };
+  ids.forEach(id => {
+    const back = all[id]?.resumed;
+    all[id] = !on ? { resumed: date } : back && back < date ? { at: date, resumed: back } : { at: date };
+  });
+  MEM['mobility_archive_v1'] = all; _syncSetting('mobility_archive_v1', all);
+}
+function setMobArchived(ids, on) {
+  _mobStoreArchive(ids, on, getActiveDateString());
+  renderMobility();
+  if (_mobDetailId) renderMobExerciseDetail();
+  if (document.getElementById('mobSessionPage').classList.contains('open')) renderMobSession();
+}
+
+// Archive-date picker (archived list row, exercise detail page): any day from when
+// the exercise was added up to today.
+function _mobArchDateInput(ex) {
+  return `<input type="date" class="mob-arch-date" data-mobarch-date="${ex.id}" value="${_mobArch(ex.id).at}"
+    min="${_mobMade(ex)}" max="${getActiveDateString()}" title="Day it came off the schedule">`;
+}
+function _mobOnArchDate(e) {
+  const id = e.target.dataset.mobarchDate;
+  const ex = id && getMobExercises().find(x => x.id === id);
+  const v = e.target.value;
+  if (!ex || !v) return;   // mid-edit (a part of the date cleared)
+  const lo = _mobMade(ex), hi = getActiveDateString(), at = v < lo ? lo : v > hi ? hi : v;
+  if (at !== v) e.target.value = at;
+  _mobStoreArchive([id], true, at);
+  // Redraw around the field, not the field itself — the date input fires on every
+  // keystroke, and replacing it would drop focus mid-edit.
+  const schedule = compileMobSchedule(getMobExercises());
+  renderMobToday(schedule); renderMobWeek(schedule); renderMobRail(schedule);
+  if (!e.target.closest('#mobList')) renderMobList();   // edited on the detail page: refresh the list behind it
+}
+
 function _mobId()    { return 's_'  + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function _mobLogId() { return 'mp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -79,6 +134,8 @@ let _mobFormFreq    = 3;
 let _mobFormProgress = 'dose';
 let _mobDraft       = null;     // unsaved edits on the exercise detail page
 let _mobOpenDay     = null;     // week-strip day selected, or null for today
+let _mobWeekOff     = 0;        // week strip: weeks from this one (negative = past)
+let _mobArchOpen    = false;    // archived section expanded
 let _mobSessionDate = null;     // 'YYYY-MM-DD' of the open session page
 let _mobSessionTod  = 'morning';
 let _mobDetailId    = null;     // exercise id open in the detail page, or null
@@ -139,12 +196,74 @@ function _mobBaseDays(f) {
   return days;
 }
 
-// Compile the whole list into a 7-day schedule.
-//   → { days: [ { morning: [ex], night: [ex] } × 7 ],   // index 0 = Monday
-//       dayFor: Map(id → [dayIdx…]) }
+// Spacing limits of frequency f's own weekly pattern: the shortest gap between
+// sessions and the longest run of back-to-back days. Catch-up never goes tighter.
+// ponytail: 1×/wk would need a 7-day gap and could never recover a late session, so it's capped at 5.
+function _mobSpacing(f) {
+  const b = _mobBaseDays(f);
+  const gaps = b.map((d, i) => (b[(i + 1) % b.length] - d + 7) % 7 || 7);
+  let run = 0, maxRun = 0;
+  for (let k = 0; k < 14; k++) { run = b.includes(k % 7) ? run + 1 : 0; maxRun = Math.max(maxRun, run); }
+  return { minGap: Math.min(5, ...gaps), maxRun: b.length === 7 ? Infinity : maxRun };
+}
+
+// Due dates for every unit (one exercise or a group), simulated together day by
+// day. Frequency is a pace, not fixed weekdays: credit builds f/7 of a session a
+// day (kept in sevenths), a session is due once a whole one has built up and the
+// pattern's spacing allows it, and doing one spends it. A missed day moves to the
+// next day that keeps its rest gap and the debt is worked off over the following
+// weeks (capped at one week's worth; one early session is banked). Credit starts
+// in the template's phase (weekday offset `off`), so perfect adherence lands on
+// the template days.
+// Load stays even: a unit on its template day always goes (the template is
+// balanced), but catch-up sessions only fill a day while its session holds fewer
+// than `cap` exercises — most overdue first — so units that fell behind together
+// spread out instead of moving in lockstep.
+// Days before today count what was logged; today on assumes each due session gets done.
+//   units: [{ f, off, from, until?, logged: Set(date), tod: 'morning'|'night', n: exercises in it }]
+//   (`until`: archive day — the unit is off the schedule from then on)
+//   → per unit { due: Set(date), carried: Set(date) } — `carried` are due days that
+//     only re-offer an earlier undone session (no new one came due), so leaving
+//     one undone isn't another miss.
+function _mobSimulate(units, to, today, cap = { morning: Infinity, night: Infinity }) {
+  const st = units.map(u => {
+    const f = Math.max(1, Math.min(7, u.f | 0));
+    // c: owed credit (clamped); ph: the same pace unclamped, marking when a new session comes due.
+    const c = (_mobDateIdx(u.from) - u.off + 7) % 7 * f % 7;
+    return { u, f, ..._mobSpacing(f), c, ph: c, since: Infinity, run: 0, fresh: 0, due: new Set(), carried: new Set() };
+  });
+  const from = units.map(u => u.from).sort()[0];
+  for (let d = from; d <= to; d = _shiftDay(d, 1)) {
+    const live = st.filter(s => s.u.from <= d && !(s.u.until <= d));
+    const load = { morning: 0, night: 0 }, catchUp = [];
+    const pick = s => { s.due.add(d); if (s.fresh) s.fresh--; else s.carried.add(d); load[s.u.tod] += s.u.n; };
+    live.forEach(s => {
+      s.ph += s.f;
+      const onDay = s.ph >= 7;
+      if (onDay) { s.ph -= 7; s.fresh = Math.min(s.f, s.fresh + 1); }
+      s.c += s.f; s.since++;
+      if (s.c >= 7 && s.since >= s.minGap && (s.since > 1 || s.run < s.maxRun)) (onDay ? pick(s) : catchUp.push(s));
+    });
+    catchUp.sort((a, b) => b.c - a.c || b.since - a.since)
+      .forEach(s => { if (load[s.u.tod] + s.u.n <= cap[s.u.tod]) pick(s); });
+    live.forEach(s => {
+      if (s.u.logged.has(d) || (s.due.has(d) && d >= today)) { s.run = s.since === 1 ? s.run + 1 : 1; s.since = 0; s.c -= 7; }
+      s.c = Math.max(-7, Math.min(7 * s.f, s.c));
+    });
+  }
+  return st.map(s => ({ due: s.due, carried: s.carried }));
+}
+
+// Compile the whole list into due dates per exercise, through the end of this week
+// (or of the future week the strip is showing).
+//   → { due: Map(id → Set('YYYY-MM-DD')), carried: Map(id → Set) }  (see _mobSimulate)
+// The weekly template (evenly-spread, load-balanced weekdays) sets each unit's
+// phase and the per-day load cap; _mobSimulate moves sessions around misses from there.
 function compileMobSchedule(exercises) {
-  const days   = Array.from({ length: 7 }, () => ({ morning: [], night: [] }));
-  const dayFor = new Map();
+  const due = new Map(), carried = new Map();
+  const today = getActiveDateString(), end = _shiftDay(_mobThisWeekMonday(), 7 * Math.max(0, _mobWeekOff) + 6);
+  // ponytail: simulate at most ~14 months back; older history only matters to a very long streak.
+  const floor = _shiftDay(today, -420);
   // Exercises placed per day, per session — balanced separately so morning and
   // night each stay even (a combined total let 5 morning + 1 night pass as "6").
   const totals = { morning: new Array(7).fill(0), night: new Array(7).fill(0) };
@@ -159,8 +278,10 @@ function compileMobSchedule(exercises) {
   const byGroup = new Map();
   const units = [];
   exercises.forEach(ex => {
-    const g = (ex.group || '').trim().toLowerCase();
+    let g = (ex.group || '').trim().toLowerCase();
     if (!g) { units.push([ex]); return; }
+    // Archived members only share a unit with others archived the same day.
+    if (_mobIsArchived(ex)) g += '|' + _mobArch(ex.id).at;
     if (!byGroup.has(g)) { const u = []; byGroup.set(g, u); units.push(u); }
     byGroup.get(g).push(ex);
   });
@@ -170,7 +291,7 @@ function compileMobSchedule(exercises) {
   // they claim days before the singles fill in around them.
   units.sort((a, b) => uFreq(b) * b.length - uFreq(a) * a.length || uFreq(b) - uFreq(a) || uMade(a) - uMade(b));
 
-  units.forEach(unit => {
+  const specs = units.map(unit => {
     const base = _mobBaseDays(uFreq(unit));
 
     let bestOff = 0, bestScore = Infinity;
@@ -181,23 +302,42 @@ function compileMobSchedule(exercises) {
       const score = spread(t.morning) + spread(t.night) + spread(both) / 10;
       if (score < bestScore) { bestScore = score; bestOff = off; }
     }
+    // An archived unit keeps its past days but doesn't shape today's balance or cap.
+    const until = _mobArch(unit[0].id)?.at;
+    if (!until) unit.forEach(ex => base.forEach(d => { totals[sessOf(ex)][(d + bestOff) % 7]++; }));
 
-    const placed = base.map(d => (d + bestOff) % 7).sort((a, b) => a - b);
-    unit.forEach(ex => {
-      const session = sessOf(ex);
-      dayFor.set(ex.id, placed);
-      placed.forEach(d => { days[d][session].push(ex); totals[session][d]++; });
-    });
+    const from = unit.map(_mobStart).sort()[0];
+    return { f: uFreq(unit), off: bestOff, from: from < floor ? floor : from, until, tod: sessOf(unit[0]), n: unit.length,
+      // A group session happened on any day one of its members was logged.
+      logged: new Set(unit.flatMap(ex => getMobLog(ex.id).map(e => e.date))) };
   });
 
-  const cmp = (a, b) =>
-    (a.group || '').localeCompare(b.group || '') ||
+  // Catch-up never makes a session heavier than the template's heaviest day.
+  const cap = { morning: Math.max(...totals.morning), night: Math.max(...totals.night) };
+  _mobSimulate(specs, end, today, cap).forEach((r, i) =>
+    units[i].forEach(ex => { due.set(ex.id, r.due); carried.set(ex.id, r.carried); }));
+
+  return { due, carried };
+}
+
+// Whether a session row counts toward a day's tally: done, or a session that newly
+// came due — an undone carry-over of an earlier miss isn't counted twice.
+function _mobCounts(ex, date, schedule) {
+  return _mobLoggedOn(ex.id, date) || !schedule.carried.get(ex.id)?.has(date);
+}
+
+// Weekday indexes (0 = Mon) an exercise is due this week, misses and catch-ups included.
+function _mobWeekDue(schedule, id) {
+  const dates = schedule.due.get(id), mon = _mobThisWeekMonday();
+  return [0, 1, 2, 3, 4, 5, 6].filter(i => dates && dates.has(_shiftDay(mon, i)));
+}
+
+// Order inside a session list.
+function _mobRowCmp(a, b) {
+  return (a.group || '').localeCompare(b.group || '') ||
     _mobByOrder(a, b) ||
     (b.frequency || 1) - (a.frequency || 1) ||
     (a.createdAt || 0) - (b.createdAt || 0);
-  days.forEach(d => { d.morning.sort(cmp); d.night.sort(cmp); });
-
-  return { days, dayFor };
 }
 
 // Manual order inside a group (set by dragging). Exercises never reordered have
@@ -263,8 +403,9 @@ function _mobAgo(date, today) {
   return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n}d ago`;
 }
 // Everything due on a date (both sessions) and how much of it was logged.
-function _mobDayStat(date, days) {
-  const rows = [..._mobSessionRows(date, 'morning', days), ..._mobSessionRows(date, 'night', days)];
+function _mobDayStat(date, schedule) {
+  const rows = [..._mobSessionRows(date, 'morning', schedule), ..._mobSessionRows(date, 'night', schedule)]
+    .filter(ex => _mobCounts(ex, date, schedule));
   return { n: rows.length, done: rows.filter(ex => _mobLoggedOn(ex.id, date)).length };
 }
 
@@ -297,10 +438,10 @@ function _mobMins(list) { return Math.max(1, Math.round(list.reduce((s, ex) => s
 
 // Scheduled days in a row with everything logged, back from today (today counts
 // once it's complete, and doesn't break the streak while it's still open).
-function _mobStreak(days, today) {
+function _mobStreak(schedule, today) {
   let n = 0, d = today;
   for (let i = 0; i < 400; i++, d = _shiftDay(d, -1)) {
-    const s = _mobDayStat(d, days);
+    const s = _mobDayStat(d, schedule);
     if (!s.n) { if (!getMobExercises().some(ex => _localDateStr(new Date(ex.createdAt || 0)) <= d)) break; continue; }
     if (s.done < s.n) { if (d === today) continue; break; }
     n++;
@@ -354,8 +495,8 @@ function renderMobToday(schedule) {
   const dayEl = document.getElementById('mobTodayDay');
   if (!dayEl) return;
   const today = getActiveDateString();
-  const am = _mobSessionRows(today, 'morning', schedule.days);
-  const pm = _mobSessionRows(today, 'night', schedule.days);
+  const am = _mobSessionRows(today, 'morning', schedule);
+  const pm = _mobSessionRows(today, 'night', schedule);
   const all = [...am, ...pm];
   const left = all.filter(ex => !_mobLoggedOn(ex.id, today));
   const done = all.length - left.length;
@@ -368,7 +509,7 @@ function renderMobToday(schedule) {
         stroke-dasharray="${C}" stroke-dashoffset="${all.length ? C * (1 - done / all.length) : C}"/>
     </svg><span class="mob-ring-txt">${done}/${all.length}</span>`;
 
-  const streak = getMobExercises().length ? _mobStreak(schedule.days, today) : 0;
+  const streak = getMobExercises().length ? _mobStreak(schedule, today) : 0;
   document.getElementById('mobTodaySub').innerHTML = !getMobExercises().length ? 'Add exercises to build your routines.' : [
     !all.length ? 'Rest day' : left.length ? `${left.length} left today` : 'All done today',
     streak ? `<span class="mob-ok">🔥 ${streak}-day streak</span>` : '',
@@ -410,29 +551,49 @@ function _mobWeekItemsHTML(list, date) {
 function renderMobWeek(schedule) {
   const grid = document.getElementById('mobWeekGrid');
   if (!grid) return;
-  const ti = _mobTodayIdx(), mon = _mobThisWeekMonday();
-  const sel = _mobOpenDay == null ? ti : _mobOpenDay;
+  const off = _mobWeekOff, mon = _shiftDay(_mobThisWeekMonday(), 7 * off);
+  // Today's index in the shown week: 7 for a past week (every day has passed), -1 for a future one.
+  const ti = off < 0 ? 7 : off > 0 ? -1 : _mobTodayIdx();
+  const sel = _mobOpenDay == null ? (off ? 0 : ti) : _mobOpenDay;
+
+  const fmt = _mobShortDate;
+  document.getElementById('mobWeekTitle').textContent =
+    !off ? 'This Week' : off === -1 ? 'Last Week' : off === 1 ? 'Next Week' : `Week of ${fmt(mon)}`;
+  document.getElementById('mobWeekRange').textContent = `${fmt(mon)} – ${fmt(_shiftDay(mon, 6))}`;
+  document.getElementById('mobWeekNow').hidden = !off;
+  // Nothing to go back to before the first exercise was added.
+  const exs = getMobExercises();
+  document.getElementById('mobWeekPrev').disabled =
+    !exs.length || _localDateStr(new Date(Math.min(...exs.map(e => e.createdAt || 0)))) >= mon;
+
+  // Each day's rows: what was due (past), is due (today) or is projected (later).
+  const rows = MOB_DAYS.map((_, i) => {
+    const date = _shiftDay(mon, i);
+    return { date, morning: _mobSessionRows(date, 'morning', schedule), night: _mobSessionRows(date, 'night', schedule) };
+  });
   // Share of a session logged; null when nothing was due.
-  const share = (date, tod) => {
-    const r = _mobSessionRows(date, tod, schedule.days);
-    return r.length ? r.filter(ex => _mobLoggedOn(ex.id, date)).length / r.length : null;
+  const share = (d, tod) => {
+    const r = d[tod].filter(ex => _mobCounts(ex, d.date, schedule));
+    return r.length ? r.filter(ex => _mobLoggedOn(ex.id, d.date)).length / r.length : null;
   };
 
-  grid.innerHTML = schedule.days.map((d, i) => {
-    const date = _shiftDay(mon, i);
-    const am = i <= ti ? share(date, 'morning') : 0, pm = i <= ti ? share(date, 'night') : 0;
-    const miss = i < ti && ((am != null && am < 1) || (pm != null && pm < 1));
+  grid.innerHTML = rows.map((d, i) => {
+    const date = d.date;
+    const am = i <= ti ? share(d, 'morning') : 0, pm = i <= ti ? share(d, 'night') : 0;
+    // Each session's count on its own: green once everything due is logged (today
+    // included), red for a past session left unfinished.
+    const mark = v => v == null || i > ti ? '' : v >= 1 ? ' class="done"' : i < ti ? ' class="miss"' : '';
     const pip = (tod, v, n) => `<span class="mob-pip ${tod}${n ? '' : ' none'}"><i style="width:${n ? v * 100 : 0}%"></i></span>`;
-    return `<button class="mob-day${i === ti ? ' is-today' : ''}${i === sel ? ' is-open' : ''}${miss ? ' is-miss' : ''}" type="button" data-mobday="${i}">
+    return `<button class="mob-day${i === ti ? ' is-today' : ''}${i === sel ? ' is-open' : ''}" type="button" data-mobday="${i}">
       <span class="mob-day-top"><span class="mob-day-name">${MOB_DAYS[i]}</span><span class="mob-day-sep">-</span><span class="mob-day-num">${Number(date.slice(8))}</span></span>
       <span class="mob-day-pips">${pip('am', am, d.morning.length)}${pip('pm', pm, d.night.length)}</span>
-      <span class="mob-day-count"><b>${d.morning.length}</b><span class="mob-ic morning">☀</span> <b>${d.night.length}</b><span class="mob-ic night">☾</span></span>
+      <span class="mob-day-count"><b${mark(am)}>${d.morning.length}</b><span class="mob-ic morning">☀</span> <b${mark(pm)}>${d.night.length}</b><span class="mob-ic night">☾</span></span>
     </button>`;
   }).join('');
 
   const date = _shiftDay(mon, sel);
   const col = (tod, label) => {
-    const r = sel <= ti ? _mobSessionRows(date, tod, schedule.days) : schedule.days[sel][tod];
+    const r = rows[sel][tod];
     return `<div class="mob-wd-col">
       <div class="mob-wd-h ${tod}"><span>${label} · ${r.length}</span>${sel <= ti && r.length ? `<button class="mob-link" type="button" data-mobweek-open="${tod}">open ›</button>` : ''}</div>
       <div class="mob-wd-items">${_mobWeekItemsHTML(r, date) || '<span class="mob-wd-empty">—</span>'}</div>
@@ -457,17 +618,19 @@ function renderMobList() {
     return;
   }
 
-  const { dayFor } = compileMobSchedule(list);
+  const schedule = compileMobSchedule(list);
   const today = getActiveDateString(), mon = _mobThisWeekMonday(), ti = _mobTodayIdx();
   const q = _mobQuery.trim().toLowerCase();
-  const sorted = list.filter(ex =>
+  const shown = list.filter(ex =>
       (_mobFilter === 'all' || (ex.session === 'night' ? 'night' : 'morning') === _mobFilter) &&
       (!q || ex.name.toLowerCase().includes(q) || (ex.group || '').toLowerCase().includes(q)))
     .sort(_mobListCmp);
-  if (!sorted.length) { el.innerHTML = '<div class="mob-empty">No matches.</div>'; return; }
+  if (!shown.length) { el.innerHTML = '<div class="mob-empty">No matches.</div>'; return; }
+  const sorted = shown.filter(ex => !_mobIsArchived(ex));
+  const archived = shown.filter(_mobIsArchived);
 
   const row = ex => {
-    const placed = dayFor.get(ex.id) || [];
+    const placed = _mobWeekDue(schedule, ex.id);
     const dayStr = MOB_DAY_INITIAL.map((ini, i) => {
       const done = i <= ti && _mobLoggedOn(ex.id, _shiftDay(mon, i));
       return `<span class="mob-di${placed.includes(i) ? ' on' : ''}${done ? ' done' : ''}">${ini}</span>`;
@@ -488,6 +651,7 @@ function renderMobList() {
       <span class="mob-last${stale ? ' stale' : ''}">${last ? _mobAgo(last.date, today) : 'never'}</span>
       <span class="mob-row-actions">
         <button class="mob-row-btn" type="button" data-mobedit="${ex.id}" title="Edit">✎</button>
+        <button class="mob-row-btn" type="button" data-mobarch="${ex.id}" title="Archive — take it off the schedule for now">⏸</button>
         <button class="mob-row-btn mob-row-del" type="button" data-mobdel="${ex.id}" title="Remove">×</button>
       </span>
     </div>`;
@@ -501,12 +665,29 @@ function renderMobList() {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(ex);
   });
-  el.innerHTML = (groups.size ? `<div class="mob-ungrouped" data-mobgroup="">${solo.map(row).join('')}</div>` : solo.map(row).join('')) +
+  const archRow = ex => `<div class="mob-arch-row">
+      <span class="mob-sdot ${ex.session === 'night' ? 'night' : 'morning'}"></span>
+      <button class="mob-row-name" type="button" data-mobdetail="${ex.id}">${_esc(ex.name)}</button>
+      ${ex.group ? `<span class="mob-tgroup">${_esc(ex.group)}</span>` : ''}
+      <span class="mob-arch-since">since ${_mobArchDateInput(ex)}</span>
+      <span class="mob-spacer"></span>
+      <button class="mob-btn" type="button" data-mobunarch="${ex.id}">Unarchive</button>
+    </div>`;
+  el.innerHTML = (sorted.length ? '' : '<div class="mob-empty">Everything here is archived.</div>') +
+    (groups.size ? `<div class="mob-ungrouped" data-mobgroup="">${solo.map(row).join('')}</div>` : solo.map(row).join('')) +
     [...groups.values()].map(m => {
-      const days = (dayFor.get(m[0].id) || []).map(i => MOB_DAYS[i]).join(' ');
+      const days = _mobWeekDue(schedule, m[0].id).map(i => MOB_DAYS[i]).join(' ');
       return `<div class="mob-group-head" data-mobgroup="${_esc(m[0].group)}">${_esc(m[0].group)}
-          <span class="mob-group-meta">${m.length} · ${days}</span>${_mobFlowSeg(m[0].group, _mobFlowOf(m[0].group))}<span class="mob-group-line"></span></div>` + m.map(row).join('');
-    }).join('');
+          <span class="mob-group-meta">${m.length} · ${days}</span>${_mobFlowSeg(m[0].group, _mobFlowOf(m[0].group))}<span class="mob-group-line"></span>
+          <button class="mob-link mob-group-arch" type="button" data-mobarch-group="${_esc(m[0].group)}" title="Take the whole group off the schedule for now">Archive group</button></div>` + m.map(row).join('');
+    }).join('') +
+    (archived.length ? `<details class="hab-archived mob-archived" id="mobArchived"${_mobArchOpen ? ' open' : ''}>
+        <summary>Archived · ${archived.length}</summary>${archived.map(archRow).join('')}</details>` : '');
+}
+
+function _mobShortDate(ds) {
+  const [y, m, d] = ds.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 
@@ -517,7 +698,7 @@ function renderMobRail(schedule) {
   const exs = getMobExercises();
   rail.hidden = !exs.length;
   if (!exs.length) return;
-  const today = getActiveDateString(), days = schedule.days;
+  const today = getActiveDateString();
 
   // Five Monday-aligned weeks ending this week. Today counts only what's logged so far.
   const start = _shiftDay(_mobThisWeekMonday(), -28);
@@ -526,7 +707,7 @@ function renderMobRail(schedule) {
     for (let i = 0; i < count; i++) {
       const d = _shiftDay(from, i);
       if (d > today) break;
-      const s = _mobDayStat(d, days);
+      const s = _mobDayStat(d, schedule);
       n += d === today ? s.done : s.n; done += s.done;
     }
     return { n, done };
@@ -535,7 +716,7 @@ function renderMobRail(schedule) {
   for (let i = 0; i < 35; i++) {
     const d = _shiftDay(start, i);
     if (d > today) { cells += '<i class="future"></i>'; continue; }
-    const s = _mobDayStat(d, days);
+    const s = _mobDayStat(d, schedule);
     const lv = !s.n ? 'rest' : !s.done ? '' : s.done < s.n / 2 ? 'l1' : s.done < s.n ? 'l2' : 'l3';
     cells += `<i class="${lv}${d === today ? ' now' : ''}" title="${_fullDateLabel(d)} — ${s.n ? `${s.done} of ${s.n}` : 'rest day'}"></i>`;
   }
@@ -543,15 +724,15 @@ function renderMobRail(schedule) {
   const pct = cur.n ? Math.round(cur.done / cur.n * 100) : 0;
   const delta = prev.n && cur.n ? pct - Math.round(prev.done / prev.n * 100) : null;
 
-  const gains = exs.map(ex => ({ ex, g: _mobGain(ex) })).filter(x => x.g && x.g.d > 0)
+  const gains = exs.filter(ex => !_mobIsArchived(ex)).map(ex => ({ ex, g: _mobGain(ex) })).filter(x => x.g && x.g.d > 0)
     .sort((a, b) => b.g.pct - a.g.pct).slice(0, 4);
 
   // Misses over the last 7 days, not counting today.
   const miss = new Map();
   for (let i = 7; i >= 1; i--) {
     const d = _shiftDay(today, -i);
-    ['morning', 'night'].forEach(tod => _mobSessionRows(d, tod, days).forEach(ex => {
-      if (_mobLoggedOn(ex.id, d)) return;
+    ['morning', 'night'].forEach(tod => _mobSessionRows(d, tod, schedule).forEach(ex => {
+      if (!_mobCounts(ex, d, schedule) || _mobLoggedOn(ex.id, d)) return;
       const m = miss.get(ex.id) || { ex, n: 0 };
       m.n++; m.d = d; miss.set(ex.id, m);
     }));
@@ -603,16 +784,12 @@ function renderMobility() {
 // (minus any created after the date), plus any that already have an entry for
 // exactly that date. The compile isn't stable over time, so the entry set is what
 // keeps past sessions editable.
-function _mobSessionRows(date, tod, days = compileMobSchedule(getMobExercises()).days) {
-  const exs   = getMobExercises();
-  const sched = days[_mobDateIdx(date)][tod]
-    .filter(ex => _localDateStr(new Date(ex.createdAt || 0)) <= date);
-  const seen  = new Set(sched.map(e => e.id));
-  const extra = exs.filter(ex =>
+function _mobSessionRows(date, tod, schedule = compileMobSchedule(getMobExercises())) {
+  // Due that day (once the exercise existed), plus anything logged off-schedule.
+  return getMobExercises().filter(ex =>
     (ex.session === 'night' ? 'night' : 'morning') === tod &&
-    !seen.has(ex.id) &&
-    getMobLog(ex.id).some(e => e.date === date));
-  return [...sched, ...extra];
+    ((schedule.due.get(ex.id)?.has(date) && _mobStart(ex) <= date) ||
+     _mobLoggedOn(ex.id, date))).sort(_mobRowCmp);
 }
 
 function openMobSession(date, tod) {
@@ -954,8 +1131,9 @@ function renderMobExerciseDetail() {
   const log     = getMobLog(ex.id);
   const baseline = { sets: ex.sets, measure: ex.measure, holdSeconds: ex.holdSeconds, reps: ex.reps };
   const dose = o => (o.measure === 'reps' ? o.reps : o.holdSeconds) ? _mobDose(o) : '–';   // nothing set yet
+  const week    = _mobWeekDue(compileMobSchedule(getMobExercises()), ex.id);
   const dots    = MOB_DAY_INITIAL.map((ini, i) => {
-    const placed = (compileMobSchedule(getMobExercises()).dayFor.get(ex.id) || []).includes(i);
+    const placed = week.includes(i);
     return `<span class="mob-di${placed ? ' on' : ''}">${ini}</span>`;
   }).join('');
 
@@ -998,7 +1176,7 @@ function renderMobExerciseDetail() {
   body.innerHTML = `
     <input class="mob-exd-name" data-mobd="name" value="${_esc(d.name)}" aria-label="Exercise name" maxlength="80">
     <div class="mob-exd-meta">
-      <span class="mob-row-days" title="Scheduled days">${dots}</span>
+      <span class="mob-row-days" title="Due this week">${dots}</span>
       ${fixed ? '<span class="mob-fixedchip">No progress tracking</span>' : ''}
     </div>
 
@@ -1062,6 +1240,10 @@ function renderMobExerciseDetail() {
     <div class="hd-notes-list">${logList}</div>
 
     <div class="mob-exd-danger">
+      ${_mobIsArchived(ex)
+        ? `<button class="mob-btn" type="button" data-mobunarch="${ex.id}">Unarchive</button><span class="mob-exd-arch-note">Archived since ${_mobArchDateInput(ex)} — off the schedule from that day.</span>`
+        : `<button class="mob-btn" type="button" data-mobarch="${ex.id}" title="Take it off the schedule for now — the log is kept">Archive</button>`}
+      <span class="mob-spacer"></span>
       <button class="area-detail-delete-btn" id="mobExDelete">Delete exercise</button>
     </div>
   `;
@@ -1385,6 +1567,15 @@ _mobPanel.addEventListener('click', e => {
   const det = e.target.closest('[data-mobdetail]');
   if (det) { openMobExerciseDetail(det.dataset.mobdetail); return; }
 
+  const nav = e.target.closest('[data-mobweek-nav]');
+  if (nav) {
+    const n = Number(nav.dataset.mobweekNav);
+    _mobWeekOff = n ? _mobWeekOff + n : 0;
+    _mobOpenDay = null;
+    renderMobWeek(compileMobSchedule(getMobExercises()));
+    return;
+  }
+
   const day = e.target.closest('[data-mobday]');
   if (day) { _mobOpenDay = Number(day.dataset.mobday); renderMobWeek(compileMobSchedule(getMobExercises())); return; }
 
@@ -1406,10 +1597,23 @@ _mobPanel.addEventListener('click', e => {
   const del = e.target.closest('[data-mobdel]');
   if (del) { deleteMobExercise(del.dataset.mobdel); return; }
 
+  const arch = e.target.closest('[data-mobarch], [data-mobunarch]');
+  if (arch) { setMobArchived([arch.dataset.mobarch || arch.dataset.mobunarch], !!arch.dataset.mobarch); return; }
+  const archG = e.target.closest('[data-mobarch-group]');
+  if (archG) {
+    const g = _mobGroupKey(archG.dataset.mobarchGroup);
+    setMobArchived(getMobExercises().filter(ex => _mobGroupKey(ex.group) === g && !_mobIsArchived(ex)).map(ex => ex.id), true);
+    return;
+  }
+
   const row = e.target.closest('[data-mobrow]');
   if (row) openMobExerciseDetail(row.dataset.mobrow);
 });
 
+// <details> toggle doesn't bubble — catch it on the way down so the list re-renders keep it open.
+_mobPanel.addEventListener('toggle', e => { if (e.target.id === 'mobArchived') _mobArchOpen = e.target.open; }, true);
+
+_mobPanel.addEventListener('change', _mobOnArchDate);
 document.getElementById('mobSearch').addEventListener('input', e => { _mobQuery = e.target.value; renderMobList(); });
 
 // Modal: segmented controls, submit, close.
@@ -1573,6 +1777,8 @@ _mobExDetailPage.addEventListener('click', e => {
     return;
   }
   if (e.target.id === 'mobExDelete')     { deleteMobExercise(_mobDetailId); return; }
+  const arch = e.target.closest('[data-mobarch], [data-mobunarch]');
+  if (arch) { setMobArchived([_mobDetailId], !!arch.dataset.mobarch); return; }
 
   const delEntry = e.target.closest('[data-mobdel-entry]');
   if (delEntry) {
@@ -1592,6 +1798,7 @@ _mobExDetailPage.addEventListener('click', e => {
 });
 
 // Detail-page editor: typing updates the draft and the Save button, without a re-render (keeps focus).
+_mobExDetailPage.addEventListener('change', _mobOnArchDate);
 _mobExDetailPage.addEventListener('input', e => {
   const f = e.target.dataset.mobd;
   if (!f || !_mobDraft) return;

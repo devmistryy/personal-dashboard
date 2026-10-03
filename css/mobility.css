@@ -105,6 +105,9 @@
   .mob-dose-reps { background: rgba(167,139,250,0.16); color: #BCA6FB; }
 
   /* ── Week strip ── */
+  .mob-week-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .mob-week-nav .hcal-nav-btn { width: 28px; height: 28px; font-size: 14px; border-radius: 7px; }
+  .mob-week-range { font: 12px var(--font-mono); color: var(--text-secondary); }
   .mob-week-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
   .mob-day {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -128,7 +131,8 @@
   .mob-pip.pm i { background: #A9B2D6; }
   .mob-day-count { font: 12.5px var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
   .mob-day-count b { font-weight: 800; }
-  .mob-day.is-miss .mob-day-count { color: #E0736B; }
+  .mob-day-count b.miss { color: #E0736B; }
+  .mob-day-count b.done { color: var(--success); }
   .mob-ic.morning { color: #F2C063; }   /* same as the Morning / Night labels on the Today card */
   .mob-ic.night   { color: #A9B2D6; }
 
@@ -191,7 +195,7 @@
 
   .mob-cols, .mob-row {
     display: grid; align-items: center; column-gap: 14px;
-    grid-template-columns: 14px minmax(0, 1fr) 118px 50px 128px 76px 44px;
+    grid-template-columns: 14px minmax(0, 1fr) 118px 50px 128px 76px 66px;
   }
   .mob-cols {
     padding: 0 10px 6px; font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
@@ -234,6 +238,20 @@
   }
   .mob-group-meta { font: 500 10.5px var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--text-tertiary); }
   .mob-group-line { flex: 1; height: 1px; background: rgba(255,255,255,0.06); }
+  .mob-group-arch { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-tertiary); opacity: 0; transition: opacity .15s; }
+  .mob-group-head:hover .mob-group-arch { opacity: 1; }
+  @media (hover: none) { .mob-group-arch { opacity: 1; } }
+  .mob-archived .mob-arch-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 38px;
+    border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px;
+  }
+  .mob-archived .mob-arch-row .mob-row-name { color: var(--text-secondary); }
+  .mob-arch-since { font: 11px var(--font-mono); color: var(--text-tertiary); white-space: nowrap; }
+  .mob-arch-date {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
+    color: var(--text-secondary); padding: 3px 6px; font: 11px var(--font-mono); outline: none; color-scheme: dark;
+  }
+  .mob-arch-date:focus { border-color: rgba(255,255,255,0.3); }
   .mob-ungrouped { border-radius: 10px; transition: background 0.15s; }
   .mob-ungrouped:empty { min-height: 40px; border: 1px dashed rgba(255,255,255,0.12); }
   .mob-ungrouped.is-drop { background: rgba(74,158,255,0.08); box-shadow: 0 0 0 1px rgba(74,158,255,0.7); }
@@ -483,7 +501,8 @@
   .mob-logrow-dose { font-family: var(--font-mono); color: var(--text-secondary); }
   .mob-logrow { cursor: pointer; }
   .mob-logrow:hover { background: rgba(255,255,255,0.04); border-radius: 10px; }
-  .mob-exd-danger { margin-top: 36px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.06); }
+  .mob-exd-danger { margin-top: 36px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .mob-exd-arch-note { font-size: 12px; color: var(--text-tertiary); }
 
   /* Responsive */
   @media (max-width: 480px) {
