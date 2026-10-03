@@ -617,7 +617,7 @@ function _finFilteredTx(list) {
     if (_finFilter === 'scan' && t.source !== 'scan') return false;
     if (_finFilter === 'review' && !t.needsReview) return false;
     if (_finCatFilter && t.category !== _finCatFilter) return false;
-    if (q && ![t.merchant, t.category, t.note, t.amount.toFixed(2)].some(v => String(v || '').toLowerCase().includes(q))) return false;
+    if (q && ![t.merchant, t.item, t.category, t.note, t.amount.toFixed(2)].some(v => String(v || '').toLowerCase().includes(q))) return false;
     return true;
   });
 }
@@ -671,7 +671,7 @@ function renderFinTxList(r, s) {
         return `<button type="button" class="fin-tx" data-fin-edit="${t.id}">
           <span class="fin-tx-icon" style="background:${c.color}22;color:${c.color}">${c.icon}</span>
           <span class="fin-tx-main">
-            <span class="fin-tx-name${t.merchant ? '' : ' fin-muted'}">${_esc(t.merchant || (t.source === 'scan' ? 'Unknown merchant' : t.category))}</span>
+            <span class="fin-tx-name${t.merchant ? '' : ' fin-muted'}">${_esc(t.merchant || (t.source === 'scan' ? 'Unknown merchant' : t.category))}${t.item ? `<span class="fin-muted"> · ${_esc(t.item)}</span>` : ''}</span>
             <span class="fin-tx-meta"><span>${_esc(t.category)}</span>${badges(t)}${t.note ? `<span class="fin-tx-note">${_esc(t.note)}</span>` : ''}</span>
           </span>
           <span class="fin-tx-amt${inc ? ' in' : ''}">${inc ? '+' : '−'}${_finMoney(t.amount)}</span>
@@ -801,7 +801,7 @@ let _finDraft = null;
 function _finNewDraft(mode) {
   return {
     mode,                                   // 'scan' | 'manual' | 'edit'
-    fields: { merchant: '', amount: '', date: _finToday(), category: null, note: '', recurring: false },
+    fields: { merchant: '', item: '', amount: '', date: _finToday(), category: null, note: '', recurring: false },
     touched: {}, conf: {}, items: [], split: false, boxes: [], image: null,
     ocr: mode === 'scan' ? 'reading' : null, error: '', guessWhy: '', reviewReason: '',
   };
@@ -817,7 +817,7 @@ async function finOpenEdit(id) {
   if (!t) return;
   const d = _finDraft = _finNewDraft('edit');
   d.txId = id;
-  d.fields = { merchant: t.merchant || '', amount: t.amount.toFixed(2), date: t.date, category: t.category, note: t.note || '', recurring: !!t.recurring };
+  d.fields = { merchant: t.merchant || '', item: t.item || '', amount: t.amount.toFixed(2), date: t.date, category: t.category, note: t.note || '', recurring: !!t.recurring };
   d.touched = { category: true };
   d.receiptId = t.receiptId || null;
   d.reviewReason = t.needsReview ? (t.reviewReason || 'Check the details') : '';
@@ -985,6 +985,7 @@ function renderFinModal() {
     </div>`;
   const dis = reading ? 'disabled' : '';
   const merchants = [...new Set(getFinTransactions().map(t => t.merchant).filter(Boolean))].slice(0, 200);
+  const itemNames = [...new Set(getFinTransactions().map(t => t.item).filter(Boolean))].slice(0, 200);
 
   const top = d.mode === 'scan'
     ? `<div class="fin-steps" id="finModalTitle" aria-label="Scan receipt: review step">
@@ -1004,7 +1005,10 @@ function renderFinModal() {
         <div class="fin-fields${reading ? ' reading' : ''}">
           ${field('merchant', 'Merchant', `<input class="task-input" id="finF-merchant" data-fin-field="merchant" list="finMerchantList"
               value="${_esc(f.merchant)}" placeholder="${reading ? 'Reading…' : 'e.g. Trader Joe’s'}" autocomplete="off" ${dis}>
-              <datalist id="finMerchantList">${merchants.map(m => `<option value="${_esc(m)}">`).join('')}</datalist>`, true, 'merchant')}
+              <datalist id="finMerchantList">${merchants.map(m => `<option value="${_esc(m)}">`).join('')}</datalist>`, d.mode === 'scan', 'merchant')}
+          ${d.mode === 'scan' ? '' : field('item', 'Item <span class="fin-muted">(optional)</span>', `<input class="task-input" id="finF-item" data-fin-field="item" list="finItemList"
+              value="${_esc(f.item)}" placeholder="e.g. coffee" autocomplete="off">
+              <datalist id="finItemList">${itemNames.map(m => `<option value="${_esc(m)}">`).join('')}</datalist>`)}
           ${field('amount', 'Total', `<div class="fin-amount-wrap"><span>$</span><input class="task-input fin-amount" id="finF-amount" data-fin-field="amount"
               inputmode="decimal" value="${_esc(f.amount)}" placeholder="${reading ? '…' : '0.00'}" autocomplete="off" ${dis}></div>`, false, 'total')}
           ${field('date', 'Date', `<input class="task-input fin-mono" type="date" id="finF-date" data-fin-field="date" value="${f.date}" ${dis}>`, false, 'date')}
@@ -1145,7 +1149,7 @@ function _finSave() {
   if (!(amount > 0)) { _finModalError('Enter an amount above $0.'); document.getElementById('finF-amount').focus(); return; }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) { _finModalError('Pick a date.'); return; }
   if (!d.split && !f.category) { _finModalError('Pick a category.'); return; }
-  const merchant = f.merchant.trim(), note = f.note.trim();
+  const merchant = f.merchant.trim(), item = f.item.trim(), note = f.note.trim();
   const list = getFinTransactions();
   const where = merchant ? ` at ${_esc(merchant)}` : '';
 
@@ -1153,7 +1157,7 @@ function _finSave() {
     const i = list.findIndex(t => t.id === d.txId);
     if (i < 0) { _finCloseModal(true); return; }
     const prev = list[i];
-    const next = { ...prev, merchant, amount, date: f.date, category: f.category, note, recurring: !!f.recurring, needsReview: false, reviewReason: '' };
+    const next = { ...prev, merchant, item, amount, date: f.date, category: f.category, note, recurring: !!f.recurring, needsReview: false, reviewReason: '' };
     saveFinTransactions(list.map(t => (t.id === d.txId ? next : t)));
     _finCloseModal(true);
     _finShowDate(next.date);
@@ -1179,7 +1183,7 @@ function _finSave() {
     if (['low', 'missing'].includes(d.conf.total) && !d.touched.amount) reasons.push('Total was a guess — check it');
   }
   const base = {
-    date: f.date, merchant, note, source: d.mode === 'scan' ? 'scan' : 'manual', receiptId,
+    date: f.date, merchant, item, note, source: d.mode === 'scan' ? 'scan' : 'manual', receiptId,
     needsReview: reasons.length > 0, reviewReason: reasons[0] || '',
   };
   const created = d.split && d.items.length >= 2
@@ -1223,7 +1227,7 @@ function _finShowDate(ds) {
 function _finLogRecurring(id, due) {
   const src = getFinTransactions().find(t => t.id === id);
   if (!src) return;
-  const t = { id: _finId(), date: due, merchant: src.merchant, amount: src.amount, category: src.category,
+  const t = { id: _finId(), date: due, merchant: src.merchant, item: src.item || '', amount: src.amount, category: src.category,
     note: '', source: 'manual', receiptId: null, recurring: true, needsReview: false, reviewReason: '' };
   saveFinTransactions([...getFinTransactions(), t]);
   renderFinance();

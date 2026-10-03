@@ -1218,7 +1218,7 @@ async function _syncFinance(list) {
   const uid = await _requireUid(); if (!uid) return;
   if (list.length) {
     const { error } = await sb.from('finance_transactions').upsert(list.map(t => ({
-      id: t.id, user_id: uid, date: t.date, merchant: t.merchant || null,
+      id: t.id, user_id: uid, date: t.date, merchant: t.merchant || null, item: t.item || null,
       amount: t.amount, category: t.category, source: t.source || 'manual',
       note: t.note || null, recurring: !!t.recurring, receipt_id: t.receiptId || null,
       needs_review: !!t.needsReview, review_reason: t.reviewReason || null,
@@ -1367,7 +1367,7 @@ async function loadFromSupabase() {
   MEM['whoop:workouts'] = results[17].data || [];
   MEM['whoop:profile']  = results[18].data || null;
   MEM['finance_tx_v1'] = (results[19].data || []).map(r => ({
-    id: r.id, date: r.date, merchant: r.merchant || '', amount: Number(r.amount),
+    id: r.id, date: r.date, merchant: r.merchant || '', item: r.item || '', amount: Number(r.amount),
     category: r.category, source: r.source, note: r.note || '', recurring: !!r.recurring,
     receiptId: r.receipt_id || null, needsReview: !!r.needs_review, reviewReason: r.review_reason || '',
   }));

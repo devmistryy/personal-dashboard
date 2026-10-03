@@ -411,6 +411,7 @@ alter table finance_transactions add column if not exists recurring     boolean 
 alter table finance_transactions add column if not exists receipt_id    text;   -- finance_receipts.id; shared by a split receipt's rows
 alter table finance_transactions add column if not exists needs_review  boolean not null default false;
 alter table finance_transactions add column if not exists review_reason text;
+alter table finance_transactions add column if not exists item          text;   -- what was bought, e.g. 'coffee'
 create index if not exists finance_transactions_user_date_idx
   on finance_transactions (user_id, date);
 alter table finance_transactions enable row level security;
