@@ -56,6 +56,24 @@ const rows = _finRowsFromOcr({ lines: [
 assert.deepStrictEqual(rows.map(x => x.text), ['TOTAL 64.12', 'VISA']);
 assert.deepStrictEqual([rows[0].x0, rows[0].y0, rows[0].x1, rows[0].y1], [10, 100, 240, 113]);
 
+// Costco: CA REDEMP VAL fees add to and discounts ("2.50-") subtract from the
+// item above, so items still sum to the subtotal.
+r = _finParseReceipt(`COSTCO WHOLESALE
+LYTE BDY ARM 18.99 N
+4544 CA REDEMP VAL N EE/1779098 0.90
+7 @ 3.99
+KSWTR40PK 27.93 N
+4469 CA REDEMP VAL N EE/782796 14.00
+1032422 PALMOLIVE 8.99 Y
+393232 /1032422 2.50-
+WHOLE MILK 6.37 N
+SUBTOTAL 74.68
+TAX 0.50
+TOTAL 75.18`, TODAY);
+assert.deepStrictEqual(r.items.map(i => [i.name, i.amount]),
+  [['Lyte Bdy Arm', 19.89], ['Kswtr40pk', 41.93], ['Palmolive', 6.49], ['Whole Milk', 6.37]]);
+assert.strictEqual(r.total, 75.18);
+
 // Split: proportional, tax shared, sums to the total to the cent.
 const parts = _finSplitAmounts([
   { amount: 30, category: 'Groceries' }, { amount: 18.52, category: 'Shopping' }, { amount: 3.49, category: 'Other' },

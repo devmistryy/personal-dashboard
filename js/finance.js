@@ -184,9 +184,18 @@ function _finParseReceipt(input, today) {
   // Line items: priced rows between the merchant and the first total row.
   const itemEnd = firstTotalRow < 0 ? lines.length : firstTotalRow;
   const items = [];
+  const addToPrev = v => {
+    const prev = items[items.length - 1];
+    if (prev) prev.amount = Math.round((prev.amount + v) * 100) / 100;
+  };
   for (let i = (rowIdx.merchant ?? -1) + 1; i < itemEnd; i++) {
+    // Discount ("2.50-" or "-2.50") → subtract from the item above.
+    const neg = lines[i].match(/(?:^|\s)-\$?(\d[\d,]*\.\d{2})\s*[a-z]{0,2}$|(\d[\d,]*\.\d{2})-\s*[a-z]{0,2}$/i);
+    if (neg && !/total/i.test(lines[i])) { addToPrev(-Number((neg[1] || neg[2]).replace(/,/g, ''))); continue; }
     const m = lines[i].match(/^(.*?[a-z]{2}.*?)\s+\$?(\d{1,3}(?:,\d{3})*\.\d{2})\s*[a-z]{0,2}$/i);
     if (!m || _FIN_NOT_ITEM.test(m[1]) || i === rowIdx.date) continue;
+    // Bottle deposit (Costco "CA REDEMP VAL", CRV) is a fee → add to the item above.
+    if (/redemp|\bcrv\b/i.test(m[1])) { addToPrev(Number(m[2].replace(/,/g, ''))); continue; }
     const name = _finTidy(m[1].replace(/^\d{4,}\s+/, '').replace(/[*]+/g, ' '), true).trim();
     if (name.length < 2) continue;
     items.push({ name: name.slice(0, 50), amount: Number(m[2].replace(/,/g, '')) });
