@@ -843,6 +843,8 @@ function _renderHabitHeader(all, active, today) {
   if (voids) bits.push(`${voids} voided`);
   if (eod.length === 1) bits.push(`“${_esc(eod[0].name)}” counts once the day ends`);
   else if (eod.length > 1) bits.push(`${eod.length} end-of-day habits count once the day ends`);
+  if (_habitNightPending() && active.some(h => h.nightRoutine && _habitScheduledOn(h, today) && !_habitVoidedOn(h.id, today)))
+    bits.push('Night habits count from 10 PM');
   document.getElementById('habSub').innerHTML = bits.join(' · ');
 
   // Last 7 days, same counting rule as the calendar rings.
@@ -903,7 +905,9 @@ function renderHabits() {
     wrap.className = 'hab-group';
     wrap.appendChild(_habitSectionHead(sec.label, counting.filter(isDone).length, counting.length, {
       routine: sec.routine, color: sec.color,
-      note: sec.key === 'eod' && group === 'routine' ? 'counts once the day ends' : '',
+      note: group !== 'routine' ? ''
+        : sec.key === 'eod' ? 'counts once the day ends'
+        : sec.key === 'night' && _habitNightPending() ? 'counts from 10 PM' : '',
     }));
     const ul = document.createElement('ul');
     ul.className = 'hab-list';
@@ -988,12 +992,19 @@ function _habitRetiredOn(h, ds) {
   return !!h.archivedAt && ds >= String(h.archivedAt).slice(0, 10);
 }
 
-// The habits that actually count on `ds`: scheduled that day, not an End-of-Day
-// habit on a day still in progress, and not voided. Shared by the overview
+const HABIT_NIGHT_START_HOUR = 22; // Night habits join today's ring from 10 PM
+function _habitNightPending() { return new Date().getHours() < HABIT_NIGHT_START_HOUR; }
+// Not counted yet today: End-of-day until the day ends, Night until 10 PM.
+function _habitPendingOn(h, ds, today) {
+  return ds === today && (h.endOfDay || (h.nightRoutine && _habitNightPending()));
+}
+
+// The habits that actually count on `ds`: scheduled that day, not pending
+// (End-of-Day / Night, see _habitPendingOn), and not voided. Shared by the overview
 // calendar ring and the day-detail view so the two can never disagree.
 function _habitsCountedOn(habits, ds, today) {
   return habits.filter(h => _habitScheduledOn(h, ds)
-    && !(h.endOfDay && ds === today)
+    && !_habitPendingOn(h, ds, today)
     && !_habitVoidedOn(h.id, ds)
     && !(_habitIsWeekly(h) && !_habitDoneOn(h, ds)));
 }
@@ -1116,7 +1127,7 @@ function renderHabitOverviewCalendar() {
     const isToday = ds === today;
     const isFuture = ds > today;
 
-    const scheduled = habits.filter(h => _habitScheduledOn(h, ds) && !(h.endOfDay && isToday));
+    const scheduled = habits.filter(h => _habitScheduledOn(h, ds) && !_habitPendingOn(h, ds, today));
     const counted   = _habitsCountedOn(habits, ds, today);
     const voidCount = scheduled.filter(h => _habitVoidedOn(h.id, ds)).length;
     const doneIds = getHabitLog(ds);
@@ -2273,3 +2284,9 @@ document.getElementById('dayDetailBack').addEventListener('click', closeDayDetai
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.getElementById('dayDetailPage').classList.contains('open')) closeDayDetail();
 });
+
+// Night habits join today's ring at 10 PM; re-render once when that happens.
+(() => {
+  const at = new Date(); at.setHours(HABIT_NIGHT_START_HOUR, 0, 0, 0);
+  if (at > Date.now()) setTimeout(renderHabits, at - Date.now());
+})();
