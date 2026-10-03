@@ -3,13 +3,12 @@
 --  Idempotent end to end — safe to run again any time this file changes.
 --
 --  Contains, in order:
---    1. Schema — every table + RLS policy the app uses.
+--    0. Renames + removals — old objects renamed or dropped, guarded.
+--    1. Schema — every table + RLS policy the app uses. A column added after
+--       its table first shipped is an `add column if not exists` line after
+--       the `create table`, so an older database picks it up on the next run.
 --    2. One-time backfill — copies any Diet/Mobility data still sitting in
---       the old `settings` key/value blobs into their new dedicated tables.
---       Idempotent and re-run-safe: each block is a no-op once the target
---       table holds any row for that user (guarded), and `on conflict do
---       nothing` covers the first run, so it can never overwrite live data
---       or bring back a record deleted after the initial migration.
+--       the old `settings` key/value blobs into their dedicated tables.
 --
 --  Storage rule for future tables:
 --    • Collections of records (habits, tasks, meals, exercises, sessions, …)
@@ -23,10 +22,11 @@
 begin;
 
 -- ─────────────────────────────────────────────────────────────
--- 0. RENAMES (2026-09: "goal" → "task")
---    Guarded so a fresh install (no old objects) and a re-run (new names
---    already in place) are both no-ops. Run before the schema section so the
---    `create table if not exists` blocks below see the renamed objects.
+-- 0. RENAMES + REMOVALS
+--    The "goal" → "task" rename (2026-09) is guarded so a fresh install (no
+--    old objects) and a re-run (new names already in place) are both no-ops.
+--    Runs before the schema section so the `create table if not exists`
+--    blocks below see the renamed objects.
 -- ─────────────────────────────────────────────────────────────
 
 do $$
@@ -82,11 +82,8 @@ create table if not exists habits (
   name        text not null,
   start_date  date,
   end_date    date,
-  area        text,
   archived    boolean default false,
   archived_at date,
-  sort_order  integer,
-  end_of_day  boolean default false,
   created_at  timestamptz default now()
 );
 alter table habits add column if not exists area        text;
@@ -109,9 +106,10 @@ alter table habits add column if not exists track_type text default 'checkbox';
 alter table habits add column if not exists target     integer;
 -- Habits redesign (2026-09-22): a non-daily schedule, kept in one jsonb column.
 -- Shape: {"schedule":{"type":"days","days":[1,3,5]}} (0 = Sunday) or
--- {"schedule":{"type":"weekly","times":3}}. No schedule = every day. The app
--- only sends `meta` once some habit has a schedule, so saving keeps working
--- before this runs.
+-- {"schedule":{"type":"weekly","times":3}}. No schedule = every day. Also holds
+-- "targets": {"YYYY-MM-DD": n}, one-day overrides of an increment habit's
+-- `target`. The app only sends `meta` once some habit has a schedule or an
+-- override, so saving keeps working before this runs.
 alter table habits add column if not exists meta       jsonb;
 alter table habits enable row level security;
 
@@ -126,8 +124,8 @@ alter table habit_logs enable row level security;
 
 -- ──────────────────────── habit_counts ────────────────────────
 -- Raw daily tally for a track_type='increment' habit — e.g. "drank water 5 of
--- 8 times today". A row only exists once the count is > 0; reaching `target`
--- also adds the day to habit_logs (see setHabitCount in js/habits.js), so
+-- 8 times today". A row only exists once the count is > 0; reaching the day's
+-- target also adds the day to habit_logs (see setHabitCount in js/habits.js), so
 -- streaks, the completion rings and every other done/not-done read still
 -- come from habit_logs alone and never need to know about counts.
 create table if not exists habit_counts (
@@ -166,7 +164,7 @@ alter table habit_notes enable row level security;
 -- ─────────────────────── reactive_habits ──────────────────────
 -- Cue-triggered habits (Situational: something happening around you; Internal:
 -- a state you notice in yourself), tracked per-occurrence rather than daily —
--- see reactive_habit_logs. id is text: client generates 'rh_' + uuid (js/reactiveHabits.js _rhId).
+-- see reactive_habit_logs. id is text: 'rh_' + 12 hex chars of a uuid (js/reactiveHabits.js _rhId).
 create table if not exists reactive_habits (
   id         text primary key,
   user_id    uuid references auth.users not null,
@@ -180,7 +178,7 @@ alter table reactive_habits enable row level security;
 -- One row per occurrence: the cue arose and the user logged whether they
 -- handled it well. Flat + timestamped like diet_entries, not date-bucketed
 -- like habit_logs — an occurrence needs its own time and an outcome, not just
--- a day. id is text: client generates 'rh_' + uuid (js/reactiveHabits.js _rhId).
+-- a day. id: same 'rh_' scheme as reactive_habits.
 create table if not exists reactive_habit_logs (
   id         text primary key,
   user_id    uuid references auth.users not null,
@@ -200,21 +198,16 @@ create table if not exists tasks (
   date       date not null,
   text       text not null,
   done       boolean default false,
-  done_at    timestamptz,
-  area       text,
-  priority   text default 'Medium',
-  tid        text,          -- stable client-generated id (g_…), used for dedup + history
-  created_at timestamptz,
-  meta       jsonb          -- optional extras: { focus, est, due, steps:[{text,done}] }
+  done_at    timestamptz
 );
 alter table tasks add column if not exists area       text;
 alter table tasks add column if not exists priority   text default 'Medium';
-alter table tasks add column if not exists tid        text;
+alter table tasks add column if not exists tid        text;   -- stable client-generated id (g_…), used for dedup + history
 alter table tasks add column if not exists created_at timestamptz;
--- To Do redesign (2026-09-22): Focus flag, time estimate (minutes), due date
--- (YYYY-MM-DD) and step checklist, kept in one jsonb column. The app only sends
--- `meta` for a day once a task on it uses one of these, so days that don't are
--- unaffected even before this runs.
+-- To Do redesign (2026-09-22): optional extras in one jsonb column —
+-- { focus (flag), est (minutes), due (YYYY-MM-DD), steps:[{text,done}] }.
+-- The app only sends `meta` for a day once a task on it uses one of these,
+-- so days that don't are unaffected even before this runs.
 alter table tasks add column if not exists meta       jsonb;
 -- Queue feature removed.
 alter table tasks drop column if exists queued;
@@ -237,11 +230,17 @@ create index if not exists tasks_user_date_idx on tasks (user_id, date);
 alter table tasks enable row level security;
 
 -- ────────────────────────── settings ──────────────────────────
--- key/value store (value = jsonb). Per-user scalar prefs / small singletons.
--- Backs: habit_sort_v1, task_sort_v1, task_streak_v1, task_dismissed_v1,
---        sunday_reset_v1, sunday_reset_removed_v1, areas:list, area_notes:<name>,
---        job_roles_v1, job_sites_v1, referral_notes_v1, job_weekly_goal_v1,
---        finance_budgets_v1, finance_habits_v1
+-- key/value store (value = jsonb). Backs:
+--   Habits       habit_sort_v1, habit_group_v1
+--   To Do        task_sort_v1, task_streak_v1, task_dismissed_v1, task_someday_v1,
+--                sunday_reset_v1, sunday_reset_mode_v1, sunday_reset_removed_v1
+--   Areas        areas:list, area_notes:<name>
+--   Jobs         job_roles_v1, job_sites_v1, job_weekly_goal_v1, referral_notes_v1
+--   Mobility     mobility_archive_v1, mobility_group_flow_v1, mobility_bumps_v1,
+--                mobility_nudge_skip_v1, mobility_rest_v1, mobility_round_rest_v1
+--   Supplements  diet_supplements_v1, diet_supp_contents_v1, diet_supp_cycles_v1,
+--                diet_supp_notes_v1, diet_supp_meta_v1
+--   Finance      finance_budgets_v1, finance_habits_v1
 -- (Meals, mobility exercises and sessions live in their own tables below.)
 create table if not exists settings (
   user_id uuid references auth.users not null,
@@ -252,13 +251,11 @@ create table if not exists settings (
 alter table settings enable row level security;
 
 -- ──────────────────── job_applications ────────────────────────
--- id is text: client generates crypto.randomUUID() (see js/jobs.js _jobId)
--- id is uuid (not text) in the live table — confirmed 2026-09-15 when adding
--- the referrals FK below surfaced the mismatch: this file's `id text` was
--- never actually applied here since the table already existed, so it had
--- silently drifted from the real column type. js/jobs.js's _jobId() already
--- generates crypto.randomUUID() strings, which Postgres/PostgREST accept for
--- either column type, so nothing in the app needed to change.
+-- id is uuid: client generates crypto.randomUUID() (js/jobs.js _jobId).
+-- This file used to say `id text`, but the live table already existed as uuid
+-- so that never applied; the drift surfaced 2026-09-15 when the referrals FK
+-- below needed matching types. randomUUID() strings suit either type, so the
+-- app didn't need to change.
 create table if not exists job_applications (
   id            uuid primary key,
   user_id       uuid references auth.users not null,
@@ -267,7 +264,6 @@ create table if not exists job_applications (
   date_applied  date,
   status        text default 'Applied',
   location_type text,
-  location_cities text[],
   created_at    timestamptz default now()
 );
 -- Job Role: a free-text value the user picks from their own self-authored
@@ -278,14 +274,11 @@ alter table job_applications add column if not exists role text;
 -- (text[]) so a hybrid/onsite application can list more than one city (e.g.
 -- open to either of two offices). location_type still picks exactly one of
 -- remote/hybrid/onsite — that choice stays mutually exclusive.
--- Guarded in a DO block (rather than a plain UPDATE) because the live table
--- had already drifted from this file before this migration was written (see
--- the id-type note above) — it turned out to have no location_city column at
--- all, which would make a bare `update ... set location_cities =
--- array[location_city]` fail with "column does not exist" before the `drop
--- column if exists` below ever ran. Checking information_schema first keeps
--- this file safe to run regardless of whatever the live table's actual
--- pre-migration shape is.
+-- The copy is a DO block that checks information_schema first, not a plain
+-- UPDATE, because the live table had drifted here too (see the id note above):
+-- it had no location_city column at all, so a bare `update … set
+-- location_cities = array[location_city]` would fail with "column does not
+-- exist". This way the file runs whatever the table's pre-migration shape.
 alter table job_applications add column if not exists location_cities text[];
 do $$
 begin
@@ -335,10 +328,7 @@ create table if not exists goals (
   user_id    uuid references auth.users not null,
   title      text not null,
   area       text,                        -- area name, or null = unassigned
-  notes      text,
   done       boolean default false,
-  done_at    timestamptz,
-  sort_order integer,
   created_at timestamptz default now()
 );
 alter table goals add column if not exists notes      text;
@@ -347,8 +337,8 @@ alter table goals add column if not exists sort_order integer;
 alter table goals enable row level security;
 
 -- ─────────────────────────── areas ────────────────────────────
--- Currently unused: areas + area notes persist via `settings`
--- (keys 'areas:list', 'area_notes:<name>'). Kept for future use.
+-- Currently unused: areas + area notes persist via `settings` (see its key
+-- list above). Kept for future use.
 create table if not exists areas (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid references auth.users not null,
@@ -441,14 +431,11 @@ create table if not exists mobility_exercises (
   hold_seconds integer,                             -- set when measure = 'hold'
   reps         integer,                             -- set when measure = 'reps'
   frequency    integer not null default 3,          -- times per week, 1..7
-  group_name   text,                                -- optional; same-group exercises share days
-  progress     text,                                -- null/'dose' = grows over time; 'fixed' = same dose, no progress tracking
-  sort_order   integer,                             -- manual order inside a group (drag to reorder)
   created_at   timestamptz default now()
 );
-alter table mobility_exercises add column if not exists group_name text;
-alter table mobility_exercises add column if not exists progress text;
-alter table mobility_exercises add column if not exists sort_order integer;
+alter table mobility_exercises add column if not exists group_name text;    -- optional; same-group exercises share days
+alter table mobility_exercises add column if not exists progress text;      -- null/'dose' = grows over time; 'fixed' = same dose, no progress tracking
+alter table mobility_exercises add column if not exists sort_order integer; -- manual order inside a group (drag to reorder)
 create index if not exists mobility_exercises_user_idx
   on mobility_exercises (user_id);
 alter table mobility_exercises enable row level security;
@@ -465,22 +452,19 @@ create table if not exists mobility_logs (
   measure      text not null default 'hold',
   hold_seconds integer,
   reps         integer,
-  set_values   jsonb,                               -- per-set values, e.g. [30, 30, null]; null = set not done
-  note         text,
   created_at   timestamptz not null default now(),
   unique (user_id, exercise_id, date)               -- upsert target (no delete-then-insert)
 );
-alter table mobility_logs add column if not exists set_values jsonb;
+alter table mobility_logs add column if not exists set_values jsonb;  -- per-set values, e.g. [30, 30, null]; null = set not done
 alter table mobility_logs add column if not exists note text;
 create index if not exists mobility_logs_user_ex_idx
   on mobility_logs (user_id, exercise_id);
 alter table mobility_logs enable row level security;
 
 -- ───────────────────── whoop_tokens ────────────────────────────
--- Raw OAuth tokens. Deliberately given NO RLS policy below (RLS is enabled
--- but the policy array is left empty for this table) — that makes it
--- unreadable/unwritable via the anon/authenticated client key entirely.
--- Only Edge Functions using the service-role key can touch this table.
+-- Raw OAuth tokens. RLS is enabled but the table is deliberately left out of
+-- the "own" policy list below, so the anon/authenticated client key can't read
+-- or write it at all. Only Edge Functions using the service-role key can.
 create table if not exists whoop_tokens (
   user_id       uuid primary key references auth.users not null,
   access_token  text not null,
@@ -501,52 +485,38 @@ create table if not exists whoop_recovery (
   user_id                      uuid references auth.users not null,
   date                         date not null,
   -- cycle (GET /v2/cycle)
-  cycle_score_state            text,      -- SCORED | PENDING_SCORE | UNSCORABLE
   strain                       numeric,
   avg_heart_rate               numeric,
   max_heart_rate               numeric,
   kilojoule                    numeric,
   -- recovery (GET /v2/cycle/{id}/recovery)
-  recovery_score_state         text,
-  user_calibrating             boolean,
   recovery_score               integer,
   resting_hr                   numeric,
   hrv_ms                       numeric,   -- hrv_rmssd_milli
   spo2_percentage              numeric,
   skin_temp_celsius            numeric,
   -- sleep (GET /v2/activity/sleep) — score + stage_summary + sleep_needed
-  sleep_score_state            text,
-  is_nap                       boolean,
-  sleep_start                  timestamptz,   -- when they fell asleep
-  sleep_end                    timestamptz,   -- when they woke up
   sleep_performance            integer,
   sleep_efficiency_percentage  numeric,
   sleep_consistency_percentage numeric,
   respiratory_rate             numeric,
-  total_in_bed_ms              integer,
-  total_awake_ms               integer,
-  total_no_data_ms             integer,
   light_sleep_ms               integer,   -- total_light_sleep_time_milli
   deep_sleep_ms                integer,   -- total_slow_wave_sleep_time_milli
   rem_sleep_ms                 integer,   -- total_rem_sleep_time_milli
-  sleep_cycle_count            integer,
-  disturbance_count            integer,
-  sleep_need_baseline_ms       integer,
-  sleep_need_debt_ms           integer,
-  sleep_need_strain_ms         integer,
-  sleep_need_nap_ms            integer,
   raw                          jsonb,     -- full cycle+recovery+sleep API responses, verbatim
   synced_at                    timestamptz not null default now(),
   primary key (user_id, date)
 );
--- table may already exist from an earlier narrower version — add anything missing
-alter table whoop_recovery add column if not exists cycle_score_state text;
+-- cycle
+alter table whoop_recovery add column if not exists cycle_score_state text;   -- SCORED | PENDING_SCORE | UNSCORABLE
+-- recovery
 alter table whoop_recovery add column if not exists recovery_score_state text;
 alter table whoop_recovery add column if not exists user_calibrating boolean;
+-- sleep
 alter table whoop_recovery add column if not exists sleep_score_state text;
 alter table whoop_recovery add column if not exists is_nap boolean;
-alter table whoop_recovery add column if not exists sleep_start timestamptz;
-alter table whoop_recovery add column if not exists sleep_end timestamptz;
+alter table whoop_recovery add column if not exists sleep_start timestamptz;  -- when they fell asleep
+alter table whoop_recovery add column if not exists sleep_end timestamptz;    -- when they woke up
 alter table whoop_recovery add column if not exists total_in_bed_ms integer;
 alter table whoop_recovery add column if not exists total_awake_ms integer;
 alter table whoop_recovery add column if not exists total_no_data_ms integer;
@@ -556,7 +526,8 @@ alter table whoop_recovery add column if not exists sleep_need_baseline_ms integ
 alter table whoop_recovery add column if not exists sleep_need_debt_ms integer;
 alter table whoop_recovery add column if not exists sleep_need_strain_ms integer;
 alter table whoop_recovery add column if not exists sleep_need_nap_ms integer;
--- superseded by the granular columns above; table is brand-new and unsynced, safe to drop
+-- Superseded by the granular sleep columns above; dropped while the table was
+-- brand-new and unsynced, so no data was lost.
 alter table whoop_recovery drop column if exists awake_ms;
 alter table whoop_recovery drop column if exists sleep_duration_ms;
 alter table whoop_recovery drop column if exists sleep_need_ms;
@@ -571,32 +542,21 @@ create table if not exists whoop_workouts (
   user_id              uuid references auth.users not null,
   start                timestamptz not null,
   "end"                timestamptz not null,
-  sport_id             integer,
   sport_name           text,
-  score_state          text,
   strain               numeric,
   avg_heart_rate       numeric,
   max_heart_rate       numeric,
   kilojoule            numeric,
-  percent_recorded     numeric,
   distance_meter       numeric,
   altitude_gain_meter  numeric,
-  altitude_change_meter numeric,
-  zone_0_ms            integer,             -- zone_zero_milli
-  zone_1_ms            integer,
-  zone_2_ms            integer,
-  zone_3_ms            integer,
-  zone_4_ms            integer,
-  zone_5_ms            integer,
   raw                  jsonb,
   synced_at            timestamptz not null default now()
 );
--- table may already exist from an earlier narrower version — add anything missing
 alter table whoop_workouts add column if not exists sport_id integer;
 alter table whoop_workouts add column if not exists score_state text;
 alter table whoop_workouts add column if not exists percent_recorded numeric;
 alter table whoop_workouts add column if not exists altitude_change_meter numeric;
-alter table whoop_workouts add column if not exists zone_0_ms integer;
+alter table whoop_workouts add column if not exists zone_0_ms integer;  -- zone_zero_milli
 alter table whoop_workouts add column if not exists zone_1_ms integer;
 alter table whoop_workouts add column if not exists zone_2_ms integer;
 alter table whoop_workouts add column if not exists zone_3_ms integer;
@@ -655,6 +615,7 @@ end $$;
 -- can never resurrect a Diet/Mobility record deleted since the first migration.
 -- (The `settings` blobs stopped updating when those tabs moved to their own
 -- tables, so without this guard they'd be a stale source of deleted rows.)
+-- On the first run, `on conflict do nothing` keeps it from overwriting live rows.
 
 -- mobility_exercises
 insert into mobility_exercises
