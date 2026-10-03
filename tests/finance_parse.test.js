@@ -56,23 +56,67 @@ const rows = _finRowsFromOcr({ lines: [
 assert.deepStrictEqual(rows.map(x => x.text), ['TOTAL 64.12', 'VISA']);
 assert.deepStrictEqual([rows[0].x0, rows[0].y0, rows[0].x1, rows[0].y1], [10, 100, 240, 113]);
 
+// Costco two-line price cell (real OCR boxes): "65.98" sits above the name's
+// center with its "N" flag below — still one row; the next item stays separate.
+assert.deepStrictEqual(_finRowsFromOcr({ lines: [
+  { text: '65.98', x0: 723, y0: 933, x1: 790, y1: 971 },
+  { text: '1972488 OATSOVRN30CF', x0: 250, y0: 956, x1: 650, y1: 985 },
+  { text: 'N', x0: 784, y0: 977, x1: 800, y1: 1003 },
+  { text: '222 10 LB. SUGAR', x0: 319, y0: 1032, x1: 600, y1: 1067 },
+  { text: '7.79 N', x0: 717, y0: 1032, x1: 800, y1: 1061 },
+] }).map(x => x.text), ['1972488 OATSOVRN30CF 65.98 N', '222 10 LB. SUGAR 7.79 N']);
+
 // Costco: CA REDEMP VAL fees add to and discounts ("2.50-") subtract from the
 // item above, so items still sum to the subtotal.
 r = _finParseReceipt(`COSTCO WHOLESALE
-LYTE BDY ARM 18.99 N
+E 1779098 LYTE BDY ARM 18.99 N
 4544 CA REDEMP VAL N EE/1779098 0.90
 7 @ 3.99
-KSWTR40PK 27.93 N
+E 782796 ***KSWTR40PK 27.93 N
+7 @ 2.00
 4469 CA REDEMP VAL N EE/782796 14.00
 1032422 PALMOLIVE 8.99 Y
 393232 /1032422 2.50-
-WHOLE MILK 6.37 N
+E 2 WHOLE MILK 6.37 N
 SUBTOTAL 74.68
 TAX 0.50
 TOTAL 75.18`, TODAY);
 assert.deepStrictEqual(r.items.map(i => [i.name, i.amount]),
   [['Lyte Bdy Arm', 19.89], ['Kswtr40pk', 41.93], ['Palmolive', 6.49], ['Whole Milk', 6.37]]);
 assert.strictEqual(r.total, 75.18);
+assert.deepStrictEqual(r.items.map(i => i.qty), [undefined, 7, undefined, undefined]);   // "7 @ 2.00" deposit qty isn't carried to Palmolive
+
+// "2 @ 32.99" above an item → qty 2 when it multiplies out to the item's price.
+r = _finParseReceipt(`TUSTIN RANCH #122
+2 @ 32.99
+E 1972488 OATSOVRN30CF 65.98 N
+E 222 10 LB. SUGAR 7.79 N
+2 @ 13.99
+E 24722 FOLGERS INST 27.98 N
+E 2007065 PREMIERSTRAW 31.99 Y
+SUBTOTAL 133.74`, TODAY);
+assert.deepStrictEqual(r.items.map(i => [i.name, i.amount, i.qty]),
+  [['Oatsovrn30cf', 65.98, 2], ['10 Lb. Sugar', 7.79, undefined], ['Folgers Inst', 27.98, 2], ['Premierstraw', 31.99, undefined]]);
+
+// Costco app screenshots: the store name beats the app's header; with no store
+// name in view (logo scrolled off) the merchant is left blank, not "Orders and Purchases".
+r = _finParseReceipt(`9:00 64
+Orders and Purchases
+at Tustin Ranch | Delivering to 92867
+COSTCO 12
+WHOLESALE
+TUSTIN RANCH #122
+TOTAL 136.22`, TODAY);
+assert.strictEqual(r.merchant, 'Costco');
+assert.strictEqual(r.conf.merchant, 'high');
+r = _finParseReceipt(`8:37 31
+Orders and Purchases
+at Tustin Ranch | Delivering to 92867
+2700 PARK AVE
+TUSTIN, CA 92782
+TOTAL 75.18`, TODAY);
+assert.strictEqual(r.merchant, '');
+assert.strictEqual(r.conf.merchant, 'missing');
 
 // Split: proportional, tax shared, sums to the total to the cent.
 const parts = _finSplitAmounts([

@@ -36,8 +36,8 @@ const _FIN_AMT_RE = /(-?\d{1,3}(?:,\d{3})+|-?\d+)\.(\d{2})(?!\d)/g;
 const _FIN_DATE_LIKE = /\b\d{1,4}[./-]\d{1,2}[./-]\d{2,4}\b/g;
 const _FIN_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const _FIN_MON_RE = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
-const _FIN_NOT_ITEM = /\b(?:sub\s*-?\s*total|total|tax|change|cash|visa|master\s*card|amex|discover|debit|credit|card|balance|tender(?:ed)?|tip|gratuity|payment|paid|auth\w*|approv\w*|saving|saved|discount|coupon|points|member|reward|refund|due|amount)\b|@|\blb\b|\bkg\b/i;
-const _FIN_NOT_MERCHANT = /receipt|welcome|thank|store\s*#|\btel\b|phone|www\.|http|\.com\b|@|\d{3}[-.) ]\d{3}[-. ]\d{4}|^\d|^#|\b(?:ave|blvd|street|road|suite|hwy)\b|\bst\.?$|customer|order\s*#|server|table|guest|cashier|transaction|register/i;
+const _FIN_NOT_ITEM = /\b(?:sub\s*-?\s*total|total|tax|change|cash|visa|master\s*card|amex|discover|debit|credit|card|balance|tender(?:ed)?|tip|gratuity|payment|paid|auth\w*|approv\w*|saving|saved|discount|coupon|points|member|reward|refund|due|amount)\b|@|\/\s*(?:lb|kg)\b/i;   // weighed lines ("2.13 lb @ 0.59/lb"), not names like "10 LB. SUGAR"
+const _FIN_NOT_MERCHANT = /receipt|welcome|thank|store\s*#|\btel\b|phone|www\.|http|\.com\b|@|\d{3}[-.) ]\d{3}[-. ]\d{4}|^\d|^#|\b(?:ave|blvd|street|road|suite|hwy)\b|\bst\.?$|customer|order\s*#|server|table|guest|cashier|transaction|register|orders\s*(?:and|&)\s*purchases|delivering\s*to|,\s*[a-z]{2}\s+\d{5}\b/i;
 
 const _FIN_CATEGORY_HINTS = [
   ['Groceries',     /trader\s*joe|whole\s*foods|safeway|kroger|aldi|costco|publix|wegmans|sprouts|grocery|supermarket|\bmarket\b|h-?e-?b\b|food\s*lion|giant\s*eagle|albertsons|ralphs|vons/i],
@@ -96,7 +96,9 @@ function _finTidy(s, allWords) {
 }
 
 // OCR overlay lines → visual rows. Receipts put the price in a far-right
-// column, which OCR often returns as a separate line on the same row.
+// column, which OCR often returns as a separate line on the same row — and
+// Costco top-aligns it in a two-line cell ("65.98" over "N"), so lines join a
+// row when they overlap it vertically, not only when their centers line up.
 function _finRowsFromOcr(ocr) {
   const lines = ((ocr && ocr.lines) || []).filter(l => l.x1 > l.x0 && l.y1 > l.y0);
   if (!lines.length) {
@@ -105,14 +107,14 @@ function _finRowsFromOcr(ocr) {
   const sorted = [...lines].sort((a, b) => (a.y0 + a.y1) - (b.y0 + b.y1));
   const rows = [];
   for (const l of sorted) {
-    const cy = (l.y0 + l.y1) / 2, h = l.y1 - l.y0;
+    const h = l.y1 - l.y0;
     const row = rows[rows.length - 1];
-    if (row && Math.abs(cy - row.cy) < Math.min(h, row.h) * 0.5) {
+    if (row && Math.min(l.y1, row.y1) - Math.max(l.y0, row.y0) > Math.min(h, row.h) * 0.25) {
       row.parts.push(l);
       row.x0 = Math.min(row.x0, l.x0); row.y0 = Math.min(row.y0, l.y0);
       row.x1 = Math.max(row.x1, l.x1); row.y1 = Math.max(row.y1, l.y1);
     } else {
-      rows.push({ cy, h, parts: [l], x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1 });
+      rows.push({ h, parts: [l], x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1 });
     }
   }
   return rows.map(r => ({
@@ -163,15 +165,17 @@ function _finParseReceipt(input, today) {
     if (best > 0) total = best;
   }
 
-  // Merchant: first wordy, non-boilerplate row near the top.
+  // Merchant: a known store near the top (app screenshots put UI text above the
+  // receipt), else the first wordy, non-boilerplate row.
+  const cands = lines.slice(0, 8).map((l, i) => i).filter(i => (lines[i].match(/[a-z]/gi) || []).length >= 3 &&
+    !_FIN_NOT_MERCHANT.test(lines[i]) && !_finAmounts(lines[i]).length);
+  const brandRow = cands.find(i => _finHintCategory(lines[i]));
   let merchant = '';
-  for (let i = 0; i < Math.min(lines.length, 8); i++) {
-    const l = lines[i];
-    if ((l.match(/[a-z]/gi) || []).length < 3 || _FIN_NOT_MERCHANT.test(l)) continue;
-    if (_finAmounts(l).length) continue;
-    merchant = _finTidy(l.replace(/\s*#\s*\d+.*$/, '').replace(/[*=_~]+/g, ' ')).slice(0, 60).trim();
-    rowIdx.merchant = i;
-    break;
+  rowIdx.merchant = brandRow ?? cands[0] ?? null;
+  if (rowIdx.merchant != null) {
+    let l = lines[rowIdx.merchant].replace(/\s*#\s*\d+.*$/, '');
+    if (brandRow != null) l = l.replace(/\s+\d+$/, '');   // "COSTCO 12": stray number beside the logo
+    merchant = _finTidy(l.replace(/[*=_~]+/g, ' ')).slice(0, 60).trim();
   }
 
   // Date: first row containing one.
@@ -188,7 +192,10 @@ function _finParseReceipt(input, today) {
     const prev = items[items.length - 1];
     if (prev) prev.amount = Math.round((prev.amount + v) * 100) / 100;
   };
+  let at = null;   // Costco "2 @ 32.99" row, applied to the next item if qty × price matches
   for (let i = (rowIdx.merchant ?? -1) + 1; i < itemEnd; i++) {
+    const q = lines[i].match(/^(\d+)\s*@\s*\$?(\d[\d,]*\.\d{2})\b/);
+    if (q) { at = { qty: +q[1], cents: Math.round(+q[1] * Number(q[2].replace(/,/g, '')) * 100) }; continue; }
     // Discount ("2.50-" or "-2.50") → subtract from the item above.
     const neg = lines[i].match(/(?:^|\s)-\$?(\d[\d,]*\.\d{2})\s*[a-z]{0,2}$|(\d[\d,]*\.\d{2})-\s*[a-z]{0,2}$/i);
     if (neg && !/total/i.test(lines[i])) { addToPrev(-Number((neg[1] || neg[2]).replace(/,/g, ''))); continue; }
@@ -196,9 +203,12 @@ function _finParseReceipt(input, today) {
     if (!m || _FIN_NOT_ITEM.test(m[1]) || i === rowIdx.date) continue;
     // Bottle deposit (Costco "CA REDEMP VAL", CRV) is a fee → add to the item above.
     if (/redemp|\bcrv\b/i.test(m[1])) { addToPrev(Number(m[2].replace(/,/g, ''))); continue; }
-    const name = _finTidy(m[1].replace(/^\d{4,}\s+/, '').replace(/[*]+/g, ' '), true).trim();
+    // Drop a leading item number, incl. Costco's "E 1779098" (E = tax flag).
+    const name = _finTidy(m[1].replace(/^(?:E\s+\d+|\d{4,})\s+/, '').replace(/[*]+/g, ' '), true).trim();
     if (name.length < 2) continue;
-    items.push({ name: name.slice(0, 50), amount: Number(m[2].replace(/,/g, '')) });
+    const amount = Number(m[2].replace(/,/g, ''));
+    items.push({ name: name.slice(0, 50), amount, ...(at && at.qty > 1 && at.cents === Math.round(amount * 100) && { qty: at.qty }) });
+    at = null;
   }
 
   const near = (a, b) => a != null && b != null && Math.abs(a - b) < 0.02;
@@ -208,7 +218,7 @@ function _finParseReceipt(input, today) {
 
   const minYear = Number(today.slice(0, 4)) - 1;
   const conf = {
-    merchant: !merchant ? 'missing' : rowIdx.merchant <= 2 ? 'high' : 'medium',
+    merchant: !merchant ? 'missing' : (rowIdx.merchant <= 2 || brandRow != null) ? 'high' : 'medium',
     total: total == null ? 'missing' : !labelled ? 'low' : consistent ? 'high' : 'medium',
     date: !date ? 'missing' : (date > today || Number(date.slice(0, 4)) < minYear) ? 'low' : 'high',
   };
@@ -895,7 +905,7 @@ function finStartScan(file) {
 async function _finRunOcr(d) {
   const run = d.run = (d.run || 0) + 1;
   const live = () => _finDraft === d && d.run === run;
-  Object.assign(d, { ocr: 'reading', error: '', conf: {}, items: [], boxes: [], split: false, image: null });
+  Object.assign(d, { ocr: 'reading', error: '', conf: {}, items: [], itemsEdited: false, boxes: [], split: false, image: null });
   d.touched = {};
   renderFinModal();
   try {
@@ -1090,9 +1100,10 @@ function renderFinItems() {
   el.innerHTML = `<details class="fin-items" open>
     <summary><span>Line items · ${d.items.length} detected</span>
       <span class="fin-mono fin-muted">${_finMoney(d.subtotal ?? itemsSum)}${d.tax ? ` + ${_finMoney(d.tax)} tax` : ''}</span></summary>
-    <div class="fin-items-list">${d.items.map((it, i) => `<div class="fin-item">
-      <span>${_esc(it.name)}</span>${catCell(it, i)}<span class="fin-mono">${it.amount.toFixed(2)}</span></div>`).join('')}</div>
-    ${total > 0 && Math.abs(expected - total) > 0.05 && d.mode === 'scan'
+    <div class="fin-items-list">${d.items.map((it, i) => `<div class="fin-item${d.mode === 'scan' ? ' del' : ''}">
+      <span>${it.qty ? `<span class="fin-muted">${it.qty} × </span>` : ''}${_esc(it.name)}</span>${catCell(it, i)}<span class="fin-mono">${it.amount.toFixed(2)}</span>${d.mode === 'scan'
+        ? `<button type="button" class="fin-icon-btn fin-item-del" data-fin-item-del="${i}" aria-label="Remove “${_esc(it.name)}”">×</button>` : ''}</div>`).join('')}</div>
+    ${total > 0 && Math.abs(expected - total) > 0.05 && d.mode === 'scan' && !d.itemsEdited
       ? `<div class="fin-items-note">Items add up to ${_finMoney(expected)} — some lines may not have been read. The total is what gets saved.</div>` : ''}
     ${canSplit ? `<div class="fin-split">
       <button type="button" class="fin-toggle${d.split ? ' on' : ''}" data-fin-split role="switch" aria-checked="${d.split}" aria-label="Split by category"></button>
@@ -1388,6 +1399,14 @@ if (typeof document !== 'undefined') {
     if (t.hasAttribute('data-fin-delete')) { _finDelete(); return; }
     if (t.hasAttribute('data-fin-rescan')) { fileInput.click(); return; }
     if (t.hasAttribute('data-fin-rotate')) { d.rotation = ((d.rotation || 0) + 90) % 360; _finRunOcr(d); return; }
+    // Removing a line item only changes the category split; the total stays as scanned.
+    if (t.dataset.finItemDel != null) {
+      d.items.splice(+t.dataset.finItemDel, 1);
+      d.itemsEdited = true;
+      if (d.split && d.items.length < 2) { modal.querySelector('[data-fin-split]').click(); return; }   // toggles split off + re-renders
+      renderFinItems(); renderFinImpact();
+      return;
+    }
     if (t.dataset.finCat) {
       d.fields.category = t.dataset.finCat;
       d.touched.category = true;
