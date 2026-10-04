@@ -423,6 +423,76 @@
   }
   .quote-author:not(:empty)::before { content: '— '; }
 
+  /* Day plan: B1 calendar strip. Blocks + cutoff ticks + hour axis. */
+  .day-plan {
+    grid-column: 1 / -1;
+    position: relative;
+    padding-top: 18px;
+    margin-top: -10px;
+  }
+  .dp-flag {
+    position: absolute; top: 0; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 3px;
+    font-size: 12px; line-height: 16px; white-space: nowrap; cursor: default;
+  }
+  .dp-flag i { font: 500 9.5px var(--font-mono); color: var(--c); font-style: normal; }
+  .dp-cut {
+    position: absolute; top: 18px; bottom: 20px;
+    border-left: 1px dashed var(--c); z-index: 3; pointer-events: none;
+  }
+  .dp-track {
+    position: relative; height: 28px; border-radius: 6px;
+    background: rgba(255,255,255,0.03); overflow: hidden;
+  }
+  .dp-blk {
+    position: absolute; top: 3px; bottom: 3px; z-index: 1; padding: 0 5px;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    border-left: 2px solid var(--c); border-radius: 4px;
+    background: color-mix(in srgb, var(--c) 26%, #111214); color: var(--c);
+    font-size: 10px; font-weight: 600; line-height: 22px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default;
+  }
+  .dp-blk svg {
+    width: 12px; height: 12px; flex: none;
+    stroke: currentColor; fill: none; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .dp-blk.night { margin-left: 2px; }
+  .dp-blk.mark { gap: 4px; container-type: inline-size; }
+  .dp-blk.mark b { display: none; font-weight: 600; }
+  @container (min-width: 56px) { .dp-blk.mark b { display: inline; } }
+  .dp-blk.hatch {
+    z-index: 2;
+    background:
+      linear-gradient(to right, color-mix(in srgb, var(--c) 26%, #111214) var(--solid, 100%), transparent var(--solid, 100%)),
+      repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 55%, transparent) 0 4px, transparent 4px 8px);
+  }
+  .dp-elapsed {
+    position: absolute; inset: 0 auto 0 0; z-index: 0;
+    background: rgba(5,5,6,0.5); pointer-events: none;
+  }
+  .dp-now {
+    position: absolute; top: 16px; bottom: 20px; z-index: 5;
+    width: 2px; margin-left: -1px; border-radius: 1px;
+    background: var(--text-primary);
+    box-shadow: 0 0 6px rgba(255,255,255,0.45);
+    pointer-events: none;
+  }
+  .dp-axis {
+    position: relative; height: 18px; margin-top: 2px;
+    font: 9px var(--font-mono); color: var(--text-tertiary);
+  }
+  .dp-axis span { position: absolute; transform: translateX(-50%); padding-top: 5px; white-space: nowrap; }
+  .dp-axis span::before {
+    content: ''; position: absolute; top: 0; left: 50%;
+    width: 1px; height: 4px; background: rgba(255,255,255,0.22);
+    transform: translateX(-50%);
+  }
+  .dp-axis .l { left: 0; transform: none; color: var(--text-secondary); }
+  .dp-axis .l::before { left: 0; transform: none; }
+  .dp-axis .r { transform: translateX(-100%); color: var(--text-secondary); }
+  .dp-axis .r::before { left: auto; right: 0; transform: none; }
+
   @media (max-width: 900px) {
     .day-strip { grid-template-columns: auto minmax(0, 1fr); }
     .day-strip > .sky-row { grid-column: 1 / -1; margin-left: 0; }
@@ -562,6 +632,7 @@
     .quote-eyebrow { font-size: 9.5px; }
     .quote-text { font-size: 14px; }
     .quote-author { font-size: 11px; }
+    .dp-flag i, .dp-axis .near-end { display: none; }
 
     /* iOS Safari zooms the page when focusing a field under 16px and
        doesn't zoom back out, so every text control is at least 16px here. */

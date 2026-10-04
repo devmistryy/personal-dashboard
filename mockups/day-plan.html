@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day plan bar — mockups</title>
+<link rel="stylesheet" href="../css/main.css">
+<style>
+  /* Mockup-only styles, prefixed mk- so nothing collides with the app sheets. */
+  body { padding: 28px 24px 60px; }
+  .mk-wrap { position: relative; z-index: 1; max-width: 1380px; margin: 0 auto; }
+  .mk-h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .mk-sub { font-size: 13px; color: var(--text-tertiary); margin: 6px 0 16px; max-width: 760px; line-height: 1.5; }
+  .mk-controls {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center;
+    padding: 12px 0; margin-bottom: 14px; background: #050506;
+    font: 12px var(--font-mono); color: var(--text-secondary);
+  }
+  .mk-controls label { display: flex; align-items: center; gap: 10px; }
+  .mk-controls input { width: 240px; accent-color: #4A9EFF; }
+  .mk-controls b { color: var(--text-primary); min-width: 64px; }
+
+  .mk-variant { margin-bottom: 18px; }
+  .mk-title { font-size: 15px; font-weight: 700; }
+  .mk-desc { font-size: 12.5px; color: var(--text-secondary); margin: 5px 0 14px; max-width: 900px; line-height: 1.5; }
+  .mk-desc em { font-style: normal; color: var(--text-tertiary); }
+  .mk-previews { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  .mk-frame { background: #111214; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px; }
+  .mk-frame-label { font: 600 9.5px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 12px; }
+  .mk-stage { container-type: inline-size; }
+  @media (max-width: 900px) { .mk-previews { grid-template-columns: 1fr; } }
+
+  /* B · Calendar strip */
+  .mkb { position: relative; padding-top: 22px; }
+  .mkb-flag {
+    position: absolute; top: 0; transform: translateX(-50%); display: flex; align-items: center; gap: 3px;
+    font-size: 12px; line-height: 16px; white-space: nowrap; cursor: default;
+  }
+  .mkb-flag i { font: normal 500 9.5px var(--font-mono); color: var(--c); }
+  .mkb-cut { position: absolute; top: 17px; bottom: 18px; border-left: 1px dashed var(--c); z-index: 3; pointer-events: none; }
+  .mkb-track { position: relative; height: 28px; border-radius: 6px; background: rgba(255,255,255,0.03); overflow: hidden; }
+  .mkb-blk {
+    position: absolute; top: 3px; bottom: 3px; z-index: 2; padding: 0 5px; border-left: 2px solid var(--c); border-radius: 4px;
+    background: color-mix(in srgb, var(--c) 26%, #111214); color: var(--c);
+    font-size: 10px; font-weight: 600; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default;
+  }
+  .mkb-blk.hatch {
+    z-index: 1;
+    background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, transparent) 0 4px, color-mix(in srgb, var(--c) 10%, transparent) 4px 8px);
+  }
+  .mkb-wind {
+    position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(123,91,176,0.05), rgba(123,91,176,0.3));
+    font: 600 9px var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(200,180,255,0.6);
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; overflow: hidden; white-space: nowrap;
+  }
+  .mkb-elapsed { position: absolute; inset: 0 auto 0 0; z-index: 4; background: rgba(5,5,6,0.5); pointer-events: none; }
+  .mkb-now { position: absolute; top: 14px; bottom: 14px; z-index: 5; width: 2px; margin-left: -1px; border-radius: 1px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.5); }
+  .mkb-axis { position: relative; height: 14px; margin-top: 4px; font: 9.5px var(--font-mono); color: var(--text-tertiary); }
+  .mkb-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .mkb-axis .l { left: 0; transform: none; color: var(--text-secondary); }
+  .mkb-axis .r { transform: translateX(-100%); color: var(--text-secondary); }
+  @container (max-width: 500px) { .mkb-flag i, .mkb-axis .near-end { display: none; } .mkb-wind { color: transparent; } }
+
+  /* C · One row per item */
+  .mkc { --name: 210px; position: relative; display: grid; grid-template-columns: var(--name) minmax(0, 1fr); }
+  .mkc-name {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 22px; padding-right: 12px;
+    font-size: 11.5px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;
+  }
+  .mkc-name span { font: 500 10px var(--font-mono); color: var(--text-tertiary); }
+  .mkc-name.past { opacity: 0.4; }
+  .mkc-name.now { color: var(--text-primary); }
+  .mkc-name.on b { color: var(--c); }
+  .mkc-track { position: relative; height: 22px; background: rgba(255,255,255,0.025); }
+  .mkc-track.past { opacity: 0.4; }
+  .mkc-bar, .mkc-ok, .mkc-off { position: absolute; top: 5px; bottom: 5px; border-radius: 3px; }
+  .mkc-bar { background: color-mix(in srgb, var(--c) 60%, transparent); }
+  .mkc-ok { background: rgba(107,227,164,0.14); }
+  .mkc-off { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 55%, transparent) 0 3px, color-mix(in srgb, var(--c) 15%, transparent) 3px 7px); }
+  .mkc-sep { grid-column: 1 / -1; height: 1px; margin: 6px 0; background: rgba(255,255,255,0.08); }
+  .mkc-now {
+    position: absolute; top: -3px; bottom: -3px; left: calc(var(--name) + (100% - var(--name)) * var(--f));
+    width: 2px; margin-left: -1px; border-radius: 1px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  }
+  @container (max-width: 500px) {
+    .mkc { --name: 104px; }
+    .mkc-name { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; height: 30px; font-size: 11px; }
+    .mkc-name span { font-size: 9px; }
+    .mkc-track { height: 30px; }
+    .mkc-bar, .mkc-ok, .mkc-off { top: 9px; bottom: 9px; }
+  }
+
+  /* D · Thin bar + now/next */
+  .mkd-ends { display: flex; justify-content: space-between; font: 9.5px var(--font-mono); color: var(--text-tertiary); }
+  .mkd-track { position: relative; height: 8px; margin: 8px 0 14px; border-radius: 4px; background: rgba(255,255,255,0.05); }
+  .mkd-seg { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--c); opacity: 0.55; }
+  .mkd-seg.past { opacity: 0.18; }
+  .mkd-seg.now { opacity: 1; }
+  .mkd-tick { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--c); }
+  .mkd-dot { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.15), 0 0 8px rgba(255,255,255,0.5); }
+  .mkd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mkd-chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.05); font-size: 11.5px; color: var(--text-secondary); white-space: nowrap;
+  }
+  .mkd-chip b { font: 700 9px var(--font-mono); letter-spacing: 0.12em; color: var(--text-tertiary); }
+  .mkd-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .mkd-chip em { font-style: normal; font-family: var(--font-mono); color: var(--text-primary); }
+  .mkd-chip.now { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); }
+  .mkd-chip.now b { color: var(--c); }
+  .mkd-chip.off { background: rgba(255,107,107,0.1); }
+  .mkd-chip.off b { color: var(--danger); }
+
+  /* E · Around the day ring */
+  .mke { display: flex; align-items: center; gap: 26px; }
+  .mke svg { width: 176px; height: 176px; flex: none; }
+  .mke-phase { font: 700 6.5px var(--font-mono); letter-spacing: 0.12em; fill: var(--text-tertiary); text-anchor: middle; }
+  .mke-clock { font: 700 21px var(--font-mono); letter-spacing: -0.03em; fill: var(--text-primary); text-anchor: middle; }
+  .mke-ampm { font: 700 6.5px var(--font-mono); letter-spacing: 0.12em; fill: var(--text-tertiary); text-anchor: middle; }
+  .mke-legend { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 14px 36px; }
+  .mke-col { flex: 1 1 220px; max-width: 320px; display: flex; flex-direction: column; gap: 5px; }
+  .mke-col .mk-frame-label { margin-bottom: 3px; }
+  .mke-item { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
+  .mke-item i { width: 8px; height: 8px; flex: none; border-radius: 2px; background: var(--c); }
+  .mke-item span { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-tertiary); }
+  .mke-item.past { opacity: 0.4; }
+  .mke-item.now { color: var(--text-primary); font-weight: 600; }
+  .mke-item.now span { color: var(--c); }
+  @container (max-width: 500px) {
+    .mke { flex-direction: column; align-items: stretch; gap: 14px; }
+    .mke svg { align-self: center; }
+  }
+</style>
+</head>
+<body>
+<div class="mk-wrap">
+  <h1 class="mk-h1">Day plan bar — 5 ways it could look</h1>
+  <p class="mk-sub">Same schedule in every option. Drag the sliders to see each one through the day. Each option shows a laptop width and a phone width. Hover a block for its details.</p>
+  <div class="mk-controls">
+    <label>Now <input type="range" id="nowIn" min="6" max="24" step="0.0833"> <b id="nowOut"></b></label>
+    <label>WHOOP wake-up <input type="range" id="wakeIn" min="6" max="10" step="0.0833" value="8"> <b id="wakeOut"></b></label>
+  </div>
+  <div id="variants"></div>
+</div>
+
+<script>
+const SLEEP = 23.5;
+const PLAN = [
+  { label: 'Breakfast',     from: 8.5,  to: 10,   lane: 0, color: '#F2C063' },
+  { label: 'Lunch',         from: 12.5, to: 14.5, lane: 0, color: '#F7B27A', note: '~30 min after the workout' },
+  { label: 'Protein shake', short: 'Shake', from: 14.5, to: 18, lane: 0, color: '#C9A7FF' },
+  { label: 'Dinner',        from: 18,   to: 20.5, lane: 0, color: '#F2804C' },
+  { label: 'Workout',       from: 10,   to: 13,   lane: 1, color: '#6BE3A4', note: 'start window, about an hour' },
+  { label: 'No caffeine', thing: 'Caffeine', icon: '☕', cut: true, from: SLEEP - 10, to: SLEEP - 3, lane: 1, color: '#B08968', note: '10h before bed' },
+  { label: 'No food',     thing: 'Food',     icon: '🍽️', cut: true, from: SLEEP - 3,  to: SLEEP - 2, lane: 1, color: '#FF6B6B', note: '3h before bed' },
+  { label: 'No liquids',  thing: 'Liquids',  icon: '💧', cut: true, from: SLEEP - 2,  to: SLEEP - 1, lane: 1, color: '#4A9EFF', note: '2h before bed; a small sip (2–4 oz) for pills is fine' },
+  { label: 'Screens off', thing: 'Screens',  icon: '📱', cut: true, from: SLEEP - 1,  to: SLEEP,     lane: 1, color: '#9B7BD6', note: '1h before bed' },
+];
+const WINDOWS = PLAN.filter(p => !p.cut).sort((a, b) => a.from - b.from);
+const CUTS = PLAN.filter(p => p.cut);
+
+let WAKE = 8, NOW = 19 + 20 / 60;
+
+const clockParts = h => { const m = Math.round(h * 60) % 1440; const hh = Math.floor(m / 60); return [hh % 12 || 12, String(m % 60).padStart(2, '0'), hh >= 12 ? 'PM' : 'AM']; };
+const fmt = h => { const [hh, mm, ap] = clockParts(h); return `${hh}:${mm} ${ap}`; };
+const tick = h => { const [hh, mm, ap] = clockParts(h); return (mm === '00' ? `${hh}` : `${hh}:${mm}`) + ap[0].toLowerCase(); };
+const range = p => { const a = fmt(p.from), b = fmt(p.to); return p.cut ? a : a.slice(-2) === b.slice(-2) ? `${a.slice(0, -3)}–${b}` : `${a}–${b}`; };
+const tip = p => `${p.label} ${p.cut ? 'after ' : ''}${range(p)}${p.note ? ` (${p.note})` : ''}`;
+const frac = t => (Math.min(Math.max(t, WAKE), SLEEP) - WAKE) / (SLEEP - WAKE);
+const x = t => (frac(t) * 100).toFixed(2) + '%';
+const w = (a, b) => ((frac(b) - frac(a)) * 100).toFixed(2) + '%';
+const visible = p => Math.min(p.to, SLEEP) > Math.max(p.from, WAKE);
+const state = p => NOW >= p.to ? 'past' : NOW >= p.from ? 'now' : '';
+const awake = () => NOW > WAKE && NOW < SLEEP;
+const inDur = hrs => { const m = Math.round(hrs * 60); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`; };
+
+// A · the version in the app today — reuses its .day-plan / .dp-seg styles from css/main.css.
+function renderLanes(el) {
+  el.innerHTML = '<div class="day-plan">' + PLAN.filter(visible).map(p =>
+    `<div class="dp-seg ${state(p)}" data-lane="${p.lane}" style="--c:${p.color};left:${x(p.from)};width:${w(p.from, p.to)}" title="${tip(p)}"><b>${p.label}</b><span>${range(p)}</span></div>`
+  ).join('') + (awake() ? `<div class="dp-now" style="left:${x(NOW)}"></div>` : '') + '</div>';
+}
+
+function renderAxis(el) {
+  const flags = CUTS.filter(visible).map(c =>
+    `<span class="mkb-flag" style="--c:${c.color};left:${x(c.from)}" title="${tip(c)}">${c.icon}<i>${tick(c.from)}</i></span>` +
+    `<span class="mkb-cut" style="--c:${c.color};left:${x(c.from)}"></span>`).join('');
+  const blocks = WINDOWS.filter(visible).map(p =>
+    `<div class="mkb-blk${p.lane ? ' hatch' : ''}" style="--c:${p.color};left:${x(p.from)};width:${w(p.from, p.to)}" title="${tip(p)}">${p.short || p.label}</div>`).join('');
+  let ticks = `<span class="l">${tick(WAKE)}</span><span class="r" style="left:100%">${tick(SLEEP)}</span>`;
+  for (let t = Math.ceil(WAKE / 2) * 2; t < SLEEP; t += 2)
+    if (t - WAKE > 0.7 && SLEEP - t > 0.9) ticks += `<span${SLEEP - t < 2 ? ' class="near-end"' : ''} style="left:${x(t)}">${tick(t)}</span>`;
+  el.innerHTML = `<div class="mkb">${flags}
+    <div class="mkb-track">
+      <div class="mkb-wind" style="left:${x(SLEEP - 3)};width:${w(SLEEP - 3, SLEEP)}">wind-down</div>
+      ${blocks}
+      ${NOW > WAKE ? `<div class="mkb-elapsed" style="width:${x(NOW)}"></div>` : ''}
+    </div>
+    ${awake() ? `<div class="mkb-now" style="left:${x(NOW)}"></div>` : ''}
+    <div class="mkb-axis">${ticks}</div>
+  </div>`;
+}
+
+function renderRows(el) {
+  let rows = WINDOWS.map(p => `
+    <div class="mkc-name ${state(p)}" title="${tip(p)}"><b>${p.label}</b><span>${range(p)}</span></div>
+    <div class="mkc-track ${state(p)}">${visible(p) ? `<div class="mkc-bar" style="--c:${p.color};left:${x(p.from)};width:${w(p.from, p.to)}"></div>` : ''}</div>`).join('');
+  rows += '<div class="mkc-sep"></div>';
+  rows += CUTS.map(c => `
+    <div class="mkc-name${NOW >= c.from ? ' on' : ''}" style="--c:${c.color}" title="${tip(c)}"><b>${c.icon} ${c.thing}</b><span>off ${fmt(c.from)}</span></div>
+    <div class="mkc-track"><div class="mkc-ok" style="left:0;width:${x(c.from)}"></div><div class="mkc-off" style="--c:${c.color};left:${x(c.from)};width:${w(c.from, SLEEP)}"></div></div>`).join('');
+  el.innerHTML = `<div class="mkc" style="--f:${frac(NOW)}">${rows}${awake() ? '<div class="mkc-now"></div>' : ''}</div>`;
+}
+
+function renderNext(el) {
+  const cur = WINDOWS.filter(p => state(p) === 'now');
+  const inEffect = CUTS.filter(c => NOW >= c.from);
+  const next = PLAN.filter(p => p.from > NOW && visible(p)).sort((a, b) => a.from - b.from).slice(0, 2);
+  let chips = '';
+  if (NOW <= WAKE) chips += `<span class="mkd-chip"><b>NOW</b>Sleeping · wake-up <em>${fmt(WAKE)}</em></span>`;
+  else if (NOW >= SLEEP) chips += `<span class="mkd-chip"><b>NOW</b>Past bedtime</span>`;
+  else if (!cur.length) chips += `<span class="mkd-chip"><b>NOW</b>Nothing scheduled</span>`;
+  chips += cur.map(p => `<span class="mkd-chip now" style="--c:${p.color}" title="${tip(p)}"><b>NOW</b>${p.label} until <em>${fmt(p.to)}</em></span>`).join('');
+  chips += next.map((p, i) => `<span class="mkd-chip" style="--c:${p.color}" title="${tip(p)}"><b>${i ? 'THEN' : 'NEXT'}</b><i></i>${p.label} <em>${fmt(p.from)}</em> · in ${inDur(p.from - NOW)}</span>`).join('');
+  if (inEffect.length) chips += `<span class="mkd-chip off"><b>OFF</b>${inEffect.map(c => `<span title="${tip(c)}">${c.icon} ${c.thing.toLowerCase()}</span>`).join(' · ')}</span>`;
+  el.innerHTML = `
+    <div class="mkd-ends"><span>${fmt(WAKE)}</span><span>${fmt(SLEEP)}</span></div>
+    <div class="mkd-track">
+      ${WINDOWS.filter(visible).map(p => `<div class="mkd-seg ${state(p)}" style="--c:${p.color};left:${x(p.from)};width:${w(p.from, p.to)}" title="${tip(p)}"></div>`).join('')}
+      ${CUTS.filter(visible).map(c => `<div class="mkd-tick" style="--c:${c.color};left:${x(c.from)}" title="${tip(c)}"></div>`).join('')}
+      ${awake() ? `<div class="mkd-dot" style="left:${x(NOW)}"></div>` : ''}
+    </div>
+    <div class="mkd-chips">${chips}</div>`;
+}
+
+function renderRing(el) {
+  const arc = (r, f0, f1, color, sw, op = 1, title = '') => {
+    const C = 2 * Math.PI * r, len = Math.max(0, (f1 - f0) * C - 1.5);
+    return `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"
+      stroke-dasharray="${len.toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-f0 * C).toFixed(2)}" transform="rotate(-90 80 80)">${title ? `<title>${title}</title>` : ''}</circle>`;
+  };
+  const track = r => `<circle cx="80" cy="80" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="6"/>`;
+  const arcs = PLAN.filter(visible).map(p =>
+    arc(p.lane ? 71 : 62, frac(p.from), frac(p.to), p.color, 6, { past: 0.3, now: 1 }[state(p)] ?? 0.7, tip(p))).join('');
+  const a = frac(NOW) * 2 * Math.PI - Math.PI / 2;
+  const cur = WINDOWS.find(p => state(p) === 'now');
+  const [hh, mm, ap] = clockParts(NOW);
+  const item = p => {
+    const st = p.cut ? (NOW >= p.from ? 'now' : '') : state(p);
+    return `<div class="mke-item ${st}" style="--c:${p.color}" title="${tip(p)}"><i></i>${p.label}<span>${p.cut ? 'from ' : ''}${range(p)}</span></div>`;
+  };
+  const legend = `<div class="mke-col"><div class="mk-frame-label">Meals &amp; workout</div>${WINDOWS.map(item).join('')}</div>`
+    + `<div class="mke-col"><div class="mk-frame-label">Cutoffs</div>${CUTS.map(item).join('')}</div>`;
+  el.innerHTML = `<div class="mke">
+    <svg viewBox="-4 -4 168 168" aria-hidden="true">
+      <circle cx="80" cy="80" r="50" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="7"/>
+      ${arc(50, 0, frac(NOW), '#4A9EFF', 7)}
+      ${track(62)}${track(71)}${arcs}
+      <line x1="80" y1="24" x2="80" y2="4" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+      ${awake() ? `<circle cx="${(80 + 79 * Math.cos(a)).toFixed(2)}" cy="${(80 + 79 * Math.sin(a)).toFixed(2)}" r="2.8" fill="#fff"/>` : ''}
+      <text class="mke-phase" x="80" y="66">${cur ? cur.label.toUpperCase() : awake() ? 'FREE' : 'SLEEP'}</text>
+      <text class="mke-clock" x="80" y="88">${hh}:${mm}</text>
+      <text class="mke-ampm" x="80" y="99">${ap}</text>
+    </svg>
+    <div class="mke-legend">${legend}</div>
+  </div>`;
+}
+
+const VARIANTS = [
+  { name: 'A · Two lanes (what’s in the app now)', render: renderLanes,
+    desc: 'Meals on top; the workout window and bedtime cutoffs underneath, each block with its own start–end time. <em>Clear on a laptop; on a phone the one-hour cutoffs get squeezed to “N…”.</em>' },
+  { name: 'B · Calendar strip with hour axis', render: renderAxis,
+    desc: 'One row of blocks with an hour scale underneath. Cutoffs are dashed lines with an icon and time on top, and the last 3 hours are shaded as wind-down. The workout is striped because it’s a “start between” window. <em>Shortest and least cluttered; you read exact meal times off the axis (or hover).</em>' },
+  { name: 'C · One row per item', render: renderRows,
+    desc: 'Every window and cutoff gets its own line with the exact time written next to it. Cutoff rows are plain until the cutoff and striped after it. <em>Easiest to read exactly, but it’s the tallest, so it fits better on its own tab than in the pinned header.</em>' },
+  { name: 'D · Thin bar + now / next', render: renderNext,
+    desc: 'A slim progress line with tick marks for the cutoffs, plus plain-text chips: what’s happening now, the next two things with a countdown, and which cutoffs are already in effect. <em>Smallest and best on a phone; the whole day isn’t spelled out at once.</em>' },
+  { name: 'E · Around the day ring', render: renderRing,
+    desc: 'The schedule wraps the ring you already have as two outer arcs (meals, then workout and cutoffs), with a legend listing every time. <em>No new row in the header; it would replace the current ring rather than sit beside it.</em>' },
+];
+
+const host = document.getElementById('variants');
+host.innerHTML = VARIANTS.map((v, i) => `
+  <section class="card mk-variant">
+    <div class="mk-title">${v.name}</div>
+    <p class="mk-desc">${v.desc}</p>
+    <div class="mk-previews">
+      <div class="mk-frame"><div class="mk-frame-label">Laptop</div><div class="mk-stage" data-v="${i}"></div></div>
+      <div class="mk-frame"><div class="mk-frame-label">Phone</div><div class="mk-stage" data-v="${i}"></div></div>
+    </div>
+  </section>`).join('');
+
+const nowIn = document.getElementById('nowIn'), wakeIn = document.getElementById('wakeIn');
+const snap = v => Math.round(v * 12) / 12;
+function update() {
+  NOW = snap(+nowIn.value);
+  WAKE = snap(+wakeIn.value);
+  document.getElementById('nowOut').textContent = fmt(NOW);
+  document.getElementById('wakeOut').textContent = fmt(WAKE);
+  for (const el of document.querySelectorAll('.mk-stage')) VARIANTS[el.dataset.v].render(el);
+}
+const d = new Date();
+nowIn.value = Math.min(24, Math.max(6, d.getHours() + d.getMinutes() / 60));
+nowIn.addEventListener('input', update);
+wakeIn.addEventListener('input', update);
+update();
+</script>
+</body>
+</html>

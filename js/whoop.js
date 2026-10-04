@@ -126,18 +126,30 @@ function _whoopFmtTime(iso) {
 // The Day Ring's "awake window" starts at WAKE_HOUR (js/main.js), a fixed
 // 8 AM default. If WHOOP has today's real wake-up time, use that instead —
 // and it naturally resets to the default each day since this looks up
-// *today's* row only, never yesterday's.
+// *today's* row only, never yesterday's. While today's wake-up is missing,
+// pull it from WHOOP (throttled — the sleep may not be scored yet).
+const WHOOP_WAKE_RETRY_MS = 15 * 60 * 1000;
+let _whoopWakeSyncAt = 0;
 function _whoopApplyWakeTime() {
   const today = _localDateStr(new Date());
-  const row = (MEM['whoop:recovery'] || []).find(r => r.date === today);
+  const recovery = MEM['whoop:recovery'] || [];
+  const row = recovery.find(r => r.date === today);
   if (row && row.sleep_end) {
     const d = new Date(row.sleep_end);
     WAKE_HOUR = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
   } else {
     WAKE_HOUR = 8;
+    const connected = recovery.length > 0 || !!MEM['whoop:profile'];
+    if (connected && Date.now() - _whoopWakeSyncAt > WHOOP_WAKE_RETRY_MS) {
+      _whoopWakeSyncAt = Date.now();
+      whoopSync();
+    }
   }
   if (typeof updateDayBar === 'function') updateDayBar();
 }
+
+setInterval(_whoopApplyWakeTime, 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _whoopApplyWakeTime(); });
 
 function renderWhoop() {
   _whoopApplyWakeTime();

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day plan B — variants</title>
+<link rel="stylesheet" href="../css/main.css">
+<style>
+  body { padding: 28px 24px 60px; }
+  .mk-wrap { position: relative; z-index: 1; max-width: 1380px; margin: 0 auto; }
+  .mk-h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .mk-sub { font-size: 13px; color: var(--text-tertiary); margin: 6px 0 16px; max-width: 820px; line-height: 1.5; }
+  .mk-controls {
+    position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center;
+    padding: 12px 0; margin-bottom: 14px; background: #050506;
+    font: 12px var(--font-mono); color: var(--text-secondary);
+  }
+  .mk-controls label { display: flex; align-items: center; gap: 10px; }
+  .mk-controls input { width: 240px; accent-color: #4A9EFF; }
+  .mk-controls b { color: var(--text-primary); min-width: 64px; }
+  .mk-variant { margin-bottom: 18px; }
+  .mk-title { font-size: 15px; font-weight: 700; }
+  .mk-desc { font-size: 12.5px; color: var(--text-secondary); margin: 5px 0 14px; max-width: 900px; line-height: 1.5; }
+  .mk-desc em { font-style: normal; color: var(--text-tertiary); }
+  .mk-previews { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  .mk-frame { background: #111214; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 14px; }
+  .mk-frame-label { font: 600 9.5px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 12px; }
+  .mk-stage { container-type: inline-size; }
+  @media (max-width: 900px) { .mk-previews { grid-template-columns: 1fr; } }
+
+  .mkb { position: relative; padding-top: 22px; }
+  .mkb.tall { padding-top: 28px; }
+  .mkb-flag {
+    position: absolute; top: 0; transform: translateX(-50%); display: flex; align-items: center; gap: 3px;
+    font-size: 12px; line-height: 16px; white-space: nowrap; cursor: default;
+  }
+  .mkb-flag.word { flex-direction: column; align-items: center; gap: 0; font: 600 9px var(--font-body); color: var(--c); }
+  .mkb-flag.word i { font: 500 9px var(--font-mono); }
+  .mkb-flag i { font: normal 500 9.5px var(--font-mono); color: var(--c); }
+  .mkb-cut { position: absolute; top: 17px; bottom: 18px; border-left: 1px dashed var(--c); z-index: 3; pointer-events: none; }
+  .mkb.tall .mkb-cut { top: 24px; }
+  .mkb-track { position: relative; height: 28px; border-radius: 6px; background: rgba(255,255,255,0.03); overflow: hidden; }
+  .mkb-track.two { height: 44px; }
+  .mkb-blk {
+    position: absolute; top: 3px; bottom: 3px; z-index: 2; padding: 0 5px;
+    display: flex; flex-direction: column; justify-content: center;
+    border-left: 2px solid var(--c); border-radius: 4px;
+    background: color-mix(in srgb, var(--c) 26%, #111214); color: var(--c);
+    font-size: 10px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; cursor: default;
+  }
+  .mkb-blk span { font: 500 9px var(--font-mono); opacity: 0.8; }
+  .mkb-blk.hatch {
+    z-index: 1;
+    background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, transparent) 0 4px, color-mix(in srgb, var(--c) 10%, transparent) 4px 8px);
+  }
+  .mkb-blk.lane0 { top: 3px; bottom: auto; height: 18px; }
+  .mkb-blk.lane1 { top: 23px; bottom: auto; height: 18px; }
+  .mkb-wind {
+    position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(123,91,176,0.05), rgba(123,91,176,0.3));
+    font: 600 9px var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(200,180,255,0.6);
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; overflow: hidden; white-space: nowrap;
+  }
+  .mkb-elapsed { position: absolute; inset: 0 auto 0 0; z-index: 4; background: rgba(5,5,6,0.5); pointer-events: none; }
+  .mkb-now { position: absolute; top: 14px; bottom: 14px; z-index: 5; width: 2px; margin-left: -1px; border-radius: 1px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.5); }
+  .mkb.two-row .mkb-now { top: 14px; bottom: 14px; }
+  .mkb-axis { position: relative; height: 14px; margin-top: 4px; font: 9.5px var(--font-mono); color: var(--text-tertiary); }
+  .mkb-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .mkb-axis .l { left: 0; transform: none; color: var(--text-secondary); }
+  .mkb-axis .r { transform: translateX(-100%); color: var(--text-secondary); }
+  .mkb-next { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+  .mkb-next em { font-style: normal; font-family: var(--font-mono); color: var(--text-primary); }
+  @container (max-width: 500px) {
+    .mkb-flag i, .mkb-axis .near-end, .mkb-blk span, .mkb-wind { display: none; }
+    .mkb-flag.word { font-size: 11px; }
+    .mkb-flag.word i { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="mk-wrap">
+  <h1 class="mk-h1">Option B — four tweaks</h1>
+  <p class="mk-sub">Same calendar strip, four label treatments. Drag the sliders. Laptop and phone side by side. Hover a block for the full note.</p>
+  <div class="mk-controls">
+    <label>Now <input type="range" id="nowIn" min="6" max="24" step="0.0833"> <b id="nowOut"></b></label>
+    <label>WHOOP wake-up <input type="range" id="wakeIn" min="6" max="10" step="0.0833" value="8"> <b id="wakeOut"></b></label>
+  </div>
+  <div id="variants"></div>
+</div>
+
+<script>
+const SLEEP = 23.5;
+const PLAN = [
+  { label: 'Breakfast',     from: 8.5,  to: 10,   lane: 0, color: '#F2C063' },
+  { label: 'Lunch',         from: 12.5, to: 14.5, lane: 0, color: '#F7B27A', note: '~30 min after the workout' },
+  { label: 'Protein shake', short: 'Shake', from: 14.5, to: 18, lane: 0, color: '#C9A7FF' },
+  { label: 'Dinner',        from: 18,   to: 20.5, lane: 0, color: '#F2804C' },
+  { label: 'Workout',       from: 10,   to: 13,   lane: 1, color: '#6BE3A4', note: 'start window, about an hour' },
+  { label: 'No caffeine', thing: 'Caffeine', shortCut: 'Caf', icon: '☕', cut: true, from: SLEEP - 10, to: SLEEP - 3, color: '#B08968', note: '10h before bed' },
+  { label: 'No food',     thing: 'Food',     shortCut: 'Food', icon: '🍽️', cut: true, from: SLEEP - 3,  to: SLEEP - 2, color: '#FF6B6B', note: '3h before bed' },
+  { label: 'No liquids',  thing: 'Liquids',  shortCut: 'Drink', icon: '💧', cut: true, from: SLEEP - 2,  to: SLEEP - 1, color: '#4A9EFF', note: '2h before bed; a small sip (2–4 oz) for pills is fine' },
+  { label: 'Screens off', thing: 'Screens',  shortCut: 'Scr', icon: '📱', cut: true, from: SLEEP - 1,  to: SLEEP,     color: '#9B7BD6', note: '1h before bed' },
+];
+const WINDOWS = PLAN.filter(p => !p.cut).sort((a, b) => a.from - b.from);
+const CUTS = PLAN.filter(p => p.cut);
+let WAKE = 8, NOW = 19 + 20 / 60;
+
+const clockParts = h => { const m = Math.round(h * 60) % 1440; const hh = Math.floor(m / 60); return [hh % 12 || 12, String(m % 60).padStart(2, '0'), hh >= 12 ? 'PM' : 'AM']; };
+const fmt = h => { const [hh, mm, ap] = clockParts(h); return `${hh}:${mm} ${ap}`; };
+const tick = h => { const [hh, mm, ap] = clockParts(h); return (mm === '00' ? `${hh}` : `${hh}:${mm}`) + ap[0].toLowerCase(); };
+const range = p => { const a = fmt(p.from), b = fmt(p.to); return p.cut ? a : a.slice(-2) === b.slice(-2) ? `${a.slice(0, -3)}–${b}` : `${a}–${b}`; };
+const tip = p => `${p.label} ${p.cut ? 'after ' : ''}${range(p)}${p.note ? ` (${p.note})` : ''}`;
+const frac = t => (Math.min(Math.max(t, WAKE), SLEEP) - WAKE) / (SLEEP - WAKE);
+const x = t => (frac(t) * 100).toFixed(2) + '%';
+const w = (a, b) => ((frac(b) - frac(a)) * 100).toFixed(2) + '%';
+const visible = p => Math.min(p.to, SLEEP) > Math.max(p.from, WAKE);
+const awake = () => NOW > WAKE && NOW < SLEEP;
+const inDur = hrs => { const m = Math.round(hrs * 60); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`; };
+
+function axisTicks() {
+  let ticks = `<span class="l">${tick(WAKE)}</span><span class="r" style="left:100%">${tick(SLEEP)}</span>`;
+  for (let t = Math.ceil(WAKE / 2) * 2; t < SLEEP; t += 2)
+    if (t - WAKE > 0.7 && SLEEP - t > 0.9) ticks += `<span${SLEEP - t < 2 ? ' class="near-end"' : ''} style="left:${x(t)}">${tick(t)}</span>`;
+  return ticks;
+}
+function flags(mode) {
+  return CUTS.filter(visible).map(c => {
+    const label = mode === 'word' ? `${c.shortCut}<i>${tick(c.from)}</i>` : `${c.icon}<i>${tick(c.from)}</i>`;
+    return `<span class="mkb-flag${mode === 'word' ? ' word' : ''}" style="--c:${c.color};left:${x(c.from)}" title="${tip(c)}">${label}</span>`
+      + `<span class="mkb-cut" style="--c:${c.color};left:${x(c.from)}"></span>`;
+  }).join('');
+}
+function blocks({ times, split }) {
+  return WINDOWS.filter(visible).map(p => {
+    const extra = split ? ` lane${p.lane}` : (p.lane ? ' hatch' : '');
+    const time = times ? `<span>${range(p)}</span>` : '';
+    return `<div class="mkb-blk${extra}" style="--c:${p.color};left:${x(p.from)};width:${w(p.from, p.to)}" title="${tip(p)}">${p.short || p.label}${time}</div>`;
+  }).join('');
+}
+function nowLine() {
+  return awake() ? `<div class="mkb-now" style="left:${x(NOW)}"></div>` : '';
+}
+function nextLine() {
+  const next = PLAN.filter(p => p.from > NOW && visible(p)).sort((a, b) => a.from - b.from)[0];
+  const cur = WINDOWS.find(p => NOW >= p.from && NOW < p.to);
+  if (NOW <= WAKE) return `<div class="mkb-next">Sleeping · wake-up <em>${fmt(WAKE)}</em></div>`;
+  if (NOW >= SLEEP) return `<div class="mkb-next">Past bedtime</div>`;
+  const nowTxt = cur ? `${cur.label} until <em>${fmt(cur.to)}</em>` : 'Nothing scheduled';
+  const nxtTxt = next ? ` · next ${next.label} <em>${fmt(next.from)}</em> in ${inDur(next.from - NOW)}` : '';
+  return `<div class="mkb-next">${nowTxt}${nxtTxt}</div>`;
+}
+function strip(el, { times = false, split = false, flag = 'icon', caption = false } = {}) {
+  el.innerHTML = `<div class="mkb${split ? ' two-row tall' : flag === 'word' ? ' tall' : ''}">
+    ${flags(flag)}
+    <div class="mkb-track${split ? ' two' : ''}">
+      <div class="mkb-wind" style="left:${x(SLEEP - 3)};width:${w(SLEEP - 3, SLEEP)}">wind-down</div>
+      ${blocks({ times, split })}
+      ${NOW > WAKE ? `<div class="mkb-elapsed" style="width:${x(NOW)}"></div>` : ''}
+    </div>
+    ${nowLine()}
+    <div class="mkb-axis">${axisTicks()}</div>
+    ${caption ? nextLine() : ''}
+  </div>`;
+}
+
+const VARIANTS = [
+  { name: 'B1 · Original', render: el => strip(el),
+    desc: 'The B you already liked. Meal blocks on one row, workout hatched over 10–1, cutoffs as icon + time on dashed lines, hour axis underneath.' },
+  { name: 'B2 · Times on the blocks', render: el => strip(el, { times: true }),
+    desc: 'Same strip, but each block also prints its start–end. <em>Matches what you asked for on the app bar. On a phone the times hide so the names still fit.</em>' },
+  { name: 'B3 · Workout on its own row', render: el => strip(el, { times: true, split: true }),
+    desc: 'Meals on top, workout on a thin row below so it no longer sits on top of lunch. Times stay on the blocks. <em>Taller by ~16px; the overlap in B1/B2 is gone.</em>' },
+  { name: 'B4 · Word cutoffs + now/next', render: el => strip(el, { times: true, flag: 'word', caption: true }),
+    desc: 'Cutoff ticks say “Caf / Food / Drink / Scr” plus the time, and a one-line caption under the axis: what’s on now and what’s next. <em>No hover needed for the next cutoff.</em>' },
+];
+
+const host = document.getElementById('variants');
+host.innerHTML = VARIANTS.map((v, i) => `
+  <section class="card mk-variant">
+    <div class="mk-title">${v.name}</div>
+    <p class="mk-desc">${v.desc}</p>
+    <div class="mk-previews">
+      <div class="mk-frame"><div class="mk-frame-label">Laptop</div><div class="mk-stage" data-v="${i}"></div></div>
+      <div class="mk-frame"><div class="mk-frame-label">Phone</div><div class="mk-stage" data-v="${i}"></div></div>
+    </div>
+  </section>`).join('');
+
+const nowIn = document.getElementById('nowIn'), wakeIn = document.getElementById('wakeIn');
+const snap = v => Math.round(v * 12) / 12;
+function update() {
+  NOW = snap(+nowIn.value);
+  WAKE = snap(+wakeIn.value);
+  document.getElementById('nowOut').textContent = fmt(NOW);
+  document.getElementById('wakeOut').textContent = fmt(WAKE);
+  for (const el of document.querySelectorAll('.mk-stage')) VARIANTS[el.dataset.v].render(el);
+}
+const d = new Date();
+nowIn.value = Math.min(24, Math.max(6, d.getHours() + d.getMinutes() / 60));
+nowIn.addEventListener('input', update);
+wakeIn.addEventListener('input', update);
+update();
+</script>
+</body>
+</html>

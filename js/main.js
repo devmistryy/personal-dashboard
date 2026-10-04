@@ -16,7 +16,7 @@ const OCR_SPACE_API_KEY = 'helloworld';
 // Default until WHOOP overrides it with today's real wake time (js/whoop.js
 // _whoopApplyWakeTime) — a `let` so that can happen.
 let WAKE_HOUR  = 8;
-const SLEEP_HOUR = 24;
+const SLEEP_HOUR = 23.5;
 
 // ── Supabase ──
 const SUPABASE_URL = 'https://tlqjmlocxxsdlxseumxw.supabase.co';
@@ -658,7 +658,80 @@ function updateDayBar() {
   }
   document.getElementById('dayRing').dataset.dayPct = Math.round(dayPct);
   renderDayStripTasks();
+  renderDayPlan(h);
   renderSky();
+}
+
+// Wake → bed calendar strip. Cutoffs count back from SLEEP_HOUR.
+const DP_ICON = {
+  sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/></svg>',
+};
+const DAY_PLAN = [
+  { label: 'Morning routine', short: 'Routine', mark: 'sun', wake: true, to: 8.5, color: '#F6E2A8' },
+  { label: 'Night routine', short: 'Routine', mark: 'moon', from: SLEEP_HOUR - 1, to: SLEEP_HOUR, color: '#9AADD4' },
+  { label: 'Breakfast',     short: 'Breakfast', from: 8.5,  to: 10,   color: '#E39A3C' },
+  { label: 'Lunch',         short: 'Lunch',     from: 12.5, to: 14.5, color: '#F28B4C', note: '~30 min after the workout' },
+  { label: 'Protein shake', short: 'Shake',     from: 14.5, to: 18,   color: '#C07AE8' },
+  { label: 'Dinner',        short: 'Dinner',    from: 18,   to: 20.5, color: '#E25D4A' },
+  { label: 'Workout',       short: 'Workout',   from: 10,   to: 13,   color: '#5BC98A', hatch: true, note: 'start window, about an hour' },
+  { label: 'No caffeine', icon: '☕', cut: true, from: SLEEP_HOUR - 10, to: SLEEP_HOUR - 3, color: '#B08968', note: '10h before bed' },
+  { label: 'No food',     icon: '🍽️', cut: true, from: SLEEP_HOUR - 3,  to: SLEEP_HOUR - 2, color: '#FF6B6B', note: '3h before bed' },
+  { label: 'No liquids',  icon: '💧', cut: true, from: SLEEP_HOUR - 2,  to: SLEEP_HOUR - 1, color: '#4A9EFF', note: '2h before bed; a small sip (2–4 oz) for pills is fine' },
+  { label: 'Screens off', icon: '📱', cut: true, from: SLEEP_HOUR - 1,  to: SLEEP_HOUR,     color: '#9B7BD6', note: '1h before bed' },
+];
+
+function fmtTick(hDec) {
+  return fmtHourDecimal(hDec).replace(' AM', 'a').replace(' PM', 'p').replace(':00', '');
+}
+
+function fmtRange(from, to) {
+  const a = fmtHourDecimal(from), b = fmtHourDecimal(to);
+  return a.slice(-2) === b.slice(-2) ? `${a.slice(0, -3)}–${b}` : `${a}–${b}`;
+}
+
+function renderDayPlan(h) {
+  const el = document.getElementById('dayPlan');
+  if (!el) return;
+  const span = SLEEP_HOUR - WAKE_HOUR;
+  if (span <= 0) { el.innerHTML = ''; return; }
+  const pct = t => (t / span * 100).toFixed(2) + '%';
+  const fromOf = p => p.wake ? WAKE_HOUR : p.from;
+  const vis = p => Math.min(p.to, SLEEP_HOUR) > Math.max(fromOf(p), WAKE_HOUR);
+  const lunch = DAY_PLAN.find(p => p.label === 'Lunch');
+  const style = p => {
+    const a = Math.max(fromOf(p), WAKE_HOUR), b = Math.min(p.to, SLEEP_HOUR);
+    let s = `--c:${p.color};left:${pct(a - WAKE_HOUR)};width:${pct(b - a)}`;
+    if (p.hatch && lunch) {
+      const o = Math.max(a, lunch.from);
+      s += `;--solid:${b <= o ? '100%' : ((o - a) / (b - a) * 100).toFixed(2) + '%'}`;
+    }
+    return s;
+  };
+
+  const flags = DAY_PLAN.filter(p => p.cut && vis(p)).map(c =>
+    `<span class="dp-flag" style="--c:${c.color};left:${pct(c.from - WAKE_HOUR)}" title="${c.label} after ${fmtHourDecimal(c.from)} (${c.note})">${c.icon}<i>${fmtTick(c.from)}</i></span>` +
+    `<span class="dp-cut" style="--c:${c.color};left:${pct(c.from - WAKE_HOUR)}"></span>`
+  ).join('');
+
+  const blocks = DAY_PLAN.filter(p => !p.cut && vis(p)).map(p => {
+    const time = fmtRange(fromOf(p), p.to);
+    const inner = p.mark ? `${DP_ICON[p.mark]}<b>${p.short}</b>` : (p.short || p.label);
+    return `<div class="dp-blk${p.hatch ? ' hatch' : ''}${p.mark ? ' mark' : ''}${p.mark === 'moon' ? ' night' : ''}" style="${style(p)}" title="${p.label} ${time}${p.note ? ` (${p.note})` : ''}">${inner}</div>`;
+  }).join('');
+
+  let ticks = `<span class="l">${fmtTick(WAKE_HOUR)}</span><span class="r" style="left:100%">${fmtTick(SLEEP_HOUR)}</span>`;
+  for (let t = Math.ceil(WAKE_HOUR); t < SLEEP_HOUR; t++)
+    if (t - WAKE_HOUR > 0.4 && SLEEP_HOUR - t > 1)
+      ticks += `<span class="hr" style="left:${pct(t - WAKE_HOUR)}">${t % 12 || 12}</span>`;
+
+  el.innerHTML = `${flags}
+    <div class="dp-track">
+      ${blocks}
+      ${h > WAKE_HOUR ? `<div class="dp-elapsed" style="width:${pct(Math.min(h, SLEEP_HOUR) - WAKE_HOUR)}"></div>` : ''}
+    </div>
+    ${h > WAKE_HOUR && h < SLEEP_HOUR ? `<div class="dp-now" style="left:${pct(h - WAKE_HOUR)}"></div>` : ''}
+    <div class="dp-axis">${ticks}</div>`;
 }
 
 // The task half of the day strip: the inner (green) ring is the share of
