@@ -736,6 +736,9 @@
   .rh-cue-btn.active { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.20); color: var(--text-primary); }
 
   /* ── Reactive Habits detail overlay ── */
+  .rh-explainer { margin-bottom: 20px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+  .rh-explainer p { margin: 0 0 8px; }
+  .rh-explainer b { color: var(--text-primary); font-weight: 600; }
   .rh-detail-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
   .rh-detail-row {
     display: flex; align-items: center; gap: 14px; padding: 12px 16px;

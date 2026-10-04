@@ -221,7 +221,14 @@ function renderReactiveDetailPage() {
     </div>`;
   }).join('') : '<div class="empty-state">Nothing logged yet.</div>';
 
+  const explainer = `
+    <div class="rh-explainer">
+      <p><b>Cue type.</b> <span class="rh-badge rh-badge-situational">Situational</span> something happens around you. <span class="rh-badge rh-badge-internal">Internal</span> a state you notice in yourself.</p>
+      <p><b>Logging.</b> Each time the cue comes up, log one occurrence as <span class="rh-pill rh-pill-good">Handled well</span> or <span class="rh-pill rh-pill-bad">Slipped</span>. Every log is saved with its own timestamp.</p>
+    </div>`;
+
   body.innerHTML = `
+    ${explainer}
     ${statRow}
     <div class="habit-detail-section-title" style="margin-top:24px;">Watching For</div>
     <div class="rh-detail-list">${listHtml}</div>
