@@ -38,7 +38,7 @@ const MOB_PROGRESS     = [['dose', 'Increase over time'], ['fixed', 'Keep the sa
 // MEM keeps the flat blob shape; persistence goes to the mobility_exercises /
 // mobility_logs tables (see _syncMobExercises / _syncMobLog in js/main.js).
 function getMobExercises()      { return MEM['mobility_exercises_v1'] || []; }
-function saveMobExercises(list) { MEM['mobility_exercises_v1'] = list; _syncMobExercises(list); }
+function saveMobExercises(list) { MEM['mobility_exercises_v1'] = list; _mobSchedMemo = null; _syncMobExercises(list); }
 
 // ── Store: per-exercise session log ──
 function getMobLog(id) { return MEM['mobility_progress:' + id] || []; }
@@ -47,6 +47,41 @@ function saveMobLog(id, list) {
   MEM['mobility_progress:' + id] = list;
   _syncMobLog(id, list);
 }
+
+// ── Link to Habits ──
+// The premade Morning / Night Mobility habits (h_mob_<session>, see HABIT_PREMADE)
+// tick for a day once any exercise in that session is logged, and untick when none is.
+// Manual ticking in Habits is untouched. Sessions are independent.
+// One-time: sessions that already have exercises get their habit switched on.
+function _mobBackfillHabits() {
+  if (MEM['habit_premade_backfill_v1']) return;
+  getMobExercises().forEach(ex => _activatePremade('h_mob_' + (ex.session === 'night' ? 'night' : 'morning')));
+  MEM['habit_premade_backfill_v1'] = true; _syncSetting('habit_premade_backfill_v1', true);
+}
+let _mobSchedMemo = null;
+function _mobSchedFor(list, today) {
+  if (!_mobSchedMemo || _mobSchedMemo.list !== list || _mobSchedMemo.today !== today)
+    _mobSchedMemo = { list, today, sched: compileMobSchedule(list) };
+  return _mobSchedMemo.sched;
+}
+// A session that has exercises but none due (or logged) that day: its habit sits out.
+function _mobSessionOff(tod, date) {
+  const list = getMobExercises();
+  if (!list.some(ex => (ex.session === 'night' ? 'night' : 'morning') === tod)) return false;
+  return !_mobSessionRows(date, tod, _mobSchedFor(list, getActiveDateString())).length;
+}
+function _mobSyncHabits(date) {
+  const habits = getHabits(), list = getMobExercises();
+  let changed = false;
+  MOB_SESSIONS.forEach(([tod]) => {
+    const hid = 'h_mob_' + tod;
+    if (!habits.some(h => h.id === hid)) return;
+    const any = list.some(ex => (ex.session === 'night' ? 'night' : 'morning') === tod && _mobLoggedOn(ex.id, date));
+    const log = getHabitLog(date);
+    if (any !== log.includes(hid)) { saveHabitLog(date, any ? [...log, hid] : log.filter(x => x !== hid)); changed = true; }
+  });
+  if (changed && typeof renderHabits === 'function') renderHabits();
+}
 // upsert one entry per (exercise, date)
 function _mobUpsertEntry(id, date, vals) {
   const log = getMobLog(id).filter(e => e.date !== date);
@@ -54,9 +89,11 @@ function _mobUpsertEntry(id, date, vals) {
              holdSeconds: vals.holdSeconds, reps: vals.reps,
              setValues: vals.setValues || null, note: vals.note || '' });
   saveMobLog(id, log);
+  _mobSyncHabits(date);
 }
 function _mobDeleteEntry(id, date) {
   saveMobLog(id, getMobLog(id).filter(e => e.date !== date));
+  _mobSyncHabits(date);
 }
 // latest entry with date <= ref (inclusive); null if none
 function _mobEntryAsOf(id, ref) {
@@ -1368,6 +1405,7 @@ function _mobSaveExercise(id, data) {
   if (orig) Object.assign(orig, data);
   else list.push({ id: _mobId(), createdAt: Date.now(), ...data });
   saveMobExercises(list);
+  if (!orig && _activatePremade('h_mob_' + (data.session === 'night' ? 'night' : 'morning'))) renderHabits();
   return '';
 }
 

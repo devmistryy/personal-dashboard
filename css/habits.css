@@ -1371,3 +1371,10 @@
     .day-detail-head .day-detail-date { font-size: 18px; }
     .habit-meta-tag { white-space: nowrap; }
   }
+
+  .hab-suggested { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+  .hab-suggested[hidden] { display: none; }
+  .hab-sug-label { font-size: 12px; color: var(--text-tertiary); margin-right: 4px; }
+  .hab-sug-chip { font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    color: var(--text-secondary); background: transparent; border: 1px dashed rgba(255,255,255,0.2); }
+  .hab-sug-chip:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.4); }

@@ -931,7 +931,7 @@ async function _syncHabits(habits) {
   if (habits.length) {
     // `meta` only goes out once a habit uses a schedule, so a database that
     // hasn't run the master.sql column yet keeps saving everything else.
-    const withMeta = _habitsMetaColumn || habits.some(h => h.schedule || h.targets);
+    const withMeta = _habitsMetaColumn || habits.some(h => h.schedule || h.targets || h.mobSession);
     const { error } = await sb.from('habits').upsert(habits.map((h, i) => {
       const row = {
         id: h.id, user_id: uid, name: h.name,
@@ -943,7 +943,7 @@ async function _syncHabits(habits) {
         track_type: h.trackType || 'checkbox', target: h.target || null,
       };
       if (withMeta) {
-        const meta = { ...(h.schedule ? { schedule: h.schedule } : {}), ...(h.targets ? { targets: h.targets } : {}) };
+        const meta = { ...(h.schedule ? { schedule: h.schedule } : {}), ...(h.targets ? { targets: h.targets } : {}), ...(h.mobSession ? { mobSession: h.mobSession } : {}) };
         row.meta = Object.keys(meta).length ? meta : null;
       }
       return row;
@@ -1455,6 +1455,7 @@ async function loadFromSupabase() {
     trackType: h.track_type || 'checkbox', target: h.target || null,
     ...(h.meta && h.meta.schedule ? { schedule: h.meta.schedule } : {}),
     ...(h.meta && h.meta.targets ? { targets: h.meta.targets } : {}),
+    ...(h.meta && h.meta.mobSession ? { mobSession: h.meta.mobSession } : {}),
   }));
 
   logs.forEach(l => {
@@ -1678,7 +1679,7 @@ function _enterApp() {
   if (LOCAL_MODE) _seedLocalSampleJobsFromUrl();
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('signOutBtn').style.display = '';
-  checkStreak(); rollover(); applySundayReset(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderFinance(); renderMobility(); renderWhoop();
+  checkStreak(); rollover(); applySundayReset(); _mobBackfillHabits(); renderHabits(); renderReactiveHabits(); loadToday(); loadUpcoming(); renderStreak(); renderJobs(); renderJobSites(); renderReferrals(); renderTechRankings(); renderAreas(); renderGoals(); renderDiet(); renderFinance(); renderMobility(); renderWhoop();
   _whoopHandleOAuthReturn();
   _syncSundayResetBtn();
 }

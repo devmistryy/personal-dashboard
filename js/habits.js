@@ -176,6 +176,7 @@ function _dow(ds) { const [y, m, d] = ds.split('-').map(Number); return new Date
 // A weekday a pick-days habit doesn't ask for: it can't be missed, and it
 // neither extends nor breaks a streak.
 function _habitOffDay(h, ds) {
+  if (h.mobSession && typeof _mobSessionOff === 'function' && _mobSessionOff(h.mobSession, ds)) return true;
   const s = _habitSchedule(h);
   return !!s && s.type === 'days' && !s.days.includes(_dow(ds));
 }
@@ -335,6 +336,41 @@ function _flipRows(containerEl, rowSel, mutate, focusId) {
     r.style.transform  = '';
   });
 }
+// ── Premade habits ──
+// Everyone can switch these on from the Suggested row; Mobility switches one on
+// itself when its session gets its first exercise. "Off" just means the id isn't in
+// the list, so deleting one sends it back to Suggested. `mobSession` links it to
+// Mobility (auto-tick, and rest days where nothing is due).
+const HABIT_PREMADE = [
+  { id: 'h_mob_morning', name: 'Morning Mobility', routine: 'morning', mobSession: 'morning' },
+  { id: 'h_mob_night',   name: 'Night Mobility',   routine: 'night',   mobSession: 'night' },
+];
+function _activatePremade(id) {
+  const p = HABIT_PREMADE.find(x => x.id === id);
+  const habits = getHabits();
+  if (!p || habits.some(h => h.id === id)) return false;
+  const h = { id, name: p.name, startDate: habitDateStr(0), archived: false, endOfDay: false,
+              morningRoutine: false, nightRoutine: false, area: null,
+              createdAt: new Date().toISOString(), mobSession: p.mobSession };
+  _setHabitRoutine(h, p.routine);
+  habits.push(h);
+  saveHabits(habits);
+  return true;
+}
+function _renderHabSuggested() {
+  const box = document.getElementById('habSuggested');
+  if (!box) return;
+  const have = new Set(getHabits().map(h => h.id));
+  const left = HABIT_PREMADE.filter(p => !have.has(p.id));
+  box.hidden = !left.length;
+  box.innerHTML = left.length ? '<span class="hab-sug-label">Suggested</span>' + left.map(p =>
+    `<button type="button" class="hab-sug-chip" data-premade="${p.id}">+ ${_esc(p.name)}</button>`).join('') : '';
+}
+document.getElementById('habSuggested').addEventListener('click', e => {
+  const b = e.target.closest('[data-premade]');
+  if (b && _activatePremade(b.dataset.premade)) { renderHabits(); showToast('Habit added'); }
+});
+
 // Habit ids key the check-in log, the void log and the notes, and they are the
 // upsert key in Supabase — so two habits must never share one. The old
 // `Date.now().toString(36)` collided whenever two were added in the same
@@ -878,6 +914,7 @@ function renderHabits() {
     `<span${i === 6 ? ' class="today"' : ''}>${'SMTWTFS'[_dow(ds)]}</span>`).join('');
 
   _renderHabitHeader(all, active, today);
+  _renderHabSuggested();
 
   // A pick-days habit on one of its off days sits out of today's list.
   const offToday = active.filter(h => _habitOffDay(h, today) && !_habitDoneOn(h, today));
