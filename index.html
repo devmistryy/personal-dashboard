@@ -18,7 +18,7 @@
      the global mobile @media block; habits.css ends with its own. Keep this order. -->
 <link rel="stylesheet" href="css/main.css?v=55">
 <link rel="stylesheet" href="css/todo.css?v=31">
-<link rel="stylesheet" href="css/habits.css?v=75">
+<link rel="stylesheet" href="css/habits.css?v=76">
 <link rel="stylesheet" href="css/jobs.css?v=93">
 <link rel="stylesheet" href="css/areas.css?v=2">
 <link rel="stylesheet" href="css/goals.css?v=1">
@@ -218,7 +218,7 @@
             </div>
             <div class="hab-actions">
               <span class="hab-weekpill" id="habWeekPill" title="Share of habits done, last 7 days"><span class="hab-weekbars" id="habWeekBars"></span><span id="habWeekPct">0%</span><small>7 days</small></span>
-              <button class="hab-chip hab-chip-void" id="habVoidBtn" type="button">∅ Void a day</button>
+              <button class="hab-chip hab-chip-void" id="habVoidBtn" type="button">⤼ Skip days</button>
               <button class="add-task-btn" id="habAddBtn" type="button" title="Add a habit (N)">+ New habit <kbd>N</kbd></button>
             </div>
           </div>
@@ -264,7 +264,7 @@
               <div class="hcal-grid" id="hcalGrid"></div>
               <div class="hcal-foot">
                 <span>Month <b id="hcalAvg">–</b></span>
-                <span>0%<span class="hcal-ramp"></span>100% · <span class="hcal-void-key">⌀ voided</span></span>
+                <span>0%<span class="hcal-ramp"></span>100% · <span class="hcal-void-key">⌀ all skipped</span></span>
               </div>
             </div>
           </div>
@@ -1000,12 +1000,12 @@
 <div id="voidDayModal" class="sr-modal">
   <form class="sr-modal-card add-task-card" id="voidDayForm" role="dialog" aria-modal="true" aria-labelledby="voidDayTitle" autocomplete="off">
     <button type="button" class="sr-modal-close" data-close aria-label="Close">×</button>
-    <h2 class="sr-modal-title vd-title" id="voidDayTitle">∅ Void a day</h2>
-    <p class="at-hint">Voided days never break a streak, don't count against your rate, and don't add to "Day N". A habit you do anyway still counts as done.</p>
+    <h2 class="sr-modal-title vd-title" id="voidDayTitle">⤼ Skip days</h2>
+    <p class="at-hint">For days you can't do some habits — travel, illness. Skipped days never break a streak, don't count against your rate, and don't add to "Day N". The rest of the day still scores normally, and a habit you do anyway still counts as done.</p>
     <div class="at-grid">
       <span class="at-label">When</span>
       <div class="at-row">
-        <div class="at-seg vd-seg" data-f="when"><button type="button" data-v="today">Today</button><button type="button" data-v="yday">Yesterday</button><button type="button" data-v="range">A few days…</button></div>
+        <div class="at-seg vd-seg" data-f="when"><button type="button" data-v="today">Today</button><button type="button" data-v="yday">Yesterday</button><button type="button" data-v="range">Dates…</button></div>
         <span class="at-row" id="vdRange" hidden><input type="date" class="task-date-input at-date" id="vdFrom" aria-label="From"><span class="at-none">to</span><input type="date" class="task-date-input at-date" id="vdTo" aria-label="To"></span>
       </div>
       <span class="at-label">Habits</span>
@@ -1015,7 +1015,7 @@
       <button type="button" class="btn-polish" id="vdAll">Select all</button>
       <span class="at-status" id="vdStatus"></span>
       <button type="button" class="btn-polish" data-close>Cancel</button>
-      <button type="submit" class="btn-add vd-submit" id="vdSubmit">Void</button>
+      <button type="submit" class="btn-add vd-submit" id="vdSubmit">Skip</button>
     </div>
   </form>
 </div>
@@ -1171,7 +1171,7 @@
      is the only file with bare top-level calls. Keep this order. -->
 <script src="js/todo.js?v=31"></script>
 <script src="js/todoPlan.js?v=4"></script>
-<script src="js/habits.js?v=52"></script>
+<script src="js/habits.js?v=53"></script>
 <script src="js/reactiveHabits.js?v=3"></script>
 <script src="vendor/d3.min.js"></script>
 <script src="vendor/topojson-client.min.js"></script>

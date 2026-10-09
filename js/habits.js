@@ -33,6 +33,30 @@ function _habitVoidedOn(habitId, ds) {
   return getHabitVoids(ds).includes(habitId) && !getHabitLog(ds).includes(habitId);
 }
 
+// Shown to you as "Skip" — voids and skips are one feature. Skipping today
+// adds today's void entry; un-skipping clears today and every later day too,
+// so coming home early from a trip skipped ahead of time ends it in one tap.
+// Returns true when the habit is now skipped.
+function _toggleHabitSkipToday(habit) {
+  const today = habitDateStr(0);
+  const ids = getHabitVoids(today);
+  if (!ids.includes(habit.id)) { ids.push(habit.id); saveHabitVoids(today, ids); return true; }
+  storeListKeys('habits:void:').forEach(k => {
+    const ds = k.slice('habits:void:'.length);
+    const dayIds = getHabitVoids(ds);
+    const i = dayIds.indexOf(habit.id);
+    if (ds >= today && i !== -1) { dayIds.splice(i, 1); saveHabitVoids(ds, dayIds); }
+  });
+  return false;
+}
+
+// "back Fri, Oct 14 · " when a skip runs past today, else ''.
+function _habitSkipBackLabel(habit, today) {
+  let ds = today;
+  for (let i = 0; i < 62 && getHabitVoids(_shiftDay(ds, 1)).includes(habit.id); i++) ds = _shiftDay(ds, 1);
+  return ds === today ? '' : `back ${_habitDayLabel(_shiftDay(ds, 1))} · `;
+}
+
 // ── Increment (count) habits ──
 // A 'checkbox' habit (the default) is done or not; an 'increment' habit is
 // done N times a day against a `target` the user sets (e.g. "drink water 8
@@ -683,7 +707,7 @@ function buildHabitRow(habit, allHabits, opts) {
   } else if (_habitSchedule(habit)) {
     tag('sched', _habitScheduleLabel(habit));
   }
-  if (isVoided && !rowDone) tag('voided', 'Voided today', "This day is excused — it won't break the streak or count against you");
+  if (isVoided && !rowDone) tag('voided', 'Skipped today', "Skipped — it won't break the streak or count against you");
   else if (!rowDone && brokenN > 0) tag('ended', `streak ended at ${brokenN}`, `You had a ${brokenN}-day streak — it ended yesterday. Check in today to start a new one.`);
   else if (!rowDone && dormant && dormant.days >= 2) tag('idle', `${dormant.days}d idle`, dormant.everDone
     ? `You haven't done this in ${dormant.days} days.`
@@ -712,14 +736,11 @@ function buildHabitRow(habit, allHabits, opts) {
     hov.className = 'hab-hover';
     const vBtn = document.createElement('button');
     vBtn.type = 'button';
-    vBtn.textContent = isVoided ? 'Un-void' : '∅ Void today';
+    vBtn.textContent = isVoided ? 'Un-skip' : '⤼ Skip today';
     vBtn.addEventListener('click', () => {
-      const ids = getHabitVoids(today);
-      const i = ids.indexOf(habit.id);
-      if (i === -1) ids.push(habit.id); else ids.splice(i, 1);
-      saveHabitVoids(today, ids);
+      const skipped = _toggleHabitSkipToday(habit);
       refresh();
-      showToast(i === -1 ? `Voided ${habit.name} for today` : `${habit.name} counts again today`);
+      showToast(skipped ? `Skipped ${habit.name} for today` : `${habit.name} counts again from today`);
     });
     const dBtn = document.createElement('button');
     dBtn.type = 'button';
@@ -876,7 +897,7 @@ function _renderHabitHeader(all, active, today) {
   const bits = [];
   if (counted.length && done === counted.length) bits.push('<em class="ok">All done for today</em>');
   else if (morningLeft) bits.push(`<em>${morningLeft} left from your morning routine</em>`);
-  if (voids) bits.push(`${voids} voided`);
+  if (voids) bits.push(`${voids} skipped`);
   if (eod.length === 1) bits.push(`“${_esc(eod[0].name)}” counts once the day ends`);
   else if (eod.length > 1) bits.push(`${eod.length} end-of-day habits count once the day ends`);
   if (_habitNightPending() && active.some(h => h.nightRoutine && _habitScheduledOn(h, today) && !_habitVoidedOn(h.id, today)))
@@ -1175,7 +1196,9 @@ function renderHabitOverviewCalendar() {
     const isMissed = ds < today && counted.length > 0 && doneCount === 0;
     const allVoided = !counted.length && voidCount > 0;
 
-    const hasVoid  = voidCount > 0 && !isFuture;
+    // Only a day skipped in full takes the slate mark; a partly skipped day is
+    // scored normally on the habits that still counted.
+    const hasVoid  = allVoided && !isFuture;
     const isFull   = pct >= 100 && counted.length > 0;
     if (!isFuture && counted.length) monthPcts.push(pct);
 
@@ -1191,9 +1214,9 @@ function renderHabitOverviewCalendar() {
     // the ring whole, so the slash lands on a complete circle rather than a gap.
     const arcPct = allVoided ? 100 : pct;
     const dash = `${(arcPct / 100) * C} ${C}`;
-    const voidNote = voidCount > 0 ? ` · ${voidCount} voided` : '';
+    const voidNote = voidCount > 0 ? ` · ${voidCount} skipped` : '';
     const titleTxt = isFuture ? ds
-      : allVoided ? `${ds} — all ${voidCount} habits voided`
+      : allVoided ? `${ds} — all ${voidCount} habits skipped`
       : `${ds} — ${doneCount}/${counted.length} habits (${pct}%)${voidNote}`;
     // transform: rotate start point to 12 o'clock, then mirror horizontally so
     // the arc grows counter-clockwise.
@@ -1453,7 +1476,7 @@ function renderHabitDetailPage(habit, allHabits) {
         <span class="hd-stat-sub${onIt ? ' good' : ''}">${!best ? '–' : onIt ? "you're on it" : `${best - displayStreak}${unit} to beat it`}</span></div>
       <div class="hd-stat"><span class="hd-stat-label">30 days</span><span class="hd-stat-val"><span class="hd-stat-num">${rate.pct == null ? '–' : rate.pct}<small>${rate.pct == null ? '' : '%'}</small></span></span>${_sparkSvg(rate.pts)}</div>
       <div class="hd-stat"><span class="hd-stat-label">Total</span><span class="hd-stat-val"><span class="hd-stat-num">${totalDone}</span></span>
-        <span class="hd-stat-sub">${voidedDays ? `${voidedDays} voided` : 'check-ins'}</span></div>
+        <span class="hd-stat-sub">${voidedDays ? `${voidedDays} skipped` : 'check-ins'}</span></div>
     </div>
     ${isTimed ? `
     <div class="hd-progress">
@@ -1471,9 +1494,9 @@ function renderHabitDetailPage(habit, allHabits) {
       </div>`;
   } else {
     const wk = weekly ? _habitWeekStatus(habit, _weekStart(today), today) : null;
-    const title = voidedToday && !doneToday ? 'Voided today'
+    const title = voidedToday && !doneToday ? 'Skipped today'
       : doneToday ? 'Done for today' : 'Check in for today';
-    const sub = voidedToday && !doneToday ? `${formatDate(today)} · excused, the streak carries over`
+    const sub = voidedToday && !doneToday ? `${formatDate(today)} · ${_habitSkipBackLabel(habit, today)}the streak carries over`
       : weekly ? `${formatDate(today)} · ${Math.min(wk.done, _habitTimes(habit))} of ${_habitTimes(habit)} this week`
       : offToday && !doneToday ? `${formatDate(today)} · not scheduled today — ticking it still counts`
       : formatDate(today);
@@ -1489,7 +1512,7 @@ function renderHabitDetailPage(habit, allHabits) {
         ${isIncrement ? '' : ctl}
         <div class="hd-checkin-tx"><b>${title}</b><span>${sub}</span></div>
         ${isIncrement ? ctl : ''}
-        <button class="hab-chip hab-chip-void" id="hdVoidToday" type="button">${voidedToday ? 'Un-void' : '∅ Void today'}</button>
+        <button class="hab-chip hab-chip-void" id="hdVoidToday" type="button">${voidedToday ? 'Un-skip' : '⤼ Skip today'}</button>
       </div>`;
   }
 
@@ -1559,10 +1582,7 @@ function renderHabitDetailPage(habit, allHabits) {
       });
     }
     document.getElementById('hdVoidToday').addEventListener('click', () => {
-      const ids = getHabitVoids(today);
-      const i = ids.indexOf(habit.id);
-      if (i === -1) ids.push(habit.id); else ids.splice(i, 1);
-      saveHabitVoids(today, ids);
+      _toggleHabitSkipToday(habit);
       renderHabits();
     });
 
@@ -1780,7 +1800,7 @@ function renderHabitHistoryGrid(habit) {
       if (isFuture) cls += ' fut';
       else if (isBeforeStart || isRetired) { cls += ' pre'; title += isRetired ? ' — archived' : ''; }
       else if (done) { cls += ' done'; title += ' — done'; }
-      else if (voided) { cls += ' void'; title += ' — voided'; }
+      else if (voided) { cls += ' void'; title += ' — skipped'; }
       else if (off) { cls += ' off'; title += ' — not scheduled'; }
       else if (ds === today || weekly) { title += ds === today ? ' — today' : ''; }
       else { cls += ' miss'; title += ' — missed'; }
@@ -1795,7 +1815,7 @@ function renderHabitHistoryGrid(habit) {
   });
   html += `</div></div>
     <div class="hd-heat-key">
-      <span><i class="k-done"></i>done</span><span><i class="k-miss"></i>missed</span><span><i class="k-void"></i>voided</span>
+      <span><i class="k-done"></i>done</span><span><i class="k-miss"></i>missed</span><span><i class="k-void"></i>skipped</span>
     </div></div>`;
   document.getElementById('habitDetailHistory').innerHTML = html;
 
@@ -1878,11 +1898,10 @@ function renderDayDetail(ds) {
   const allVoided = !counted.length && voidCount > 0;
 
   const R = 15.5, C = 2 * Math.PI * R;
-  // Mirrors the calendar ring: a day carrying any void drops its completion
-  // colour and becomes one slate mark — arc, slash and label together. The
-  // percentage comes off entirely, since on a voided day the number is the
-  // misleading part; the summary line below still spells out the counts.
-  const hasVoid = voidCount > 0;
+  // Mirrors the calendar ring: only a day skipped in full becomes one slate
+  // mark — arc, slash and label together. A partly skipped day keeps its
+  // normal score on the habits that still counted.
+  const hasVoid = allVoided;
   const arcPct  = allVoided ? 100 : pct;
   const arc = hasVoid
     ? (arcPct > 0
@@ -1901,16 +1920,16 @@ function renderDayDetail(ds) {
   // the bar, into the lower-left half of the ring.
   const voidMark = hasVoid ? `${_HCAL_SLASH_SVG}
         <text class="hcal-ring-void-label" x="18" y="18" text-anchor="middle"
-          transform="rotate(45 18 18) translate(0 8.6)">VOIDED</text>` : '';
+          transform="rotate(45 18 18) translate(0 8.6)">SKIPPED</text>` : '';
 
   const prevDisabled = ds <= _dayDetailFloor();
   const nextDisabled = ds >= today;
 
   const summary = allVoided
-    ? `Day voided — ${voidCount} habit${voidCount === 1 ? '' : 's'} excused, nothing counted against you.`
+    ? `Day skipped — ${voidCount} habit${voidCount === 1 ? '' : 's'} skipped, nothing counted against you.`
     : counted.length
     ? `${doneCount} of ${counted.length} habit${counted.length === 1 ? '' : 's'} completed` +
-      (voidCount ? ` · ${voidCount} voided` : '')
+      (voidCount ? ` · ${voidCount} skipped` : '')
     : 'No habits were active on this day.';
 
   const canDrag = getHabitSort() === 'custom';
@@ -1957,13 +1976,13 @@ function renderDayDetail(ds) {
       ${doneCtl}
       <span class="day-detail-habit-name">${_esc(h.name)}</span>
       ${isLocked ? '<span class="habit-meta-tag archived-tag">Archived</span>' : ''}
-      ${voidActive ? '<span class="habit-meta-tag voided">Voided</span>' : ''}
+      ${voidActive ? '<span class="habit-meta-tag voided">Skipped</span>' : ''}
       ${h.endOfDay ? '<span class="habit-meta-tag eod">End of Day</span>' : ''}
       ${h.morningRoutine ? '<span class="habit-meta-tag morning">Morning Routine</span>' : ''}
       ${h.nightRoutine ? '<span class="habit-meta-tag night">Night Routine</span>' : ''}
       ${areaTag}
       ${_dayVoidMode && !isLocked ? `<button class="day-void-toggle${isVoided ? ' active' : ''}" data-void-id="${h.id}"
-        title="${isVoided ? 'Un-void this habit' : "Void this habit — it won't count on this day"}"
+        title="${isVoided ? 'Un-skip this habit' : "Skip this habit — it won't count on this day"}"
         aria-pressed="${isVoided}">∅</button>` : ''}
     </div>`;
   }).join('');
@@ -1971,7 +1990,7 @@ function renderDayDetail(ds) {
   const voidBar = _dayVoidMode ? `
     <div class="day-void-bar">
       <span class="day-void-hint">Pick the habits that didn't count on this day.</span>
-      <button class="day-void-bulk" id="dayVoidAll">Void all</button>
+      <button class="day-void-bulk" id="dayVoidAll">Skip all</button>
       <button class="day-void-bulk" id="dayVoidNone">Clear</button>
     </div>` : '';
 
@@ -1996,7 +2015,7 @@ function renderDayDetail(ds) {
       <div class="day-detail-list-head">
         <div class="habit-detail-section-title">Habits</div>
         <button class="day-void-btn${_dayVoidMode ? ' active' : ''}" id="dayVoidModeBtn">
-          ${_dayVoidMode ? 'Done' : 'Void'}
+          ${_dayVoidMode ? 'Done' : 'Skip'}
         </button>
       </div>
       ${voidBar}
@@ -2208,7 +2227,7 @@ _ahEl('addHabitForm').addEventListener('click', e => {
 });
 _ahEl('addHabitModal').addEventListener('click', e => { if (e.target.id === 'addHabitModal') closeAddHabit(); });
 
-// ── Void a day ──
+// ── Skip days ──
 let _vdSel = new Set();
 let _vdWhen = 'today';
 
@@ -2219,7 +2238,7 @@ function _vdDates() {
   let from = _ahEl('vdFrom').value, to = _ahEl('vdTo').value;
   if (!from || !to) return [];
   if (from > to) [from, to] = [to, from];
-  if (to > today) to = today;
+  // Future days are fine — that's how a trip gets skipped ahead of time.
   const out = [];
   for (let ds = from; ds <= to && out.length < 62; ds = _shiftDay(ds, 1)) out.push(ds);
   return out;
@@ -2227,13 +2246,17 @@ function _vdDates() {
 
 function _vdPaint() {
   const active = _orderHabits(getHabits().filter(h => !h.archived));
-  _ahEl('vdPick').innerHTML = active.map(h =>
-    `<button type="button" data-hid="${h.id}" class="${_vdSel.has(h.id) ? 'on' : ''}" aria-pressed="${_vdSel.has(h.id)}">${_esc(h.name)}</button>`).join('');
+  // Grouped by routine, in the same order and colours as the habit list.
+  _ahEl('vdPick').innerHTML = HABIT_ROUTINES.map(([k, label]) => {
+    const hs = active.filter(h => _habitRoutine(h) === k);
+    return hs.length ? `<div class="vd-group"><h4 class="vd-group-head rt-${k}">${label}</h4><div class="vd-group-chips">${hs.map(h =>
+      `<button type="button" data-hid="${h.id}" class="${_vdSel.has(h.id) ? 'on' : ''}" aria-pressed="${_vdSel.has(h.id)}">${_esc(h.name)}</button>`).join('')}</div></div>` : '';
+  }).join('');
   document.querySelectorAll('#voidDayForm .at-seg[data-f="when"] button').forEach(b =>
     b.classList.toggle('on', b.dataset.v === _vdWhen));
   _ahEl('vdRange').hidden = _vdWhen !== 'range';
   const n = _vdSel.size;
-  _ahEl('vdSubmit').textContent = n ? `Void ${n} habit${n === 1 ? '' : 's'}` : 'Void';
+  _ahEl('vdSubmit').textContent = n ? `Skip ${n} habit${n === 1 ? '' : 's'}` : 'Skip';
   _ahEl('vdSubmit').disabled = !n;
 }
 
@@ -2242,8 +2265,8 @@ function openVoidDay() {
   _vdWhen = 'today';
   _vdSel = new Set(getHabits().filter(h => !h.archived && !_habitDoneOn(h, today)).map(h => h.id));
   _ahEl('vdFrom').value = _shiftDay(today, -2);
-  _ahEl('vdTo').value = today;
-  [_ahEl('vdFrom'), _ahEl('vdTo')].forEach(el => { el.min = _dayDetailFloor(); el.max = today; });
+  _ahEl('vdTo').value = _shiftDay(today, 3);
+  [_ahEl('vdFrom'), _ahEl('vdTo')].forEach(el => { el.min = _dayDetailFloor(); });
   _ahEl('vdStatus').textContent = '';
   _vdPaint();
   _ahEl('voidDayModal').classList.add('open');
@@ -2257,7 +2280,7 @@ function closeVoidDay() {
 
 function _vdSubmit() {
   const dates = _vdDates();
-  if (!dates.length) { _ahEl('vdStatus').textContent = 'Pick the days to void.'; return; }
+  if (!dates.length) { _ahEl('vdStatus').textContent = 'Pick the days to skip.'; return; }
   const habits = getHabits().filter(h => _vdSel.has(h.id));
   let n = 0;
   dates.forEach(ds => {
@@ -2273,7 +2296,7 @@ function _vdSubmit() {
   renderHabits();
   const when = _vdWhen === 'today' ? 'today' : _vdWhen === 'yday' ? 'yesterday'
     : dates.length === 1 ? _habitDayLabel(dates[0]) : `${_habitDayLabel(dates[0])}–${_habitDayLabel(dates[dates.length - 1])}`;
-  showToast(n ? `Voided ${habits.length} habit${habits.length === 1 ? '' : 's'} for ${when}` : 'Nothing to void on those days');
+  showToast(n ? `Skipped ${habits.length} habit${habits.length === 1 ? '' : 's'} for ${when}` : 'Nothing to skip on those days');
 }
 
 _ahEl('habVoidBtn').addEventListener('click', openVoidDay);
