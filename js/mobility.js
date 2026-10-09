@@ -67,7 +67,11 @@ function _mobSchedFor(list, today) {
 // A session that has exercises but none due (or logged) that day: its habit sits out.
 function _mobSessionOff(tod, date) {
   const list = getMobExercises();
-  if (!list.some(ex => (ex.session === 'night' ? 'night' : 'morning') === tod)) return false;
+  const mine = list.filter(ex => (ex.session === 'night' ? 'night' : 'morning') === tod);
+  if (!mine.length) return false;
+  // Before the session's first exercise existed nothing could be due, so the
+  // habit stays an ordinary day (markable, missable) rather than sitting out.
+  if (date < mine.reduce((m, ex) => { const s = _mobMade(ex); return s < m ? s : m; }, '9999-99-99')) return false;
   return !_mobSessionRows(date, tod, _mobSchedFor(list, getActiveDateString())).length;
 }
 function _mobSyncHabits(date) {
