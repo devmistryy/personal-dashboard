@@ -13,7 +13,8 @@
 //   diet_supp_contents_v1  { key: [{ name, amount, unit }] } per pill; wins over the latest log's
 //   diet_supp_cycles_v1    { key: { on, off, start } } on/off cycle, in days
 //   diet_supp_notes_v1     { key: text }
-//   diet_supp_meta_v1      { key: { name, slot, sched, qty, form, food, stock, bottle, after: { key, min }, archived } }
+//   diet_supp_meta_v1      { key: { name, slot, sched, qty, form, food, stock, bottle, after: { key, min }, group, archived } }
+//                          group = name shared by supplements taken together (Today shows them linked; same time slot only)
 // A supplement exists while it has a log entry or a meta row, and isn't archived.
 
 // ponytail: each list/map is one settings row rewritten on every change. Own tables if the log grows enough for that to matter.
@@ -129,6 +130,7 @@ function _suppCatalogFrom(logs, meta, contents, cycles, notes) {
       stock: m.stock == null ? '' : m.stock,
       bottle: m.bottle == null ? '' : m.bottle,
       after: m.after && m.after.key && m.after.key !== c.key ? m.after : null,
+      group: m.group || '',
     });
   });
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -225,7 +227,7 @@ function _suppRename(oldKey, newName) {
 
 function _suppWriteItem(key, it) {
   _suppSaveMap(SUPP_META, { ..._suppMap(SUPP_META), [key]: {
-    name: it.name, slot: it.slot, sched: it.sched, qty: it.qty, form: it.form, food: it.food, stock: it.stock, bottle: it.bottle, after: it.after,
+    name: it.name, slot: it.slot, sched: it.sched, qty: it.qty, form: it.form, food: it.food, stock: it.stock, bottle: it.bottle, after: it.after, group: it.group || '',
   } });
   _suppSaveMap(SUPP_CONTENTS, { ..._suppMap(SUPP_CONTENTS), [key]: it.contents });
   const cycles = { ..._suppMap(SUPP_CYCLES) };
@@ -332,13 +334,33 @@ function _suppRenderToday(c) {
   el.innerHTML = [...SUPP_SLOTS, ['prn', 'As needed']].map(([g, label]) => {
     const list = _suppChainOrder(c.cat.filter(it => _suppGroup(it) === g));
     if (!list.length) return '';
+    const blocks = [], byGroup = new Map();   // supplements sharing a group sit together; a lone member shows as a plain row
+    list.forEach(it => {
+      const gk = _suppKey(it.group);
+      if (!gk) return blocks.push([it]);
+      if (byGroup.has(gk)) return byGroup.get(gk).push(it);
+      const b = [it]; byGroup.set(gk, b); blocks.push(b);
+    });
     const due = list.filter(it => _suppIsDue(it, c.today));
     const done = due.filter(it => c.doses(it.key).length).length;
     return `<div class="supp-slot">
       <div class="supp-slot-h ${g}">${label}${g === 'prn' ? '<span class="hint">doesn’t count toward today</span>' : `<span class="n">${done}/${due.length}</span>`}</div>
-      ${list.map(it => _suppRowHTML(c, it)).join('')}
+      ${blocks.map(b => b.length > 1 ? _suppGroupHTML(c, b, g) : _suppRowHTML(c, b[0])).join('')}
     </div>`;
   }).join('');
+}
+
+// Members keep their own rows (take one, some or all); the footer takes whatever is left.
+function _suppGroupHTML(c, b, g) {
+  const gk = _suppKey(b[0].group);
+  const todo = b.filter(it => !c.doses(it.key).length && !_suppIsOff(it, c.today));
+  const taken = b.filter(it => c.doses(it.key).length).length;
+  return `<div class="supp-group ${g}" data-supp-grp="${_esc(gk)}">${b.map(it => _suppRowHTML(c, it)).join('')}
+    <div class="supp-grp-f"><button type="button" class="supp-name-btn" data-supp-grprename="${_esc(gk)}" title="Rename group">${_esc(b[0].group)}</button>
+      <span>${taken}/${b.length}</span>
+      ${todo.length ? `<button type="button" class="supp-link" data-supp-takegrp="${_esc(gk)}" data-g="${g}">${taken ? 'Take rest' : 'Take all'}</button>` : '<span class="ok">✓ all taken</span>'}
+      <button type="button" class="supp-link mute" data-supp-ungroup="${_esc(gk)}">Ungroup</button></div>
+  </div>`;
 }
 
 function _suppRowHTML(c, it) {
@@ -353,7 +375,7 @@ function _suppRowHTML(c, it) {
     : it.usual ? 'usually ' + _dietFmtTime(it.usual) : '';
   const parts = _suppContentsParts(it.contents, it.qty);
   const state = waiting ? ' wait' : ready ? ' ready' : '';
-  return _suppGapHTML(c, it, ds, w) + `<div class="supp-row${done ? ' done' : ''}${off ? ' resting' : ''}" data-supp-open="${_esc(it.key)}">
+  return _suppGapHTML(c, it, ds, w) + `<div class="supp-row${done ? ' done' : ''}${off ? ' resting' : ''}" data-supp-open="${_esc(it.key)}" data-supp-key="${_esc(it.key)}" draggable="true">
     <button type="button" class="supp-chk ${_suppGroup(it)}${state}" data-supp-take="${_esc(it.key)}" aria-label="${done ? 'Undo' : 'Take'} ${_esc(it.name)}"><span>${waiting ? (w.left > 99 ? Math.ceil(w.left / 60) + 'h' : w.left) : '✓'}</span></button>
     <div class="supp-row-main">
       <div class="supp-name"><button type="button" class="supp-name-btn">${_esc(it.name)}</button><span class="dose">${_suppFmtNum(it.qty)} ${_suppFormLabel(it.form, it.qty)}</span></div>
@@ -493,6 +515,42 @@ function _suppTake(key) {
   _finToast(`Took ${_suppFmtNum(it.qty)} × ${_esc(it.name)}`, next.length ? '⏱ ' + next.join(' · ') : '', undo);
 }
 
+// Take every member of a group not taken yet today (off-cycle ones are skipped), as one undo.
+function _suppTakeGroup(gk, g) {
+  const c = _suppCtx();
+  const todo = _suppChainOrder(c.cat.filter(it => _suppKey(it.group) === gk && _suppGroup(it) === g && !c.doses(it.key).length && !_suppIsOff(it, c.today)));
+  if (!todo.length) return;
+  const early = todo.filter(it => { const w = _suppWait(c, it); return w && !todo.includes(w.dep) && (w.pending || w.left > 0); });
+  if (early.length && !confirm(`${early.map(it => it.name).join(', ')} ${early.length > 1 ? 'have' : 'has'} a spacing rule that isn't met yet. Take the group anyway?`)) return;
+  const undos = todo.map(it => _suppLogDose(it, c.today, c.now, it.qty));
+  renderSupplements();
+  _finToast(`Took ${todo.map(it => _esc(it.name)).join(' + ')}`, '', () => { undos.forEach(u => u()); });
+}
+
+// Set (or clear, with '') the group of some supplements; undo restores the meta map.
+function _suppSetGroup(keys, group, title) {
+  const meta = _suppMap(SUPP_META), cat = _suppCatalog(), next = { ...meta };
+  keys.forEach(k => { const it = cat.find(x => x.key === k); if (it) next[k] = { ...(meta[k] || {}), name: it.name, group }; });
+  _suppSaveMap(SUPP_META, next);
+  renderSupplements();
+  _finToast(title, '', () => { _suppSaveMap(SUPP_META, meta); renderSupplements(); });
+}
+const _suppGroupKeys = (gk, g) => _suppCatalog().filter(it => _suppKey(it.group) === gk && (!g || _suppGroup(it) === g)).map(it => it.key);
+
+// Drag a supplement onto another (same time slot): joins its group, or starts one.
+function _suppDropOn(aKey, bKey) {
+  const cat = _suppCatalog(), a = cat.find(x => x.key === aKey), b = cat.find(x => x.key === bKey);
+  if (!a || !b || a === b) return;
+  if (_suppGroup(a) !== _suppGroup(b)) return _finToast('Groups stay within one time slot', `${_esc(a.name)} is ${_suppSlotLabel(a.slot)}, ${_esc(b.name)} is ${_suppSlotLabel(b.slot)}`);
+  if (a.group && _suppKey(a.group) === _suppKey(b.group)) return;
+  let name = b.group;
+  if (!name) {
+    name = (prompt('Name this group', `${_suppSlotLabel(b.slot)} stack`) || '').trim();
+    if (!name) return;
+  }
+  _suppSetGroup(b.group ? [aKey] : [aKey, bKey], name, `Grouped ${_esc(a.name)} with ${_esc(b.name)}`);
+}
+
 // A square in the 14-day grid: remove that day's dose, or log one at the usual time.
 function _suppCell(v) {
   const i = v.lastIndexOf('|'), key = v.slice(0, i), d = v.slice(i + 1);
@@ -532,6 +590,13 @@ function _suppOnViewClick(e) {
   const T = sel => e.target.closest(sel);
   let el;
   if ((el = T('[data-supp-take]')))    return _suppTake(el.dataset.suppTake);
+  if ((el = T('[data-supp-takegrp]'))) return _suppTakeGroup(el.dataset.suppTakegrp, el.dataset.g);
+  if ((el = T('[data-supp-ungroup]'))) return _suppSetGroup(_suppGroupKeys(el.dataset.suppUngroup), '', 'Group removed');
+  if ((el = T('[data-supp-grprename]'))) {
+    const gk = el.dataset.suppGrprename, cur = el.textContent;
+    const name = (prompt('Rename group', cur) || '').trim();
+    return name && name !== cur ? _suppSetGroup(_suppGroupKeys(gk), name, `Renamed to ${_esc(name)}`) : undefined;
+  }
   if ((el = T('[data-supp-cell]')))    return _suppCell(el.dataset.suppCell);
   if ((el = T('[data-supp-del]')))     return _suppDeleteDose(el.dataset.suppDel);
   if ((el = T('[data-supp-restock]'))) return _suppRestock(el.dataset.suppRestock);
@@ -746,7 +811,10 @@ function _suppSavePage() {
   const cyc = s.sched === 'cycle' ? s.cycle : null;
   if (cyc && !(cyc.on >= 1 && cyc.off >= 1 && cyc.start)) return showStatus(status, 'Finish the cycle, or pick Every day.', 'var(--warning)', 5000);
   const num = v => v === '' || v == null || isNaN(Number(v)) ? '' : Math.max(0, Number(v));
+  const old = _suppDraftKey ? _suppCatalog().find(x => x.key === _suppDraftKey) : null;
   const item = {
+    // changing slot (or going as-needed) takes it out of its group: groups stay within one slot
+    group: old && _suppGroup(old) === _suppGroup(s) ? old.group : '',
     name, slot: s.slot, sched: s.sched, qty: Math.max(0.5, Number(s.qty) || 1), form: s.form, food: s.food,
     stock: num(s.stock), bottle: num(s.bottle), note: String(s.note || '').trim(), cycle: cyc,
     after: s.after && s.after.key ? { key: s.after.key, min: Math.max(1, Math.round(Number(s.after.min) || 30)) } : null,
@@ -757,7 +825,6 @@ function _suppSavePage() {
     })).filter(r => r.name),
   };
   const isNew = !_suppDraftKey;
-  const old = isNew ? null : _suppCatalog().find(x => x.key === _suppDraftKey);
   if (old && old.name !== name) _suppRename(_suppDraftKey, name);
   _suppWriteItem(key, item);
   const logNow = isNew && document.getElementById('suppLogNow').checked;
@@ -955,6 +1022,32 @@ async function suppScan(file) {
 
 // ── Listeners ──
 document.getElementById('dietViewSupps').addEventListener('click', _suppOnViewClick);
+// Drag a row onto another to group them, or onto empty space in its slot to leave its group.
+let _suppDragKey = '';
+const _suppTodayEl = document.getElementById('suppToday');
+const _suppClearDrop = () => _suppTodayEl.querySelectorAll('.drop-on').forEach(x => x.classList.remove('drop-on'));
+_suppTodayEl.addEventListener('dragstart', e => {
+  const row = e.target.closest && e.target.closest('.supp-row[data-supp-key]');
+  if (!row) return;
+  _suppDragKey = row.dataset.suppKey;
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', _suppDragKey);
+});
+_suppTodayEl.addEventListener('dragover', e => {
+  if (!_suppDragKey) return;
+  e.preventDefault(); _suppClearDrop();
+  const row = e.target.closest('.supp-row[data-supp-key]');
+  if (row && row.dataset.suppKey !== _suppDragKey) row.classList.add('drop-on');
+});
+_suppTodayEl.addEventListener('dragend', () => { _suppDragKey = ''; _suppClearDrop(); });
+_suppTodayEl.addEventListener('drop', e => {
+  if (!_suppDragKey) return;
+  e.preventDefault(); _suppClearDrop();
+  const key = _suppDragKey; _suppDragKey = '';
+  const row = e.target.closest('.supp-row[data-supp-key]');
+  if (row) return _suppDropOn(key, row.dataset.suppKey);
+  const it = _suppCatalog().find(x => x.key === key), slot = e.target.closest('.supp-slot');
+  if (it && it.group && slot && slot.querySelector('.supp-slot-h.' + _suppGroup(it))) _suppSetGroup([key], '', `Removed ${_esc(it.name)} from its group`);
+});
 document.getElementById('suppDrawer').addEventListener('click', _suppOnPageClick);
 document.getElementById('suppDrawer').addEventListener('input', _suppOnPageInput);
 document.getElementById('suppDrawer').addEventListener('keydown', e => { if (e.key === 'Escape') closeSuppPage(); });
