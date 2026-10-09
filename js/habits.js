@@ -734,21 +734,19 @@ function buildHabitRow(habit, allHabits, opts) {
   if (!preview) {
     const hov = document.createElement('div');
     hov.className = 'hab-hover';
-    const vBtn = document.createElement('button');
-    vBtn.type = 'button';
-    vBtn.textContent = isVoided ? 'Un-skip' : '⤼ Skip today';
-    vBtn.addEventListener('click', () => {
-      const skipped = _toggleHabitSkipToday(habit);
-      refresh();
-      showToast(skipped ? `Skipped ${habit.name} for today` : `${habit.name} counts again from today`);
-    });
-    const dBtn = document.createElement('button');
-    dBtn.type = 'button';
-    dBtn.textContent = 'Details →';
-    dBtn.addEventListener('click', () => openHabitDetail(habit.id));
-    hov.appendChild(vBtn);
-    hov.appendChild(dBtn);
-    main.appendChild(hov);
+    // Skipping and details live in the detail view (click the name); the hover keeps only the way back from a skip.
+    if (isVoided) {
+      const vBtn = document.createElement('button');
+      vBtn.type = 'button';
+      vBtn.textContent = 'Un-skip';
+      vBtn.addEventListener('click', () => {
+        _toggleHabitSkipToday(habit);
+        refresh();
+        showToast(`${habit.name} counts again from today`);
+      });
+      hov.appendChild(vBtn);
+    }
+    if (hov.childElementCount) main.appendChild(hov);
   }
   li.appendChild(main);
 
@@ -817,6 +815,14 @@ function buildHabitRow(habit, allHabits, opts) {
     }
   }
   li.appendChild(streakEl);
+
+  // The whole pill opens the detail view; its own controls keep their jobs.
+  if (!preview) {
+    li.classList.add('is-openable');
+    li.addEventListener('click', e => {
+      if (!e.target.closest('button, input, label, a, .hab-area, .habit-drag-handle')) openHabitDetail(habit.id);
+    });
+  }
 
   return li;
 }

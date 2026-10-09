@@ -129,6 +129,7 @@
     transition: background 0.15s, opacity 0.2s;
   }
   .hab-row:hover { background: #1A1B1F; }
+  .hab-row.is-openable { cursor: pointer; }
   .hab-row.is-flipping {
     z-index: 2;
     animation: habit-row-land 0.95s ease-out;
