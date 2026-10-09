@@ -1771,6 +1771,7 @@ function renderHabitHistoryGrid(habit) {
     <div class="hd-hist-head">
       <span class="hab-eyebrow">${atCurrent ? 'Last 13 weeks' : `${_habitDayLabel(first)} – ${_habitDayLabel(lastDay)}`}</span>
       <span class="hd-hist-hint">Click a past day to toggle it</span>
+      ${isArchived ? '' : '<button class="hab-chip hab-chip-void" id="hdSkipDays" type="button">⤼ Skip days</button>'}
       <span class="hd-hist-nav">
         <button class="hcal-nav-btn" id="habitCalPrev" type="button" aria-label="Earlier weeks" ${atStart ? 'disabled' : ''}>‹</button>
         <button class="hcal-nav-btn" id="habitCalNext" type="button" aria-label="Later weeks" ${atCurrent ? 'disabled' : ''}>›</button>
@@ -1818,6 +1819,9 @@ function renderHabitHistoryGrid(habit) {
       <span><i class="k-done"></i>done</span><span><i class="k-miss"></i>missed</span><span><i class="k-void"></i>skipped</span>
     </div></div>`;
   document.getElementById('habitDetailHistory').innerHTML = html;
+
+  const skipDays = document.getElementById('hdSkipDays');
+  if (skipDays) skipDays.addEventListener('click', () => openVoidDay(habit.id));
 
   const heat = document.querySelector('#habitDetailHistory .hd-heat');
   const toggle = cell => {
@@ -2260,12 +2264,15 @@ function _vdPaint() {
   _ahEl('vdSubmit').disabled = !n;
 }
 
-function openVoidDay() {
+// With a habit id (from its detail page) the form opens on that habit alone, in date-range mode.
+function openVoidDay(habitId) {
   const today = habitDateStr(0);
-  _vdWhen = 'today';
-  _vdSel = new Set(getHabits().filter(h => !h.archived && !_habitDoneOn(h, today)).map(h => h.id));
-  _ahEl('vdFrom').value = _shiftDay(today, -2);
-  _ahEl('vdTo').value = _shiftDay(today, 3);
+  const one = typeof habitId === 'string';
+  _vdWhen = one ? 'range' : 'today';
+  _vdSel = one ? new Set([habitId])
+    : new Set(getHabits().filter(h => !h.archived && !_habitDoneOn(h, today)).map(h => h.id));
+  _ahEl('vdFrom').value = one ? today : _shiftDay(today, -2);
+  _ahEl('vdTo').value = one ? today : _shiftDay(today, 3);
   [_ahEl('vdFrom'), _ahEl('vdTo')].forEach(el => { el.min = _dayDetailFloor(); });
   _ahEl('vdStatus').textContent = '';
   _vdPaint();
@@ -2299,7 +2306,7 @@ function _vdSubmit() {
   showToast(n ? `Skipped ${habits.length} habit${habits.length === 1 ? '' : 's'} for ${when}` : 'Nothing to skip on those days');
 }
 
-_ahEl('habVoidBtn').addEventListener('click', openVoidDay);
+_ahEl('habVoidBtn').addEventListener('click', () => openVoidDay());
 _ahEl('voidDayForm').addEventListener('submit', e => { e.preventDefault(); _vdSubmit(); });
 _ahEl('voidDayForm').addEventListener('click', e => {
   const b = e.target.closest('button');
